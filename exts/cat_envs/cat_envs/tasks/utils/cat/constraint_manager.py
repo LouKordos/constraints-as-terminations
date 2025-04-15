@@ -68,9 +68,7 @@ class CaT:
         if name not in self.running_maxes:
             self.running_maxes[name] = constraint_max
         else:
-            self.running_maxes[name] = (
-                self.tau * self.running_maxes[name] + (1.0 - self.tau) * constraint_max
-            )
+            self.running_maxes[name] = (self.tau * self.running_maxes[name] + (1.0 - self.tau) * constraint_max)
 
         self.raw_constraints[name] = constraint
 
@@ -80,16 +78,10 @@ class CaT:
         # Compute the termination probability which scales between min_p and max_p with
         # increasing constraint violation. Remains at 0 when there is no violation.
         probs = torch.zeros_like(constraint)
-        probs[mask] = self.min_p + torch.clamp(
-            constraint[mask]
-            / (self.running_maxes[name].expand(constraint.size())[mask]),
-            min=0.0,
-            max=1.0,
-        ) * (max_p - self.min_p)
+        probs[mask] = self.min_p + torch.clamp(constraint[mask] / (self.running_maxes[name].expand(constraint.size())[mask]), min=0.0, max=1.0,) * (max_p - self.min_p)
+
         self.probs[name] = probs
-        self.max_p[name] = torch.tensor(max_p, device=constraint.device).repeat(
-            constraint.shape[1]
-        )
+        self.max_p[name] = torch.tensor(max_p, device=constraint.device).repeat(constraint.shape[1])
 
     def get_probs(self):
         """Returns the termination probabilities due to constraint violations."""
@@ -112,12 +104,7 @@ class CaT:
             names = list(self.probs.keys())
         txt = ""
         for name in names:
-            txt += " {}: {}".format(
-                name,
-                str(
-                    100.0 * self.probs[name].max(1).values.gt(0.0).float().mean().item()
-                )[:4],
-            )
+            txt += " {}: {}".format(name, str(100.0 * self.probs[name].max(1).values.gt(0.0).float().mean().item())[:4],)
             # txt += " {}: {}".format(name, str(100.0*self.probs[name].max(1).values.float().mean().item())[:4])
 
         return txt[1:]
@@ -194,9 +181,7 @@ class ConstraintManager(ManagerBase):
         table.align["Body"] = "r"
         table.align["Max p"] = "r"
         # add info on each term
-        for index, (name, term_cfg) in enumerate(
-            zip(self._term_names, self._term_cfgs)
-        ):
+        for index, (name, term_cfg) in enumerate(zip(self._term_names, self._term_cfgs)):
             if "limit" in term_cfg.params:
                 if "names" in term_cfg.params:
                     table.add_row(
@@ -209,13 +194,9 @@ class ConstraintManager(ManagerBase):
                         ]
                     )
                 else:
-                    table.add_row(
-                        [index, name, term_cfg.params["limit"], "-", term_cfg.max_p]
-                    )
+                    table.add_row([index, name, term_cfg.params["limit"], "-", term_cfg.max_p])
             elif "names" in term_cfg.params:
-                table.add_row(
-                    [index, name, "-", term_cfg.params["names"], term_cfg.max_p]
-                )
+                table.add_row([index, name, "-", term_cfg.params["names"], term_cfg.max_p])
             else:
                 table.add_row([index, name, "-", "-", term_cfg.max_p])
         # convert table to string
@@ -254,20 +235,8 @@ class ConstraintManager(ManagerBase):
         extras = {}
         for key in self._episode_sums.keys():
             # store information
-            extras["Episode_Constraint_violation/" + key] = (
-                torch.mean(
-                    self._episode_sums[key][env_ids]
-                    / self._env.episode_length_buf[env_ids],
-                    dim=0,
-                )
-                * 100
-            )
-            extras["Episode_Constraint_probability/" + key] = torch.mean(
-                self._cstr_mean_values[key][env_ids]
-                / self._env.episode_length_buf[env_ids],
-                dim=0,
-            )
-            # reset episodic sum
+            extras["Episode_Constraint_violation/" + key] = (torch.mean(self._episode_sums[key][env_ids] / self._env.episode_length_buf[env_ids], dim=0,) * 100)
+            extras["Episode_Constraint_probability/" + key] = torch.mean(self._cstr_mean_values[key][env_ids] / self._env.episode_length_buf[env_ids], dim=0,) # reset episodic sum
             self._episode_sums[key][env_ids] = 0.0
             self._cstr_mean_values[key][env_ids] = 0.0
         # reset all the constraints terms
@@ -290,15 +259,11 @@ class ConstraintManager(ManagerBase):
         """
         # iterate over all the reward terms
         for name, term_cfg in zip(self._term_names, self._term_cfgs):
-            self.cat.add(
-                name, term_cfg.func(self._env, **term_cfg.params), term_cfg.max_p
-            )
+            self.cat.add(name, term_cfg.func(self._env, **term_cfg.params), term_cfg.max_p)
         cstr_prob = self.cat.get_probs()
 
         for name in self._term_names:
-            self._episode_sums[name] += (
-                self.cat.probs[name].max(1).values.gt(0.0).float()
-            )
+            self._episode_sums[name] += (self.cat.probs[name].max(1).values.gt(0.0).float())
             self._cstr_mean_values[name] += self.cat.probs[name].max(1).values
 
         return cstr_prob
