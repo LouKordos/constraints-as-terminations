@@ -12,11 +12,11 @@ from collections.abc import Sequence
 from prettytable import PrettyTable
 from typing import TYPE_CHECKING
 
-from omni.isaac.lab.managers.manager_base import ManagerBase, ManagerTermBase
+from isaaclab.managers.manager_base import ManagerBase, ManagerTermBase
 from .manager_constraint_cfg import ConstraintTermCfg
 
 if TYPE_CHECKING:
-    from omni.isaac.lab.envs import ManagerBasedRLEnv
+    from isaaclab.envs import ManagerBasedRLEnv
 
 
 class CaT:

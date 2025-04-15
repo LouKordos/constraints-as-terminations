@@ -5,7 +5,7 @@
 
 """Common functions that can be used to create observation terms.
 
-The functions can be passed to the :class:`omni.isaac.lab.managers.ObservationTermCfg` object to enable
+The functions can be passed to the :class:`isaaclab.managers.ObservationTermCfg` object to enable
 the observation introduced by the function.
 """
 
@@ -14,11 +14,11 @@ from __future__ import annotations
 import torch
 from typing import TYPE_CHECKING
 
-from omni.isaac.lab.assets import Articulation
-from omni.isaac.lab.managers import SceneEntityCfg
+from isaaclab.assets import Articulation
+from isaaclab.managers import SceneEntityCfg
 
 if TYPE_CHECKING:
-    from omni.isaac.lab.envs import ManagerBasedEnv
+    from isaaclab.envs import ManagerBasedEnv
 
 
 def joint_pos(

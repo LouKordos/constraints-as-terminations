@@ -9,8 +9,8 @@ from __future__ import annotations
 import torch
 from collections.abc import Sequence
 
-from omni.isaac.lab.envs.common import VecEnvStepReturn
-from omni.isaac.lab.envs.manager_based_rl_env import ManagerBasedRLEnv
+from isaaclab.envs.common import VecEnvStepReturn
+from isaaclab.envs.manager_based_rl_env import ManagerBasedRLEnv
 from cat_envs.tasks.utils.cat.constraint_manager import ConstraintManager
 
 
