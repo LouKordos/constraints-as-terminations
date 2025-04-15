@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import argparse
-
+from datetime import datetime
 
 def add_clean_rl_args(parser: argparse.ArgumentParser):
     arg_group = parser.add_argument_group(
@@ -33,14 +33,14 @@ def add_clean_rl_args(parser: argparse.ArgumentParser):
     arg_group.add_argument(
         "--logger",
         type=str,
-        default=None,
+        default="wandb",
         choices={"wandb", "tensorboard"},
         help="Logger module to use.",
     )
     arg_group.add_argument(
         "--log_project_name",
         type=str,
-        default=None,
+        default=f"clr-{datetime.now().strftime('%Y-%m-%d-%H-$M-%S')}",
         help="Name of the logging project when using wandb",
     )
 
