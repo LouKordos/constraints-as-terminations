@@ -236,7 +236,9 @@ class ConstraintManager(ManagerBase):
         for key in self._episode_sums.keys():
             # store information
             extras["Episode_Constraint_violation/" + key] = (torch.mean(self._episode_sums[key][env_ids] / self._env.episode_length_buf[env_ids], dim=0,) * 100)
-            extras["Episode_Constraint_probability/" + key] = torch.mean(self._cstr_mean_values[key][env_ids] / self._env.episode_length_buf[env_ids], dim=0,) # reset episodic sum
+            extras["Episode_Constraint_probability/" + key] = torch.mean(self._cstr_mean_values[key][env_ids] / self._env.episode_length_buf[env_ids], dim=0,)
+
+            # reset episodic sum
             self._episode_sums[key][env_ids] = 0.0
             self._cstr_mean_values[key][env_ids] = 0.0
         # reset all the constraints terms
