@@ -21,11 +21,7 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
 
 
-def joint_pos(
-    env: ManagerBasedEnv,
-    names: list[str],
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-) -> torch.Tensor:
+def joint_pos(env: ManagerBasedEnv, names: list[str], asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
     """The joint positions of the asset.
 
     Note: Only the joints configured in :attr:`asset_cfg.joint_ids` will have their positions returned.
@@ -35,11 +31,7 @@ def joint_pos(
     return asset.data.joint_pos[:, asset.find_joints(names, preserve_order=True)[0]]
 
 
-def joint_vel(
-    env: ManagerBasedEnv,
-    names: list[str],
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-):
+def joint_vel(env: ManagerBasedEnv, names: list[str], asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),):
     """The joint velocities of the asset.
 
     Note: Only the joints configured in :attr:`asset_cfg.joint_ids` will have their velocities returned.

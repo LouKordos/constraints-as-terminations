@@ -52,6 +52,8 @@ class UniformVelocityCommandWithDeadzone(mdp.UniformVelocityCommand):
         self.vel_command_b *= (torch.any(torch.abs(self.vel_command_b[:, :3]) > self.velocity_deadzone, dim=1)).unsqueeze(1)
 
         # Random velocity command resampling
+        # This injects exploration into the command space. Even if the robot is not actively commanded to move, a small probability of resampling ensures that there is a chance to kick-start movement.
+        # For active commands, the small chance helps prevent the policy from getting stuck with suboptimal command values over too long time periods.
         no_vel_command = (torch.norm(self.vel_command_b[:, :3], dim=1) < self.velocity_deadzone).float()
         p_resample_command = 0.01 * no_vel_command + (self.dt / self.max_episode_length_s) * (1 - no_vel_command)
         resample_command_idx = (torch.bernoulli(p_resample_command).nonzero(as_tuple=False).flatten())
