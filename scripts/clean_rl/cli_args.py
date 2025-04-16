@@ -40,7 +40,7 @@ def add_clean_rl_args(parser: argparse.ArgumentParser):
     arg_group.add_argument(
         "--log_project_name",
         type=str,
-        default=f"clr-{datetime.now().strftime('%Y-%m-%d-%H-$M-%S')}",
+        default=f"clr-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}",
         help="Name of the logging project when using wandb",
     )
 
