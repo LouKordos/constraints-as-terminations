@@ -176,6 +176,7 @@ def PPO(envs, ppo_cfg, run_path):
             lrnow = frac * LEARNING_RATE
             optimizer.param_groups[0]["lr"] = lrnow
 
+        # Collecting trajectories for NUM_STEPS before updating the networks
         for step in range(0, NUM_STEPS):
             global_step += NUM_ENVS
             obs[step] = next_obs
@@ -207,7 +208,7 @@ def PPO(envs, ppo_cfg, run_path):
                     print("time outs", info["time_outs"].sum())
                     exit(0)
 
-        # Adapted from rslrl
+        # Logging/Analytics, adapted from rslrl
         for key in ep_infos[0]:
             infotensor = torch.tensor([], device=device)
             for ep_info in ep_infos:
