@@ -269,7 +269,8 @@ class ConstraintManager(ManagerBase):
         for name in self._term_names:
             self._episode_sums[name] += (self.cat.probs[name].max(1).values.gt(0.0).float())
             self._cstr_mean_values[name] += self.cat.probs[name].max(1).values
-
+        print("Episode reward sums:", self.cat.log_all(self._episode_sums))
+        
         return cstr_prob
 
     """
