@@ -8,7 +8,7 @@
 """Launch Isaac Sim Simulator first."""
 
 import argparse
-
+import numpy as np
 from isaaclab.app import AppLauncher
 
 # local imports
@@ -111,7 +111,7 @@ def main():
     actor.load_state_dict(actor_sd)
 
     obs = env.reset()[0]["policy"]
-
+    sum_of_rewards = []
     for _ in range(2000):
         with torch.no_grad():
             actions, _, _, _ = actor.get_action_and_value(
@@ -120,8 +120,10 @@ def main():
 
         next_obs, rewards, next_done, timeouts, info = env.step(actions)
         obs = next_obs["policy"]
-
+        sum_of_rewards.append(rewards.mean().item())
     # close the simulator
+
+    print("Sum of rewards: ", np.mean(sum_of_rewards))
     env.close()
 
 
