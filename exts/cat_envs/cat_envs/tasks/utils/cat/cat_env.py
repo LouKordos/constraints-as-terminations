@@ -94,6 +94,8 @@ class CaTEnv(ManagerBasedRLEnv):
         self.reset_time_outs = self.termination_manager.time_outs
         # -- CaT constraints prob computation
         if self.cfg.constraints:
+            # This is termination probability based on max constraint violation over all constraints. Remember that for each individual constraint, the max is already computed before.
+            # So cstr_prob = max(termination_probability_formula(max(individual_constraint_values))), where individual_constraint_values could be a tensor of e.g. joint velocity constraint violation for each joint.
             cstr_prob = self.constraint_manager.compute()
             # -- constrained reward computation
             self.reward_buf = torch.clip(self.reward_manager.compute(dt=self.step_dt) * (1.0 - cstr_prob), min=0.0, max=None,)

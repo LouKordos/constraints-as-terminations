@@ -62,6 +62,7 @@ class CaT:
             constraint = constraint.unsqueeze(1)
 
         # Get the maximum constraint violation for the current step
+        # (i.e. for joint velocity violation only take the highest one. Still, termination probabilities for each constraint are saved separately and then in get_probs the max of those is return)
         constraint_max = constraint.max(dim=0, keepdim=True)[0].clamp(min=1e-6)
 
         # Compute polyak average of the maximum constraint violation for this constraint
@@ -78,6 +79,7 @@ class CaT:
         # Compute the termination probability which scales between min_p and max_p with
         # increasing constraint violation. Remains at 0 when there is no violation.
         probs = torch.zeros_like(constraint)
+        # Equation 6 in the paper I think
         probs[mask] = self.min_p + torch.clamp(constraint[mask] / (self.running_maxes[name].expand(constraint.size())[mask]), min=0.0, max=1.0,) * (max_p - self.min_p)
 
         self.probs[name] = probs
