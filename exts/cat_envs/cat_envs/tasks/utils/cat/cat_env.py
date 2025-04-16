@@ -100,6 +100,9 @@ class CaTEnv(ManagerBasedRLEnv):
             # -- constrained reward computation
             self.reward_buf = torch.clip(self.reward_manager.compute(dt=self.step_dt) * (1.0 - cstr_prob), min=0.0, max=None,)
             dones = cstr_prob.clone()
+            # To test with CaT disabled, uncomment the following two lines and coment out the rewards *= not_dones in ppo.py
+            # self.reward_buf = torch.clip(self.reward_manager.compute(dt=self.step_dt) * (1.0 - 0), min=0.0, max=None,)
+            # dones = self.reset_buf.clone()
         else:
             self.reward_buf = self.reward_manager.compute(dt=self.step_dt)
             dones = torch.zeros(self.num_envs, device=self.device)

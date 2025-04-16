@@ -226,7 +226,7 @@ def PPO(envs, ppo_cfg, run_path):
             else:
                 writer.add_scalar("Episode/" + key, value, iteration)
 
-        # CaT: must compute the CaT quantity
+        # COMMENT OUT TO DISABLE CAT, AND ALSO ADJUST STEP FUNTION FOR SIMULATION!!! CaT: must compute the CaT quantity
         not_dones = 1.0 - dones
         rewards *= not_dones
 
