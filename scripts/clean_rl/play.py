@@ -80,9 +80,8 @@ def main():
     log_root_path = os.path.join("logs", "clean_rl", agent_cfg.experiment_name)
     log_root_path = os.path.abspath(log_root_path)
     print(f"[INFO] Loading experiment from directory: {log_root_path}")
-    resume_path = get_checkpoint_path(
-        log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint
-    )
+    resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+    # resume_path = "/home/kordoslo/dev/constraints-as-terminations/logs/clean_rl/solo12_flat/2025-04-16-14-21-48/working_ground_truth_no_changes_model_1549.pt"
     print(f"[INFO] Loading model: {resume_path}")
     log_dir = os.path.dirname(resume_path)
 
