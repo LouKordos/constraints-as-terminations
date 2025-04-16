@@ -79,10 +79,7 @@ class CaTEnv(ManagerBasedRLEnv):
             # render between steps only if the GUI or an RTX sensor needs it
             # note: we assume the render interval to be the shortest accepted rendering interval.
             #    If a camera needs rendering at a faster frequency, this will lead to unexpected behavior.
-            if (
-                self._sim_step_counter % self.cfg.sim.render_interval == 0
-                and is_rendering
-            ):
+            if (self._sim_step_counter % self.cfg.sim.render_interval == 0 and is_rendering):
                 self.sim.render()
             # update buffers at sim dt
             self.scene.update(dt=self.physics_dt)
@@ -99,11 +96,7 @@ class CaTEnv(ManagerBasedRLEnv):
         if self.cfg.constraints:
             cstr_prob = self.constraint_manager.compute()
             # -- constrained reward computation
-            self.reward_buf = torch.clip(
-                self.reward_manager.compute(dt=self.step_dt) * (1.0 - cstr_prob),
-                min=0.0,
-                max=None,
-            )
+            self.reward_buf = torch.clip(self.reward_manager.compute(dt=self.step_dt) * (1.0 - cstr_prob), min=0.0, max=None,)
             dones = cstr_prob.clone()
         else:
             self.reward_buf = self.reward_manager.compute(dt=self.step_dt)
