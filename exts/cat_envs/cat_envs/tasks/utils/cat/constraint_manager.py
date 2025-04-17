@@ -160,6 +160,10 @@ class ConstraintManager(ManagerBase):
         # create buffer for managing constraint prob per environment
         self._cstr_prob_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
 
+        self._episode_max_applied_torque = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+        self._episode_max_joint_vel = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+        self._episode_max_joint_pos = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+
     def __str__(self) -> str:
         """Returns: A string representation for reward manager."""
         msg = f"<ConstraintManager> contains {len(self._term_names)} active terms.\n"
@@ -230,10 +234,18 @@ class ConstraintManager(ManagerBase):
             # store information
             extras["Episode_Constraint_violation/" + key] = (torch.mean(self._episode_sums[key][env_ids] / self._env.episode_length_buf[env_ids], dim=0,) * 100)
             extras["Episode_Constraint_probability/" + key] = torch.mean(self._cstr_mean_values[key][env_ids] / self._env.episode_length_buf[env_ids], dim=0,)
-
+            
             # reset episodic sum
             self._episode_sums[key][env_ids] = 0.0
             self._cstr_mean_values[key][env_ids] = 0.0
+
+        extras["Episode/MaxAppliedTorque"] = torch.mean(self._episode_max_applied_torque[env_ids], dim=0).item()
+        extras["Episode/MaxJointVel"] = torch.mean(self._episode_max_joint_vel[env_ids], dim=0).item()
+        extras["Episode/MaxJointPos"] = torch.mean(self._episode_max_joint_pos[env_ids], dim=0).item()
+        self._episode_max_applied_torque[env_ids] = 0.0
+        self._episode_max_joint_vel[env_ids] = 0.0
+        self._episode_max_joint_pos[env_ids] = 0.0
+
         # reset all the constraints terms
         for term_cfg in self._class_term_cfgs:
             term_cfg.func.reset(env_ids=env_ids)
@@ -261,6 +273,20 @@ class ConstraintManager(ManagerBase):
             self._episode_sums[name] += (self.cat.probs[name].max(1).values.gt(0.0).float())
             self._cstr_mean_values[name] += self.cat.probs[name].max(1).values
         # print("Episode reward sums:", self.cat.log_all(self._episode_sums))
+
+        robot = self._env.scene["robot"]
+        data = robot.data
+
+        current_max_torque = torch.max(torch.abs(data.applied_torque), dim=1).values
+        # print(current_max_torque)
+        current_max_joint_vel = torch.max(torch.abs(data.joint_vel), dim=1).values
+        current_max_joint_pos = torch.max(torch.abs(data.joint_pos), dim=1).values
+
+        self._episode_max_applied_torque = torch.max(self._episode_max_applied_torque, current_max_torque)
+        self._episode_max_joint_vel = torch.max(self._episode_max_joint_vel, current_max_joint_vel)
+        self._episode_max_joint_pos = torch.max(self._episode_max_joint_pos, current_max_joint_pos)
+
+        # print(f"_episode_max: {self._episode_max_applied_torque}")
 
         return cstr_prob
 
