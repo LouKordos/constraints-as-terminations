@@ -68,13 +68,9 @@ class MySceneCfg(InteractiveSceneCfg):
         debug_vis=False,
     )
     # robots
-    robot: ArticulationCfg = SOLO12_MINIMAL_CFG.replace(
-        prim_path="/World/envs/env_.*/Robot"
-    )
+    robot: ArticulationCfg = SOLO12_MINIMAL_CFG.replace(prim_path="/World/envs/env_.*/Robot")
     # sensors
-    contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True
-    )
+    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
     # lights
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
