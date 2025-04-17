@@ -134,9 +134,7 @@ class ConstraintManager(ManagerBase):
     _env: ManagerBasedRLEnv
     """The environment instance."""
 
-    def __init__(
-        self, cfg: object, env: ManagerBasedRLEnv, tau: float = 0.95, min_p: float = 0.0
-    ):
+    def __init__(self, cfg: object, env: ManagerBasedRLEnv, tau: float = 0.95, min_p: float = 0.0):
         """Initialize the reward manager.
 
         Args:
@@ -157,16 +155,10 @@ class ConstraintManager(ManagerBase):
         self._episode_sums = dict()
         self._cstr_mean_values = dict()
         for term_name in self._term_names:
-            self._episode_sums[term_name] = torch.zeros(
-                self.num_envs, dtype=torch.float, device=self.device
-            )
-            self._cstr_mean_values[term_name] = torch.zeros(
-                self.num_envs, dtype=torch.float, device=self.device
-            )
+            self._episode_sums[term_name] = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+            self._cstr_mean_values[term_name] = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         # create buffer for managing constraint prob per environment
-        self._cstr_prob_buf = torch.zeros(
-            self.num_envs, dtype=torch.float, device=self.device
-        )
+        self._cstr_prob_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
 
     def __str__(self) -> str:
         """Returns: A string representation for reward manager."""
