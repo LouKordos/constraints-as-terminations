@@ -35,6 +35,13 @@ class CaTEnv(ManagerBasedRLEnv):
         # prepare the managers
         # -- constraint manager
 
+        # Move camera closer to robot for better videos (1m behind and 0.5m above the robots base_link)
+        robot_root = self.scene["robot"]
+        pos = robot_root.data.root_pos_w[0]
+        eye = (pos[0].item() - 5.0, pos[1].item(), pos[2].item() + 2.5)
+        target = (pos[0].item(), pos[1].item(), pos[2].item())
+        self.sim.set_camera_view(eye=eye, target=target)
+
         if self.cfg.constraints:
             self.constraint_manager = ConstraintManager(self.cfg.constraints, self)
             print("[INFO] Constraint Manager: ", self.constraint_manager)
