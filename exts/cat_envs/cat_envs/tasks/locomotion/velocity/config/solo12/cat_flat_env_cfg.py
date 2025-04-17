@@ -337,6 +337,8 @@ class ConstraintsCfg:
     base_orientation = ConstraintTerm(
         func=constraints.base_orientation, max_p=0.25, params={"limit": 0.1}
     )
+    # Never forget to also add a curriculum term for each added constraint
+    # base_height = ConstraintTerm(func=constraints.max_base_height, max_p=0.25, params={"limit": 0.2})
     air_time = ConstraintTerm(
         func=constraints.air_time,
         max_p=0.25,
@@ -440,6 +442,7 @@ class CurriculumCfg:
             "init_max_p": 0.25,
         },
     )
+    # base_height = CurrTerm(func=curriculums.modify_constraint_p, params={"term_name": "base_height", "num_steps": 24 * MAX_CURRICULUM_ITERATIONS, "init_max_p": 0.25})
     air_time = CurrTerm(
         func=curriculums.modify_constraint_p,
         params={

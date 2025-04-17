@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 def joint_position(env: ManagerBasedRLEnv, limit: float, names: list[str], asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
     robot = env.scene[asset_cfg.name]
+    print("base height:", robot.data.root_pos_w[:, 2].mean().item())
     data = env.scene[asset_cfg.name].data
     joint_ids, _ = robot.find_joints(names, preserve_order=True)
     cstr = torch.abs(data.joint_pos[:, joint_ids]) - limit
@@ -109,6 +110,10 @@ def foot_contact_force(env: ManagerBasedRLEnv, limit: float, names: list[str], a
 def min_base_height(env: ManagerBasedRLEnv, limit: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
     robot = env.scene[asset_cfg.name]
     return limit - robot.data.root_pos_w[:, 2]
+
+def max_base_height(env: ManagerBasedRLEnv, limit: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
+    robot = env.scene[asset_cfg.name]
+    return robot.data.root_pos_w[:, 2] - limit
 
 def no_move(env: ManagerBasedRLEnv, names: list[str], velocity_deadzone: float, joint_vel_limit: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
     robot = env.scene[asset_cfg.name]
