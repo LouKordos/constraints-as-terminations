@@ -592,6 +592,7 @@ class Solo12RectangularStairsEnvCfg(ManagerBasedRLEnvCfg):
 
     def __post_init__(self):
         """Post initialization."""
+        super().__post_init__()
         # general settings
         self.decimation = 4
         self.episode_length_s = 10.0
