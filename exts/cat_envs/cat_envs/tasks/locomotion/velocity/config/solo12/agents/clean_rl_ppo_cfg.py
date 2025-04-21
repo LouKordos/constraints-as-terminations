@@ -13,7 +13,7 @@ class Solo12FlatPPORunnerCfg(CleanRlPpoActorCriticCfg):
 
     learning_rate = 3.0e-4
     num_steps = 24
-    num_iterations = 2000
+    num_iterations = 30000
     gamma = 0.99
     gae_lambda = 0.95
     updates_epochs = 5
