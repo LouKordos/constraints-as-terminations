@@ -127,7 +127,6 @@ class MySceneCfg(InteractiveSceneCfg):
     #     debug_vis=False,
     # )
 
-    # ground terrain
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",
@@ -148,7 +147,7 @@ class MySceneCfg(InteractiveSceneCfg):
     )
 
     # robots
-    robot: ArticulationCfg = SOLO12_MINIMAL_CFG.replace(prim_path="/World/envs/env_.*/Robot")
+    robot: ArticulationCfg = SOLO12_MINIMAL_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     # sensors
     contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
     ray_caster = RayCasterCfg(
