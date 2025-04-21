@@ -48,7 +48,7 @@ import cat_envs.tasks.utils.mdp.commands as commands
 ##
 from cat_envs.assets.odri import SOLO12_MINIMAL_CFG
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
-
+import torch
 
 
 ##
@@ -56,14 +56,30 @@ from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 ##
 
 def height_map_grid(env, asset_cfg: SceneEntityCfg):
-    # world‑frame hit points: [envs, n_rays, 3]
-    hits_w = env.scene[asset_cfg.name].data.ray_hits_w
-    # base position in world:    [envs, 3]
-    base_w = env.scene["robot"].data.root_pos_w
-    # bring into base_link frame:
-    local = hits_w - base_w.view(-1, 1, 3)  # [envs, n_rays, 3]
-    # return just the Z component = height above base_link
-    return local[..., 2]                   # [envs, n_rays]
+    ray_hit_positions_world_frame = env.scene[asset_cfg.name].data.ray_hits_w # [E, R, 3]
+    base_pose_world_frame = env.scene["robot"].data.root_pos_w # [E, 3]
+
+    # 2) expand base_w so it lines up with hits_w
+    base_expanded_to_match_shape_world_frame = base_pose_world_frame.view(-1, 1, 3).expand_as(ray_hit_positions_world_frame) # [E, R, 3]
+
+    # 3) sanitize: any non‐finite entry → copy from base_expanded...
+    #	this makes hit == base for that ray, so height=0
+    non_finite_mask = ~torch.isfinite(ray_hit_positions_world_frame)
+    if non_finite_mask.any():
+        # clone once so we don't overwrite the original tensor in the scene
+        print("NANS OR INF DURING HEIGHT MAP CALCULATION!!!")
+        hits_clean = ray_hit_positions_world_frame.clone()
+        hits_clean[non_finite_mask] = base_expanded_to_match_shape_world_frame[non_finite_mask]
+    else:
+        hits_clean = ray_hit_positions_world_frame
+
+    # 4) compute local coordinates, then the height = z_hit - z_base
+    local = hits_clean - base_expanded_to_match_shape_world_frame # [E, R, 3]
+    height = local[..., 2] # [E, R]
+
+    # height = torch.nan_to_num(height, nan=0.0, posinf=0.0, neginf=0.0)
+
+    return height
 
 
 @configclass

@@ -24,6 +24,7 @@ from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
+from isaaclab.sensors.ray_caster import RayCasterCfg, patterns
 
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 import cat_envs.tasks.utils.cat.constraints as constraints
@@ -43,6 +44,33 @@ from cat_envs.assets.odri import SOLO12_MINIMAL_CFG
 ##
 # Scene definition
 ##
+import torch
+
+def height_map_grid(env, asset_cfg: SceneEntityCfg):
+    ray_hit_positions_world_frame = env.scene[asset_cfg.name].data.ray_hits_w # [E, R, 3]
+    base_pose_world_frame = env.scene["robot"].data.root_pos_w # [E, 3]
+
+    # 2) expand base_w so it lines up with hits_w
+    base_expanded_to_match_shape_world_frame = base_pose_world_frame.view(-1, 1, 3).expand_as(ray_hit_positions_world_frame) # [E, R, 3]
+
+    # 3) sanitize: any non‐finite entry → copy from base_expanded...
+    #	this makes hit == base for that ray, so height=0
+    non_finite_mask = ~torch.isfinite(ray_hit_positions_world_frame)
+    if non_finite_mask.any():
+        # clone once so we don't overwrite the original tensor in the scene
+        print("NANS OR INF DURING HEIGHT MAP CALCULATION!!!")
+        hits_clean = ray_hit_positions_world_frame.clone()
+        hits_clean[non_finite_mask] = base_expanded_to_match_shape_world_frame[non_finite_mask]
+    else:
+        hits_clean = ray_hit_positions_world_frame
+
+    # 4) compute local coordinates, then the height = z_hit - z_base
+    local = hits_clean - base_expanded_to_match_shape_world_frame # [E, R, 3]
+    height = local[..., 2] # [E, R]
+
+    # height = torch.nan_to_num(height, nan=0.0, posinf=0.0, neginf=0.0)
+
+    return height
 
 
 @configclass
@@ -71,6 +99,19 @@ class MySceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = SOLO12_MINIMAL_CFG.replace(prim_path="/World/envs/env_.*/Robot")
     # sensors
     contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
+    ray_caster = RayCasterCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base_link",
+        update_period=0.0,  # will override in __post_init__
+        offset=RayCasterCfg.OffsetCfg(pos=(0.2, 0.0, 0.5)),  # 0.5 m above base_link
+        mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
+        attach_yaw_only=True,  # keep sensor level (no pitch/roll with body). This is a gross oversimplification but the original paper also used a grid of heights around the robot
+        pattern_cfg=patterns.GridPatternCfg( # Grid pattern shoots down vertical rays to retrieve hight at each grid point. Needs adjustments to be more realistic, such as using e.g. LIDARConfig
+            size=[1, 0.8], # see Fig. 3 in paper for grid layout, I tried approximating it visually here
+            resolution=0.08,
+            ordering="xy" # default row-major
+        ),
+        debug_vis=True,
+    )
     # lights
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
@@ -193,6 +234,13 @@ class ObservationsCfg:
             scale=0.05,
         )
         actions = ObsTerm(func=mdp.last_action, scale=1.0)
+        
+        height_map = ObsTerm(
+            func=height_map_grid,
+            params={"asset_cfg": SceneEntityCfg("ray_caster")},
+            noise=Unoise(n_min=-0.01, n_max=0.01),
+            scale=1.0,
+        )
 
         def __post_init__(self):
             self.enable_corruption = True
@@ -500,6 +548,7 @@ class Solo12FlatEnvCfg(ManagerBasedRLEnvCfg):
         # we tick all the sensors based on the smallest update period (physics update period)
         if self.scene.contact_forces is not None:
             self.scene.contact_forces.update_period = self.sim.dt
+        self.scene.ray_caster.update_period = self.sim.dt
 
 
 class Solo12FlatEnvCfg_PLAY(Solo12FlatEnvCfg):
