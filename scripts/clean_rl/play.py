@@ -22,7 +22,7 @@ parser.add_argument(
 parser.add_argument(
     "--video_length",
     type=int,
-    default=1000,
+    default=2000,
     help="Length of the recorded video (in steps).",
 )
 parser.add_argument(
@@ -115,11 +115,9 @@ def main():
 
     obs = env.reset()[0]["policy"]
     sum_of_rewards = 0
-    for _ in range(2000):
+    for _ in range(4000):
         with torch.no_grad():
-            actions, _, _, _ = actor.get_action_and_value(
-                actor.obs_rms(obs, update=False)
-            )
+            actions, _, _, _ = actor.get_action_and_value(actor.obs_rms(obs, update=False))
 
         next_obs, rewards, next_done, timeouts, info = env.step(actions)
         obs = next_obs["policy"]
