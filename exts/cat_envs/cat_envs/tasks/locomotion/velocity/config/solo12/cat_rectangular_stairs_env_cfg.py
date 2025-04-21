@@ -29,6 +29,7 @@ from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ContactSensorCfg
 from isaaclab.terrains import TerrainImporterCfg
+from isaaclab.terrains.terrain_generator_cfg import FlatPatchSamplingCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
@@ -81,6 +82,27 @@ def height_map_grid(env, asset_cfg: SceneEntityCfg):
 
     return height
 
+orig_gen = ROUGH_TERRAINS_CFG
+
+    # --- 2. Add "init_pos" sampling to each sub‑terrain ----------------------
+patched_sub_terrains = {
+    name: sub_cfg.replace(                               # sub_cfg is a SubTerrainBaseCfg
+        flat_patch_sampling={
+            "init_pos": FlatPatchSamplingCfg(            # <- lives on the *sub‑terrain*
+                num_patches=8,
+                patch_radius=0.8,
+                max_height_diff=0.15,
+            )
+        }
+    )
+    for name, sub_cfg in orig_gen.sub_terrains.items()
+}
+
+# --- 3. Build a *new* TerrainGeneratorCfg with those patched sub‑terrains
+patched_generator = orig_gen.replace(
+    sub_terrains=patched_sub_terrains,
+    use_cache=True,          # whatever other flags you want
+)
 
 @configclass
 class MySceneCfg(InteractiveSceneCfg):
@@ -109,7 +131,7 @@ class MySceneCfg(InteractiveSceneCfg):
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",
-        terrain_generator=ROUGH_TERRAINS_CFG,
+        terrain_generator=patched_generator,
         max_init_terrain_level=5,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -296,7 +318,7 @@ class EventCfg:
     )
 
     reset_base = EventTerm(
-        func=mdp.reset_root_state_uniform,
+        func=mdp.reset_root_state_from_terrain,
         mode="reset",
         params={
             "pose_range": {
@@ -312,6 +334,7 @@ class EventCfg:
                 "pitch": (-0.0, 0.0),
                 "yaw": (-0.0, 0.0),
             },
+            "asset_cfg": SceneEntityCfg("robot"),
         },
     )
 
