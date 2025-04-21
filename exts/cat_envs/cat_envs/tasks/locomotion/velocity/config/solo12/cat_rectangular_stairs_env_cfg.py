@@ -299,6 +299,18 @@ class ObservationsCfg:
     # observation groups
     policy: PolicyCfg = PolicyCfg()
 
+def force_hard_terrain(env, env_ids: torch.Tensor | None):
+    ti = env.scene.terrain  # runtime TerrainImporter
+    # Grab sub-terrain origins: [rows, cols, 3]
+    origins = ti.terrain_origins
+    num_rows = origins.shape[0]
+    # Compute the target row: either max_init_level or last row
+    # If you set max_init_terrain_level=5 originally, row index = min(5, num_rows-1).
+    row_idx = min(env.cfg.scene.terrain.max_init_terrain_level or (num_rows - 1), num_rows - 1)
+    # Select just that row → shape (1, cols, 3), then flatten to (cols, 3)
+    hard_origins = origins[row_idx:row_idx+1].reshape(-1, 3)
+    # Reconfigure env origins so every env starts on the hardest level
+    ti.configure_env_origins(hard_origins)
 
 @configclass
 class EventCfg:
@@ -622,6 +634,14 @@ class Solo12RectangularStairsEnvCfg_PLAY(Solo12RectangularStairsEnvCfg):
 
         # disable randomization for play
         self.observations.policy.enable_corruption = False
+
+        # Pick the hardest terrain when testing the model.
+        # Technically, this is incorrect as it wlil only run after 
+        # the first reset but it's good to see a baseline of it walking on flat terrain first
+        self.events.force_hard_terrain = EventTerm(
+            func=force_hard_terrain,
+            mode="startup",  # runs once at environment startup
+        )
 
         # set velocity command
         self.commands.base_velocity.ranges.lin_vel_x = (-0.3, 1.0)
