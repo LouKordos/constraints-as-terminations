@@ -24,7 +24,7 @@ parser.add_argument(
 parser.add_argument(
     "--video_length",
     type=int,
-    default=200,
+    default=500,
     help="Length of the recorded video (in steps).",
 )
 parser.add_argument(
@@ -112,6 +112,12 @@ def main(
     env_cfg.sim.device = (
         args_cli.device if args_cli.device is not None else env_cfg.sim.device
     )
+
+    # Follow robot with viewport
+    env_cfg.viewer.origin_type = "asset_root"
+    env_cfg.viewer.asset_name  = "robot"
+    env_cfg.viewer.eye        = (0.0, -5.0, 5.0)
+    env_cfg.viewer.lookat     = (0.0,  0.0, 0.5)
 
     # specify directory for logging experiments
     log_root_path = os.path.join("logs", "clean_rl", agent_cfg.experiment_name)
