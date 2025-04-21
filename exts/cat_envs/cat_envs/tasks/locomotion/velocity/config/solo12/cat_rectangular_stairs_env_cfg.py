@@ -622,6 +622,17 @@ class Solo12RectangularStairsEnvCfg(ManagerBasedRLEnvCfg):
             if self.scene.terrain.terrain_generator is not None:
                 self.scene.terrain.terrain_generator.curriculum = False
 
+        if self.seed is not None:
+            # this makes pyroTorch/NumPy/etc use the same seed as the env
+            self.sim.random_seed = self.seed  
+            # and for the gym wrapper
+            self.seed(self.seed)
+
+        # 2) Propagate that same seed into the terrain generator:
+        terr = self.scene.terrain.terrain_generator
+        if terr is not None:
+            terr.seed = self.seed
+
 
 class Solo12RectangularStairsEnvCfg_PLAY(Solo12RectangularStairsEnvCfg):
     def __post_init__(self) -> None:
