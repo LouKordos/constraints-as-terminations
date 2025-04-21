@@ -194,6 +194,8 @@ def PPO(envs, ppo_cfg, run_path):
             next_obs, rewards[step], next_done, timeouts, info = envs.step(action)
             next_done = next_done.to(torch.float)
             next_obs = next_obs["policy"]
+            if torch.any(torch.isnan(next_obs)):
+                print("NAN IN OBSERVATION")
 
             if "episode" in info:
                 ep_infos.append(info["episode"])
