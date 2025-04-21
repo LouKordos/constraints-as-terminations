@@ -74,6 +74,12 @@ def main():
         num_envs=args_cli.num_envs,
         use_fabric=not args_cli.disable_fabric,
     )
+
+    env_cfg.viewer.origin_type = "asset_root"
+    env_cfg.viewer.asset_name  = "robot"
+    env_cfg.viewer.eye        = (0.0, -5.0, 5.0)
+    env_cfg.viewer.lookat     = (0.0,  0.0, 0.5)
+
     agent_cfg = cli_args.parse_clean_rl_cfg(args_cli.task, args_cli)
 
     # specify directory for logging experiments
