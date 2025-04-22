@@ -22,7 +22,7 @@ parser.add_argument(
 parser.add_argument(
     "--video_length",
     type=int,
-    default=2000,
+    default=4000,
     help="Length of the recorded video (in steps).",
 )
 parser.add_argument(
@@ -77,7 +77,7 @@ def main():
 
     env_cfg.viewer.origin_type = "asset_root"
     env_cfg.viewer.asset_name  = "robot"
-    env_cfg.viewer.eye        = (0.0, -5.0, 5.0)
+    env_cfg.viewer.eye        = (0.0, -3.0, 2.0)
     env_cfg.viewer.lookat     = (0.0,  0.0, 0.5)
 
     agent_cfg = cli_args.parse_clean_rl_cfg(args_cli.task, args_cli)
