@@ -505,7 +505,7 @@ class TerminationsCfg:
     upside_down = DoneTerm(
         func=terminations.upside_down,
         params={
-            "limit": 0.8,
+            "limit": 1,
         },
     )
 
