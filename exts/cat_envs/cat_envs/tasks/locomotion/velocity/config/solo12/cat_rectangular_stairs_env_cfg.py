@@ -642,7 +642,8 @@ class Solo12RectangularStairsEnvCfg(ManagerBasedRLEnvCfg):
 
         if self.seed is not None:
             # this makes pyroTorch/NumPy/etc use the same seed as the env
-            self.sim.random_seed = self.seed  
+            self.sim.random_seed = self.seed
+            np.random.seed(self.seed)
             # and for the gym wrapper
             self.seed(self.seed)
 
