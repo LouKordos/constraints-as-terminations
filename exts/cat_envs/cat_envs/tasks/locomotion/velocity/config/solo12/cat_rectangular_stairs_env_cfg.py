@@ -90,7 +90,7 @@ patched_sub_terrains = {
     name: sub_cfg.replace(                               # sub_cfg is a SubTerrainBaseCfg
         flat_patch_sampling={
             "init_pos": FlatPatchSamplingCfg(            # <- lives on the *sub‑terrain*
-                num_patches=8,
+                num_patches=4000,
                 patch_radius=0.8, # This will be updated in __post_init__
                 max_height_diff=0.15,
             )
@@ -173,23 +173,9 @@ class MySceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    def __post__init__(self):
     def __post_init__(self):
         super().__post_init__()
-        # Now adjust sampling for the terrain generator *before* it samples:
-        terr_gen = self.terrain.terrain_generator
-        if terr_gen is not None:
-            total_envs = self.num_envs
-            num_subs  = len(terr_gen.sub_terrains)
-            patches_per_sub = math.ceil(total_envs / num_subs)
-            # update each sub-terrain’s flat_patch_sampling init_pos.num_patches
-            for name, sub in terr_gen.sub_terrains.items():
-                new_init = sub.flat_patch_sampling.init_pos.replace(
-                    num_patches=patches_per_sub
-                )
-                terr_gen.sub_terrains[name] = sub.replace(
-                    flat_patch_sampling={"init_pos": new_init}
-                )
+        
 
 ##
 # MDP settings
