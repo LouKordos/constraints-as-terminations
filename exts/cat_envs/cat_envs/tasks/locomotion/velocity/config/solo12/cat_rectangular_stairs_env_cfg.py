@@ -682,6 +682,8 @@ class Solo12RectangularStairsEnvCfg(ManagerBasedRLEnvCfg):
         if terr is not None:
             terr.seed = self.seed
 
+        self.sim.physx.gpu_max_rigid_patch_count = 568462
+
 
 class Solo12RectangularStairsEnvCfg_PLAY(Solo12RectangularStairsEnvCfg):
     def __post_init__(self) -> None:
