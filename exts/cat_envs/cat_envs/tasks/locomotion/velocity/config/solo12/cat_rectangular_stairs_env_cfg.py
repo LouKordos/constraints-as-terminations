@@ -173,7 +173,8 @@ class MySceneCfg(InteractiveSceneCfg):
     )
 
     def __post__init__(self):
-        super().__post__init__()
+    def __post_init__(self):
+        super().__post_init__()
         # Now adjust sampling for the terrain generator *before* it samples:
         terr_gen = self.terrain.terrain_generator
         if terr_gen is not None:
