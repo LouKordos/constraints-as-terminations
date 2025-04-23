@@ -43,6 +43,7 @@ import cat_envs.tasks.utils.mdp.observations as observations
 import cat_envs.tasks.utils.mdp.terminations as terminations
 import cat_envs.tasks.utils.mdp.events as events
 import cat_envs.tasks.utils.mdp.commands as commands
+import numpy as np
 
 ##
 # Pre-defined configs
@@ -330,6 +331,42 @@ def force_hard_terrain(env, env_ids: torch.Tensor | None):
     # Reconfigure env origins so every env starts on the hardest level
     ti.configure_env_origins(hard_origins)
 
+# Reset robot to random orientation + position close to the flat patches calculated by the terrain config
+def reset_with_jitter(env, env_ids: torch.Tensor):
+    # 1) place at flat‐patch centers
+    mdp.reset_root_state_from_terrain(
+        env, env_ids,
+        pose_range={"x": (0,0), "y": (0,0), "z": (0,0), "yaw": (0,0)},
+        velocity_range={"x": (0,0), "y": (0,0), "z": (0,0),
+                        "roll": (0,0), "pitch": (0,0), "yaw": (0,0)},
+        asset_cfg=SceneEntityCfg("robot")
+    )
+
+    # 2) read back the assigned positions
+    #	shape: [num_ids, 3]
+    robot = env.scene["robot"]
+    positions = robot.data.root_link_pos_w[env_ids]
+    quaternions = robot.data.root_link_quat_w[env_ids]
+    N = len(env_ids)
+    patch_radius = 0.8
+
+    # 3) sample random offsets in circle of radius `patch_radius`
+    #	(you can also use env.np_random if you prefer reproducibility)
+    angles = torch.rand(N, device=positions.device) * 2 * math.pi
+    radii  = torch.rand(N, device=quaternions.device) * patch_radius
+    dx = radii * torch.cos(angles)
+    dy = radii * torch.sin(angles)
+
+    # 4) apply jitter and write back
+    positions[:, 0] += dx
+    positions[:, 1] += dy
+    root_pose = torch.cat([positions, quaternions], dim=-1)
+    # leave z, orientation, and velocity unchanged
+
+    # push new root poses into the sim
+    robot.write_root_pose_to_sim(root_pose, env_ids=env_ids)
+    env.scene["ray_caster"]._initialize_warp_meshes()
+
 @configclass
 class EventCfg:
     """Configuration for events."""
@@ -347,24 +384,9 @@ class EventCfg:
     )
 
     reset_base = EventTerm(
-        func=mdp.reset_root_state_from_terrain,
+        func=reset_with_jitter,
         mode="reset",
-        params={
-            "pose_range": {
-                "x": (-0.05, 0.05),
-                "y": (-0.05, 0.05),
-                "yaw": (-1.57, 1.57),
-            },
-            "velocity_range": {
-                "x": (-0.0, 0.0),
-                "y": (-0.0, 0.0),
-                "z": (-0.0, 0.0),
-                "roll": (-0.0, 0.0),
-                "pitch": (-0.0, 0.0),
-                "yaw": (-0.0, 0.0),
-            },
-            "asset_cfg": SceneEntityCfg("robot"),
-        },
+        is_global_time=False # per env reset
     )
 
     reset_robot_joints = EventTerm(
