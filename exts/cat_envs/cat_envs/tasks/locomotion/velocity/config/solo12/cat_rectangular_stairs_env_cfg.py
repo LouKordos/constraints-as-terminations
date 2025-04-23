@@ -533,8 +533,11 @@ class TerminationsCfg:
     )
 
 
-MAX_CURRICULUM_ITERATIONS = 1000
+def terrain_levels_with_ray_caster_refresh(env, env_ids):
+    mdp.terrain_levels_vel(env, env_ids)
+    env.scene["ray_caster"]._initialize_warp_meshes()
 
+MAX_CURRICULUM_ITERATIONS = 1000
 
 @configclass
 class CurriculumCfg:
@@ -607,7 +610,11 @@ class CurriculumCfg:
         },
     )
 
-    terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
+    terrain_levels = CurrTerm(
+        func=terrain_levels_with_ray_caster_refresh,
+    )
+
+    # terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
 ##
 # Environment configuration
 ##
