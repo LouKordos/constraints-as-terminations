@@ -611,7 +611,7 @@ class Solo12RectangularStairsEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
 
     # Scene settings
-    scene: MySceneCfg = MySceneCfg(num_envs=4096, env_spacing=8.0)
+    scene: MySceneCfg = MySceneCfg(num_envs=10000, env_spacing=8.0)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
