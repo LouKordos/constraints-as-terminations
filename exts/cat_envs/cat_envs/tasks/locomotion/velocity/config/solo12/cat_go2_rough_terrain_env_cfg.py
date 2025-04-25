@@ -163,7 +163,7 @@ class MySceneCfg(InteractiveSceneCfg):
     ray_caster = RayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
         update_period=0.0,  # will override in __post_init__
-        offset=RayCasterCfg.OffsetCfg(pos=(0.2, 0.0, 0.5)),  # 0.5 m above base_link
+        offset=RayCasterCfg.OffsetCfg(pos=(0.2, 0.0, 0.5)),  # 0.5 m above base
         mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
         attach_yaw_only=True,  # keep sensor level (no pitch/roll with body). This is a gross oversimplification but the original paper also used a grid of heights around the robot
         pattern_cfg=patterns.GridPatternCfg( # Grid pattern shoots down vertical rays to retrieve hight at each grid point. Needs adjustments to be more realistic, such as using e.g. LIDARConfig
@@ -222,12 +222,12 @@ class ActionsCfg:
             "FR_hip_joint",
             "FR_thigh_joint",
             "FR_calf_joint",
-            "HR_hip_joint",
-            "HR_thigh_joint",
-            "HR_calf_joint",
-            "HL_hip_joint",
-            "HL_thigh_joint",
-            "HL_calf_joint",
+            "RR_hip_joint",
+            "RR_thigh_joint",
+            "RR_calf_joint",
+            "RL_hip_joint",
+            "RL_thigh_joint",
+            "RL_calf_joint",
         ],
         scale=0.5,
         use_default_offset=True,
@@ -265,12 +265,12 @@ class ObservationsCfg:
                     "FR_hip_joint",
                     "FR_thigh_joint",
                     "FR_calf_joint",
-                    "HR_hip_joint",
-                    "HR_thigh_joint",
-                    "HR_calf_joint",
-                    "HL_hip_joint",
-                    "HL_thigh_joint",
-                    "HL_calf_joint",
+                    "RR_hip_joint",
+                    "RR_thigh_joint",
+                    "RR_calf_joint",
+                    "RL_hip_joint",
+                    "RL_thigh_joint",
+                    "RL_calf_joint",
                 ]
             },
             noise=Unoise(n_min=-0.01, n_max=0.01),
@@ -286,12 +286,12 @@ class ObservationsCfg:
                     "FR_hip_joint",
                     "FR_thigh_joint",
                     "FR_calf_joint",
-                    "HR_hip_joint",
-                    "HR_thigh_joint",
-                    "HR_calf_joint",
-                    "HL_hip_joint",
-                    "HL_thigh_joint",
-                    "HL_calf_joint",
+                    "RR_hip_joint",
+                    "RR_thigh_joint",
+                    "RR_calf_joint",
+                    "RL_hip_joint",
+                    "RL_thigh_joint",
+                    "RL_calf_joint",
                 ]
             },
             noise=Unoise(n_min=-0.2, n_max=0.2),
@@ -454,7 +454,7 @@ class ConstraintsCfg:
     contact = ConstraintTerm(
         func=constraints.contact,
         max_p=1.0,
-        params={"names": ["base_link", ".*_thigh"]},
+        params={"names": ["base", ".*_thigh"]},
     )
     foot_contact_force = ConstraintTerm(
         func=constraints.foot_contact_force,
@@ -515,7 +515,7 @@ class TerminationsCfg:
         func=mdp.illegal_contact,
         params={
             "sensor_cfg": SceneEntityCfg(
-                "contact_forces", body_names=["base_link", ".*_thigh"]
+                "contact_forces", body_names=["base", ".*_thigh"]
             ),
             "threshold": 1.0,
         },
