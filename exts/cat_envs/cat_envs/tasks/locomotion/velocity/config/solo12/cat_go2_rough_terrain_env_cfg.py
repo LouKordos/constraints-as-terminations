@@ -229,7 +229,7 @@ class ActionsCfg:
             "RL_calf_joint",
             "RR_calf_joint",
         ],
-        scale=0.5,
+        scale=0.8,
         use_default_offset=True,
         preserve_order=True,
     )
@@ -340,6 +340,8 @@ def reset_with_jitter(env, env_ids: torch.Tensor):
     # 2) read back the assigned positions
     #	shape: [num_ids, 3]
     robot = env.scene["robot"]
+    # print("ROBOT INITIAL STATE DEFAULT JOINT POS:", robot.data.default_joint_pos[0])
+    # print("JOINT NAMES IN ORDER:", robot.data.joint_names)
     positions = robot.data.root_link_pos_w[env_ids]
     quaternions = robot.data.root_link_quat_w[env_ids]
     N = len(env_ids)
