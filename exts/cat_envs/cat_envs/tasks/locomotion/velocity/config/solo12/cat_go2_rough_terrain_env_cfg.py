@@ -149,9 +149,11 @@ class MySceneCfg(InteractiveSceneCfg):
     )
 
     # robots
-    robot: ArticulationCfg = UNITREE_GO2_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot").replace(articulation_props=UNITREE_GO2_CFG.spawn.articulation_props.replace(
-            enabled_self_collisions=True
-        ),
+    robot: ArticulationCfg = UNITREE_GO2_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot").replace(spawn=UNITREE_GO2_CFG.spawn.replace(
+            articulation_props=UNITREE_GO2_CFG.spawn.articulation_props.replace(
+                enabled_self_collisions=True
+            ),
+        )
     )
 
     # sensors
