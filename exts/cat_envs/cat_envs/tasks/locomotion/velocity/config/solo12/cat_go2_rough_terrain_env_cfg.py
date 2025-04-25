@@ -149,7 +149,15 @@ class MySceneCfg(InteractiveSceneCfg):
     )
 
     # robots
-    robot: ArticulationCfg = UNITREE_GO2_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = UNITREE_GO2_CFG.replace(
+        spawn=UNITREE_GO2_CFG.spawn.replace(
+            prim_path="{ENV_REGEX_NS}/Robot",
+            articulation_props=UNITREE_GO2_CFG.spawn.articulation_props.replace(
+                enabled_self_collisions=True
+            ),
+        )
+    )
+
     # sensors
     contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
     ray_caster = RayCasterCfg(
@@ -208,18 +216,18 @@ class ActionsCfg:
     joint_pos = mdp.JointPositionActionCfg(
         asset_name="robot",
         joint_names=[
-            "FL_HAA",
-            "FL_HFE",
-            "FL_KFE",
-            "FR_HAA",
-            "FR_HFE",
-            "FR_KFE",
-            "HR_HAA",
-            "HR_HFE",
-            "HR_KFE",
-            "HL_HAA",
-            "HL_HFE",
-            "HL_KFE",
+            "FL_hip_joint",
+            "FL_thigh_joint",
+            "FL_calf_joint",
+            "FR_hip_joint",
+            "FR_thigh_joint",
+            "FR_calf_joint",
+            "HR_hip_joint",
+            "HR_thigh_joint",
+            "HR_calf_joint",
+            "HL_hip_joint",
+            "HL_thigh_joint",
+            "HL_calf_joint",
         ],
         scale=0.5,
         use_default_offset=True,
@@ -251,18 +259,18 @@ class ObservationsCfg:
             func=observations.joint_pos,
             params={
                 "names": [
-                    "FL_HAA",
-                    "FL_HFE",
-                    "FL_KFE",
-                    "FR_HAA",
-                    "FR_HFE",
-                    "FR_KFE",
-                    "HR_HAA",
-                    "HR_HFE",
-                    "HR_KFE",
-                    "HL_HAA",
-                    "HL_HFE",
-                    "HL_KFE",
+                    "FL_hip_joint",
+                    "FL_thigh_joint",
+                    "FL_calf_joint",
+                    "FR_hip_joint",
+                    "FR_thigh_joint",
+                    "FR_calf_joint",
+                    "HR_hip_joint",
+                    "HR_thigh_joint",
+                    "HR_calf_joint",
+                    "HL_hip_joint",
+                    "HL_thigh_joint",
+                    "HL_calf_joint",
                 ]
             },
             noise=Unoise(n_min=-0.01, n_max=0.01),
@@ -272,18 +280,18 @@ class ObservationsCfg:
             func=observations.joint_vel,
             params={
                 "names": [
-                    "FL_HAA",
-                    "FL_HFE",
-                    "FL_KFE",
-                    "FR_HAA",
-                    "FR_HFE",
-                    "FR_KFE",
-                    "HR_HAA",
-                    "HR_HFE",
-                    "HR_KFE",
-                    "HL_HAA",
-                    "HL_HFE",
-                    "HL_KFE",
+                    "FL_hip_joint",
+                    "FL_thigh_joint",
+                    "FL_calf_joint",
+                    "FR_hip_joint",
+                    "FR_thigh_joint",
+                    "FR_calf_joint",
+                    "HR_hip_joint",
+                    "HR_thigh_joint",
+                    "HR_calf_joint",
+                    "HL_hip_joint",
+                    "HL_thigh_joint",
+                    "HL_calf_joint",
                 ]
             },
             noise=Unoise(n_min=-0.2, n_max=0.2),
