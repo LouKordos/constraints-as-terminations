@@ -79,6 +79,8 @@ def main():
     env_cfg.viewer.asset_name  = "robot"
     env_cfg.viewer.eye        = (0.0, -3.0, 2.0)
     env_cfg.viewer.lookat     = (0.0,  0.0, 0.5)
+    env_cfg.sim.render.rendering_mode = "quality"
+    env_cfg.viewer.resolution = (1920, 1080)
 
     agent_cfg = cli_args.parse_clean_rl_cfg(args_cli.task, args_cli)
 
