@@ -431,22 +431,22 @@ class ConstraintsCfg:
     joint_torque = ConstraintTerm(
         func=constraints.joint_torque,
         max_p=0.25,
-        params={"limit": 3.0, "names": [".*_HAA", ".*_HFE", ".*_KFE"]},
+        params={"limit": 35.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
     joint_velocity = ConstraintTerm(
         func=constraints.joint_velocity,
         max_p=0.25,
-        params={"limit": 16.0, "names": [".*_HAA", ".*_HFE", ".*_KFE"]},
+        params={"limit": 25.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
     joint_acceleration = ConstraintTerm(
         func=constraints.joint_acceleration,
         max_p=0.25,
-        params={"limit": 800.0, "names": [".*_HAA", ".*_HFE", ".*_KFE"]},
+        params={"limit": 800.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
     action_rate = ConstraintTerm(
         func=constraints.action_rate,
         max_p=0.25,
-        params={"limit": 80.0, "names": [".*_HAA", ".*_HFE", ".*_KFE"]},
+        params={"limit": 80.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
 
     # Safety Hard constraints
@@ -454,17 +454,17 @@ class ConstraintsCfg:
     contact = ConstraintTerm(
         func=constraints.contact,
         max_p=1.0,
-        params={"names": ["base_link", ".*_UPPER_LEG"]},
+        params={"names": ["base_link", ".*_thigh"]},
     )
     foot_contact_force = ConstraintTerm(
         func=constraints.foot_contact_force,
         max_p=1.0,
-        params={"limit": 50.0, "names": [".*_FOOT"]},
+        params={"limit": 150.0, "names": [".*_foot"]},
     )
     front_hfe_position = ConstraintTerm(
         func=constraints.joint_position,
         max_p=1.0,
-        params={"limit": 1.3, "names": ["FL_HFE", "FR_HFE"]},
+        params={"limit": 1.5, "names": ["FL_thigh_joint", "FR_thigh_joint"]},
     )
     upsidedown = ConstraintTerm(
         func=constraints.upsidedown, max_p=1.0, params={"limit": 0.0}
@@ -473,8 +473,8 @@ class ConstraintsCfg:
     # Style constraints
     hip_position = ConstraintTerm(
         func=constraints.joint_position_when_moving_forward,
-        max_p=0.25,
-        params={"limit": 0.2, "names": [".*_HAA"], "velocity_deadzone": 0.1},
+        max_p=0.3,
+        params={"limit": 0.2, "names": [".*_hip_joint"], "velocity_deadzone": 0.1},
     )
     base_orientation = ConstraintTerm(
         func=constraints.base_orientation, max_p=0.25, params={"limit": 0.1}
@@ -484,13 +484,13 @@ class ConstraintsCfg:
     air_time = ConstraintTerm(
         func=constraints.air_time,
         max_p=0.25,
-        params={"limit": 0.25, "names": [".*_FOOT"], "velocity_deadzone": 0.1},
+        params={"limit": 0.25, "names": [".*_foot"], "velocity_deadzone": 0.1},
     )
     no_move = ConstraintTerm(
         func=constraints.no_move,
         max_p=0.1,
         params={
-            "names": [".*_HAA", ".*_HFE", ".*_KFE"],
+            "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
             "velocity_deadzone": 0.1,
             "joint_vel_limit": 4.0,
         },
@@ -499,7 +499,7 @@ class ConstraintsCfg:
         func=constraints.n_foot_contact,
         max_p=0.25,
         params={
-            "names": [".*_FOOT"],
+            "names": [".*_foot"],
             "number_of_desired_feet": 2,
             "min_command_value": 0.5,
         },
@@ -515,7 +515,7 @@ class TerminationsCfg:
         func=mdp.illegal_contact,
         params={
             "sensor_cfg": SceneEntityCfg(
-                "contact_forces", body_names=["base_link", ".*_UPPER_LEG"]
+                "contact_forces", body_names=["base_link", ".*_thigh"]
             ),
             "threshold": 1.0,
         },
