@@ -50,7 +50,7 @@ import numpy as np
 ##
 from cat_envs.assets.odri import SOLO12_MINIMAL_CFG
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
-from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG  # isort: skip
+from cat_envs.assets.go2_config import UNITREE_GO2_CFG  # isort: skip
 import torch
 
 
@@ -149,12 +149,7 @@ class MySceneCfg(InteractiveSceneCfg):
     )
 
     # robots
-    robot: ArticulationCfg = UNITREE_GO2_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot").replace(spawn=UNITREE_GO2_CFG.spawn.replace(
-            articulation_props=UNITREE_GO2_CFG.spawn.articulation_props.replace(
-                enabled_self_collisions=True
-            ),
-        )
-    )
+    robot: ArticulationCfg = UNITREE_GO2_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # sensors
     contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
