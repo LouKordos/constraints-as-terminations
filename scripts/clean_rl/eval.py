@@ -10,7 +10,6 @@ from isaaclab.app import AppLauncher
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-
 # Disable interactive display so saves don't pop up windows immediately
 plt.ioff()
 
@@ -36,17 +35,11 @@ def parse_arguments():
         arguments.enable_cameras = True
     return arguments
 
-
-
-
 def get_latest_checkpoint(run_directory: str) -> str:
     checkpoint_files = sorted(glob.glob(os.path.join(run_directory, "*.pt")))
     if not checkpoint_files:
         raise FileNotFoundError(f"No checkpoint files found in {run_directory}")
     return checkpoint_files[-1]
-
-
-
 
 def load_constraint_limits(params_directory: str) -> dict:
     yaml_file = os.path.join(params_directory, 'env.yaml')
@@ -66,9 +59,6 @@ def load_constraint_limits(params_directory: str) -> dict:
             if isinstance(params, dict) and 'limit' in params:
                 limits[term_name] = params['limit']
     return limits
-
-
-
 
 def plot_time_series_with_contact(time_steps: np.ndarray, values: np.ndarray, limits: dict, label: str, output_path: str, contact_states: np.ndarray | None = None) -> plt.Figure:
     """
@@ -101,9 +91,6 @@ def plot_time_series_with_contact(time_steps: np.ndarray, values: np.ndarray, li
     ax.grid(True)
     fig.savefig(output_path, dpi=600)
     return fig
-
-
-
 
 def create_height_map_animation(height_map_sequence: np.ndarray, foot_positions_sequence: np.ndarray, output_path: str, fps: int = 30, sensor=None):
     """
@@ -209,16 +196,13 @@ def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
 
-
     # Create output directories
     plots_directory = os.path.join(args.run_dir, "test/plots")
     trajectories_directory = os.path.join(args.run_dir, "test/trajectories")
     os.makedirs(plots_directory, exist_ok=True)
     os.makedirs(trajectories_directory, exist_ok=True)
 
-
     constraint_limits = load_constraint_limits(os.path.join(args.run_dir, 'params'))
-
 
     # Launch Isaac Lab environment
     app_launcher = AppLauncher(args)
@@ -245,16 +229,13 @@ def main():
     env_configuration.sim.render.rendering_mode = "quality"
     env_configuration.viewer.resolution = (1920, 1080)
 
-
     import cli_args  # isort: skip
     agent_configuration = cli_args.parse_clean_rl_cfg(args.task, args)
-
 
     checkpoint_path = get_latest_checkpoint(args.run_dir)
     print(f"[INFO] Loading model from: {checkpoint_path}")
     log_parent = os.path.dirname(checkpoint_path)
     model_state = torch.load(checkpoint_path)
-
 
     env = gym.make(args.task, cfg=env_configuration, render_mode="rgb_array" if args.video else None)
     if args.video:
@@ -267,11 +248,10 @@ def main():
         print_dict(video_configuration, nesting=4)
         env = gym.wrappers.RecordVideo(env, **video_configuration)
 
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     policy_agent = Agent(env).to(device)
     policy_agent.load_state_dict(model_state)
-
+    joint_names = env.unwrapped.scene["robot"].data.joint_names
 
     # Initialize buffers for recording
     joint_positions_buffer = []
@@ -289,12 +269,10 @@ def main():
     height_map_buffer = []
     foot_positions_buffer = []
 
-
     cumulative_reward = 0.0
     observations, info = env.reset()
     policy_observation = observations['policy']
     total_steps = args.video_length
-
 
     previous_action = None
     for t in range(total_steps):
@@ -302,15 +280,12 @@ def main():
             action, _, _, _ = policy_agent.get_action_and_value(policy_agent.obs_rms(policy_observation, update=False))
         next_observation, reward, done, truncated, info = env.step(action)
 
-
         scene_data = env.unwrapped.scene['robot'].data
-
 
         joint_positions = scene_data.joint_pos[0].cpu().numpy()
         joint_velocities = scene_data.joint_vel[0].cpu().numpy()
         joint_positions_buffer.append(joint_positions)
         joint_velocities_buffer.append(joint_velocities)
-
 
         contact_sensors = env.unwrapped.scene['contact_forces']
         feet_ids,_ = contact_sensors.find_bodies(['FL_foot','FR_foot','RL_foot','RR_foot'], preserve_order=True)
@@ -320,20 +295,17 @@ def main():
         max_per_foot = force_magnitudes.max(dim=0)[0].numpy()
         contact_forces_buffer.append(max_per_foot)
 
-
         torques = scene_data.applied_torque[0].cpu().numpy()
         joint_torques_buffer.append(torques)
-
 
         accelerations = scene_data.joint_acc[0].cpu().numpy()
         joint_accelerations_buffer.append(accelerations)
 
-
         action_np = action.cpu().numpy()
         if previous_action is None:
-            action_rate = 0.0
+            action_rate = np.zeros_like(action_np)
         else:
-            action_rate = float(np.linalg.norm(action_np - previous_action))
+            action_rate = np.abs(action_np - previous_action)
         action_rate_buffer.append(action_rate)
         previous_action = action_np
 
@@ -353,17 +325,14 @@ def main():
         base_position_buffer.append(relative_position)
         base_orientation_buffer.append([yaw, pitch, roll])
 
-
         linear_velocity = scene_data.root_lin_vel_w[0].cpu().numpy()
         angular_velocity = scene_data.root_ang_vel_w[0].cpu().numpy()
         base_linear_velocity_buffer.append(linear_velocity)
         base_angular_velocity_buffer.append(angular_velocity)
 
-
         commanded_velocity_buffer.append(env.unwrapped.command_manager.get_command("base_velocity"))
         contact_state = (max_per_foot > 0).astype(int)
         contact_state_buffer.append(contact_state)
-
 
         height_map_sequence = height_map_grid(env.unwrapped, SceneEntityCfg(name="ray_caster")).cpu().numpy()
         height_map_buffer.append(height_map_sequence[0])
@@ -374,7 +343,6 @@ def main():
         ])
         foot_positions_buffer.append(foot_positions - world_position)
 
-
         cumulative_reward += reward.mean().item()
         policy_observation = next_observation['policy']
 
@@ -384,7 +352,7 @@ def main():
     joint_velocities_array = np.vstack(joint_velocities_buffer)
     joint_torques_array = np.vstack(joint_torques_buffer)
     joint_accelerations_array = np.vstack(joint_accelerations_buffer)
-    action_rate_array = np.array(action_rate_buffer)
+    action_rate_array = np.vstack(action_rate_buffer)
     contact_forces_array = np.stack(contact_forces_buffer)
     base_position_array = np.vstack(base_position_buffer)
     base_orientation_array = np.vstack(base_orientation_buffer)
@@ -397,17 +365,24 @@ def main():
     violations_percent = {}
     for term, limit in constraint_limits.items():
         data_map = {
-            'joint_velocity': joint_velocities_array,
-            'joint_torque': joint_torques_array,
+            'joint_velocity': 	joint_velocities_array,
+            'joint_torque':   	joint_torques_array,
             'joint_acceleration': joint_accelerations_array,
-            'action_rate': action_rate_array,
-            'foot_contact_force': contact_forces_array.reshape(total_steps, -1).mean(axis=1)
+            'action_rate':    	action_rate_array,
+            'foot_contact_force': contact_forces_array.reshape(total_steps, -1).mean(axis=1),
         }
-        metric_array = data_map.get(term)
-        if metric_array is not None:
-            percent_violation = (metric_array > limit).sum() / metric_array.size * 100
-            violations_percent[term] = percent_violation
 
+        for term, limit in constraint_limits.items():
+            metric = data_map.get(term)
+            if metric is None:
+                continue
+
+            # vector metrics → percent per joint
+            if metric.ndim == 2:
+                percent_per_joint = (metric > limit).mean(axis=0) * 100
+                violations_percent[term] = dict(zip(joint_names, percent_per_joint.tolist()))
+            else:
+                violations_percent[term] = float((metric > limit).mean() * 100)
 
     # Save summary metrics
     summary_metrics = {
@@ -419,7 +394,6 @@ def main():
         json.dump(summary_metrics, summary_file, indent=2)
     print(json.dumps(summary_metrics, indent=2))
 
-
     # Write trajectories to JSONL
     trajectories_path = os.path.join(trajectories_directory, 'trajectory.jsonl')
     with open(trajectories_path, 'w') as traj_file:
@@ -429,7 +403,7 @@ def main():
                 'joint_positions': joint_positions_buffer[idx].tolist(),
                 'joint_velocities': joint_velocities_buffer[idx].tolist(),
                 'joint_accelerations': joint_accelerations_buffer[idx].tolist(),
-                'action_rate': float(action_rate_buffer[idx]),
+                'action_rate': action_rate_buffer[idx].tolist(),
                 'contact_forces': contact_forces_buffer[idx].tolist(),
                 'joint_torques': joint_torques_buffer[idx].tolist(),
                 'base_position': base_position_buffer[idx].tolist(),
@@ -443,35 +417,84 @@ def main():
             }
             traj_file.write(json.dumps(record) + "\n")
 
-
     # Individual plots for each metric
     figs = []
-    figs.append(plot_time_series_with_contact(time_steps, joint_positions_array.mean(axis=1),
-                                            violations_percent, 'joint_positions',
-                                            os.path.join(plots_directory, 'joint_positions.pdf'),
-                                            contact_state_array))
-    figs.append(plot_time_series_with_contact(time_steps, joint_velocities_array.mean(axis=1),
-                                            violations_percent, 'joint_velocities',
-                                            os.path.join(plots_directory, 'joint_velocities.pdf'),
-                                            contact_state_array))
-    figs.append(plot_time_series_with_contact(time_steps, joint_accelerations_array.mean(axis=1),
-                                            violations_percent, 'joint_accelerations',
-                                            os.path.join(plots_directory, 'joint_accelerations.pdf'),
-                                            contact_state_array))
-    figs.append(plot_time_series_with_contact(time_steps, joint_torques_array.mean(axis=1),
-                                            violations_percent, 'joint_torques',
-                                            os.path.join(plots_directory, 'joint_torques.pdf'),
-                                            contact_state_array))
-    figs.append(plot_time_series_with_contact(time_steps, action_rate_array,
-                                            violations_percent, 'action_rate',
-                                            os.path.join(plots_directory, 'action_rate.pdf'),
-                                            contact_state_array))
-    foot_force_mean = contact_forces_array.reshape(total_steps, -1).mean(axis=1)
-    figs.append(plot_time_series_with_contact(time_steps, foot_force_mean,
-                                            violations_percent, 'foot_contact_force',
-                                            os.path.join(plots_directory, 'foot_contact_force.pdf'),
-                                            contact_state_array))
 
+    # ----------------------------------------
+    # 1) Foot contact‐force per‐foot in 2×2 grid
+    # ----------------------------------------
+    foot_labels = ['front left','front right','rear left','rear right']
+    fig, axes = plt.subplots(2, 2, sharex=True, figsize=(16, 8))
+    for i, ax in enumerate(axes.flat):
+        ax.plot(time_steps, contact_forces_array[:, i], label='force')
+        # identify contiguous contact intervals
+        in_contact = contact_state_array[:, i].astype(bool)
+        segments = []
+        start_idx = None
+        for idx, val in enumerate(in_contact):
+            if val and start_idx is None:
+                start_idx = idx
+            elif not val and start_idx is not None:
+                segments.append((start_idx, idx))
+                start_idx = None
+        if start_idx is not None:
+            segments.append((start_idx, len(time_steps)))
+
+        # shade each interval across the full y-axis
+        first = True
+        for s, e in segments:
+            ax.axvspan(
+                time_steps[s],
+                time_steps[e-1],
+                facecolor='gray',
+                alpha=0.3,
+                label='in contact' if first else None
+            )
+            first = False
+
+        ax.set_title(foot_labels[i])
+        ax.set_ylabel('Force [N]')
+        ax.legend()
+    fig.tight_layout()
+    fig.savefig(os.path.join(plots_directory, 'foot_contact_each.pdf'), dpi=600)
+
+    # ------------------------------------------------
+    # 2) Joint metrics: 4×3 grid and overview per metric
+    # ------------------------------------------------
+    metrics = {
+        'positions': 	joint_positions_array,
+        'velocities':	joint_velocities_array,
+        'accelerations': joint_accelerations_array,
+        'torques':   	joint_torques_array,
+        'action_rates': action_rate_array
+    }
+
+    for name, data in metrics.items():
+        # 4×3 grid of separate joint plots
+        fig, axes = plt.subplots(4, 3, sharex=True, figsize=(18, 12))
+        for j, ax in enumerate(axes.flat):
+            ax.plot(time_steps, data[:, j])
+            ax.fill_between(
+                time_steps, 0, contact_forces_array[:, i],
+                where=contact_state_array[:, i].astype(bool),
+                color='gray', alpha=0.3, step='post',
+                label='in contact'
+            )
+            ax.set_title(joint_names[j])
+            ax.set_ylabel("Joint " + (name.replace('_', ' ')[:-1] if name != 'velocities' else 'velocity'))
+        axes[-1, 0].set_xlabel('Timestep')
+        fig.tight_layout()
+        fig.savefig(os.path.join(plots_directory, f'joint_{name}_grid.pdf'), dpi=600)
+
+        # overview: all joints in one plot
+        fig, ax = plt.subplots(figsize=(12, 6))
+        for j in range(data.shape[1]):
+            ax.plot(time_steps, data[:, j], label=joint_names[j])
+        ax.set_xlabel('Timestep')
+        ax.set_ylabel("Joint " + (name.replace('_', ' ')[:-1] if name != 'velocities' else 'velocity'))
+        ax.legend(loc='upper right', ncol=2)
+        fig.tight_layout()
+        fig.savefig(os.path.join(plots_directory, f'joint_{name}_overview.pdf'), dpi=600)
 
     # Combined subplots for base position, orientation, linear and angular velocity
     FIGSIZE = (16, 9)
@@ -487,7 +510,6 @@ def main():
     fig_bp.savefig(os.path.join(plots_directory, 'base_position_subplots.pdf'), dpi=600)
     figs.append(fig_bp)
 
-
     fig_bo, axes_bo = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, orient_label in enumerate(['Yaw', 'Pitch', 'Roll']):
         axes_bo[i].plot(time_steps, base_orientation_array[:, i], label=orient_label)
@@ -499,7 +521,6 @@ def main():
     fig_bo.tight_layout()
     fig_bo.savefig(os.path.join(plots_directory, 'base_orientation_subplots.pdf'), dpi=600)
     figs.append(fig_bo)
-
 
     fig_blv, axes_blv = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, vel_label in enumerate(['VX', 'VY', 'VZ']):
@@ -513,7 +534,6 @@ def main():
     fig_blv.savefig(os.path.join(plots_directory, 'base_linear_velocity_subplots.pdf'), dpi=600)
     figs.append(fig_blv)
 
-
     fig_bav, axes_bav = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, vel_label in enumerate(['WX', 'WY', 'WZ']):
         axes_bav[i].plot(time_steps, base_angular_velocity_array[:, i], label=vel_label)
@@ -525,7 +545,6 @@ def main():
     fig_bav.tight_layout()
     fig_bav.savefig(os.path.join(plots_directory, 'base_angular_velocity_subplots.pdf'), dpi=600)
     figs.append(fig_bav)
-
 
     fig_overview, overview_axes = plt.subplots(2, 2, figsize=(20, 16))
     cats = [base_position_array, base_orientation_array,
@@ -547,9 +566,7 @@ def main():
     create_height_map_animation(np.array(height_map_buffer),
                                 np.array(foot_positions_buffer),
                                 os.path.join(plots_directory, 'height_map.mp4'), sensor=env.unwrapped.scene["ray_caster"])
-    foot_labels = ['front left','front right','rear left','rear right']
     figs.append(plot_gait_diagram(np.array(contact_state_buffer), foot_labels, os.path.join(plots_directory, 'gait_diagram.pdf'), spacing=1.0))
-
 
     plt.ion()
     plt.show(block=True)
