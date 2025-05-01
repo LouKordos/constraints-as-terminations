@@ -359,7 +359,7 @@ def main():
         previous_action = action_np
 
         world_position = scene_data.root_pos_w[0].cpu().numpy() # world-frame for env 0
-        origin = env.unwrapped.scene.env_origins[0].cpu().numpy() # terrain origin for env 0
+        origin = env.unwrapped.scene.terrain.env_origins[0].cpu().numpy() # terrain origin for env 0
         relative_position = world_position - origin # position relative to terrain
         # quat_xyzw = scene_data.root_quat_w[0]
         # quat_wxyz = torch.cat([quat_xyzw[3:], quat_xyzw[:3]]) # reorder to (w,x,y,z)
