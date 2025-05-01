@@ -253,6 +253,52 @@ def main():
     policy_agent.load_state_dict(model_state)
     joint_names = env.unwrapped.scene["robot"].data.joint_names
 
+    # --- joint → leg-row + column index ---------------------------------
+    # recognised prefixes for the four legs
+    _leg_prefixes = [
+        ("FL_",),                     	# 0 = front-left
+        ("FR_",),                     	# 1 = front-right
+        ("RL_", "HL_"),               	# 2 = rear/​hind-left
+        ("RR_", "HR_"),               	# 3 = rear/​hind-right
+    ]
+
+    # -- accepted substrings for each joint "column" --------
+    JOINT_TYPE_SYNONYMS = {
+        0: ("hip",  "haa"),      	# 0th column  = hip  / HAA  (ab-ad)
+        1: ("thigh","hfe"),      	# 1st column  = thigh/ HFE  (flex-ext)
+        2: ("calf", "kfe"),      	# 2nd column  = calf / KFE  (knee flex-ext)
+    }
+
+    def _column_from_name(jname: str) -> int | None:
+        """
+        Return 0,1,2 depending on which set of synonyms the name matches, else None.
+        """
+        low = jname.lower()
+        for col, keys in JOINT_TYPE_SYNONYMS.items():
+            if any(k in low for k in keys):
+                return col
+        raise ValueError("Could not determine joint row/col for plotting based on names")
+    
+    # build two look-up tables
+    leg_row  	= [None] * len(joint_names)   # index 0-3
+    leg_col  	= [None] * len(joint_names)   # index 0-2
+    foot_from_joint = [None] * len(joint_names)
+
+    for j, name in enumerate(joint_names):
+        # find which leg
+        for row, prefixes in enumerate(_leg_prefixes):
+            if any(name.startswith(p) for p in prefixes):
+                leg_row[j] = row
+                foot_from_joint[j] = row        	# same index as contact_state columns
+                break
+        # find column inside that leg
+        leg_col[j] = _column_from_name(name)
+
+    print("joint names: ", joint_names)
+    print("leg_row:", leg_row)
+    print("leg_col:", leg_col)
+    print("foot_from_joint:", foot_from_joint)
+
     # Initialize buffers for recording
     joint_positions_buffer = []
     joint_velocities_buffer = []
@@ -471,17 +517,36 @@ def main():
         'action_rates': action_rate_array
     }
 
+    # helper: map joint index → foot index (0=FL,1=FR,2=RL,3=RR)
+    foot_from_joint = []
+    for name in joint_names:
+        if   name.startswith('FL_'): foot_from_joint.append(0)
+        elif name.startswith('FR_'): foot_from_joint.append(1)
+        elif name.startswith('RL_') or name.startswith('HL_'): foot_from_joint.append(2)
+        elif name.startswith('RR_') or name.startswith('HR_'): foot_from_joint.append(3)
+        else:                    	 foot_from_joint.append(None) # unlikely
+
     for name, data in metrics.items():
         # 4×3 grid of separate joint plots
         fig, axes = plt.subplots(4, 3, sharex=True, figsize=(18, 12))
-        for j, ax in enumerate(axes.flat):
+        for j in range(len(joint_names)):
+            row, col = leg_row[j], leg_col[j]
+            if row is None or col is None:
+                raise ValueError("Could not determine joint row/col for plotting based on names")
+            ax = axes[row, col]
             ax.plot(time_steps, data[:, j])
-            ax.fill_between(
-                time_steps, 0, contact_forces_array[:, i],
-                where=contact_state_array[:, i].astype(bool),
-                color='gray', alpha=0.3, step='post',
-                label='in contact'
-            )
+            foot_idx = foot_from_joint[j]
+            if foot_idx is not None: # shade when that foot is in contact
+                in_contact = contact_state_array[:, foot_idx].astype(bool)
+                # contiguous segments for that foot
+                start = None
+                for t, val in enumerate(in_contact):
+                    if val and start is None:  start = t
+                    if (not val or t == len(in_contact)-1) and start is not None:
+                        end = t if not val else t+1
+                        ax.axvspan(time_steps[start], time_steps[end-1],
+                                    facecolor='gray', alpha=0.5)
+                        start = None
             ax.set_title(joint_names[j])
             ax.set_ylabel("Joint " + (name.replace('_', ' ')[:-1] if name != 'velocities' else 'velocity'))
         axes[-1, 0].set_xlabel('Timestep')
