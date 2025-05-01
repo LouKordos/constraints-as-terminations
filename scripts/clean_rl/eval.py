@@ -197,8 +197,8 @@ def main():
     args.run_dir = os.path.abspath(args.run_dir)
 
     # Create output directories
-    plots_directory = os.path.join(args.run_dir, "test/plots")
-    trajectories_directory = os.path.join(args.run_dir, "test/trajectories")
+    plots_directory = os.path.join(args.run_dir, "eval/plots")
+    trajectories_directory = os.path.join(args.run_dir, "eval/trajectories")
     os.makedirs(plots_directory, exist_ok=True)
     os.makedirs(trajectories_directory, exist_ok=True)
 
@@ -389,7 +389,7 @@ def main():
         'cumulative_reward': cumulative_reward,
         'violations_percent': violations_percent
     }
-    summary_path = os.path.join(args.run_dir, 'test/metrics_summary.txt')
+    summary_path = os.path.join(args.run_dir, 'eval/metrics_summary.txt')
     with open(summary_path, 'w') as summary_file:
         json.dump(summary_metrics, summary_file, indent=2)
     print(json.dumps(summary_metrics, indent=2))
