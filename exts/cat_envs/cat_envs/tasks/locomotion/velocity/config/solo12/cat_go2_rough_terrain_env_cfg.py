@@ -524,8 +524,10 @@ class TerminationsCfg:
 
 
 def terrain_levels_with_ray_caster_refresh(env, env_ids):
-    mdp.terrain_levels_vel(env, env_ids)
+    levels = mdp.terrain_levels_vel(env, env_ids)
     env.scene["ray_caster"]._initialize_warp_meshes()
+
+    return levels
 
 MAX_CURRICULUM_ITERATIONS = 1000
 
