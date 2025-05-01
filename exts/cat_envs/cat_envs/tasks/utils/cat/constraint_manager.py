@@ -161,6 +161,7 @@ class ConstraintManager(ManagerBase):
         self._cstr_prob_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
 
         self._episode_max_applied_torque = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+        self._episode_max_action_rate = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         self._episode_max_joint_vel = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         self._episode_max_joint_pos = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         self._episode_energy_consumed = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
@@ -244,11 +245,13 @@ class ConstraintManager(ManagerBase):
         extras["Episode/MaxJointVel"] = torch.mean(self._episode_max_joint_vel[env_ids], dim=0).item()
         extras["Episode/MaxJointPos"] = torch.mean(self._episode_max_joint_pos[env_ids], dim=0).item()
         extras["Episode/EnergyConsumed"] = self._episode_energy_consumed[env_ids].mean().item()
+        extras["Episode/MaxActionRate"] = self._episode_max_action_rate[env_ids].mean().item()
 
         self._episode_max_applied_torque[env_ids] = 0.0
         self._episode_max_joint_vel[env_ids] = 0.0
         self._episode_max_joint_pos[env_ids] = 0.0
         self._episode_energy_consumed[env_ids] = 0.0
+        self._episode_max_action_rate[env_ids] = 0.0
 
         # reset all the constraints terms
         for term_cfg in self._class_term_cfgs:
@@ -280,19 +283,20 @@ class ConstraintManager(ManagerBase):
 
         robot = self._env.scene["robot"]
         data = robot.data
+        names = [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"] if "Go2" in self._env.spec.id else [".*_HAA", ".*_HFE", ".*_KFE"]
+        joint_ids, _ = robot.find_joints(names, preserve_order=True)
 
         current_max_torque = torch.max(torch.abs(data.applied_torque), dim=1).values
-        # print(current_max_torque)
+        current_max_action_rate = torch.max(torch.abs(self._env.action_manager._action[:, joint_ids] - self._env.action_manager._prev_action[:, joint_ids]) / self._env.step_dt)
         current_max_joint_vel = torch.max(torch.abs(data.joint_vel), dim=1).values
         energy_step = torch.sum(torch.abs(data.applied_torque * data.joint_vel), dim=1) * self._env.step_dt
         self._episode_energy_consumed += energy_step
         current_max_joint_pos = torch.max(torch.abs(data.joint_pos), dim=1).values
 
         self._episode_max_applied_torque = torch.max(self._episode_max_applied_torque, current_max_torque)
+        self._episode_max_action_rate = torch.max(self._episode_max_action_rate, current_max_action_rate)
         self._episode_max_joint_vel = torch.max(self._episode_max_joint_vel, current_max_joint_vel)
         self._episode_max_joint_pos = torch.max(self._episode_max_joint_pos, current_max_joint_pos)
-
-        # print(f"_episode_max: {self._episode_max_applied_torque}")
 
         return cstr_prob
 
