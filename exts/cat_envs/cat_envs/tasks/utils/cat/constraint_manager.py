@@ -166,6 +166,7 @@ class ConstraintManager(ManagerBase):
         self._episode_max_joint_vel = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         self._episode_max_joint_pos = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         self._episode_energy_consumed = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+        self._episode_max_foot_contact_force = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
 
     def __str__(self) -> str:
         """Returns: A string representation for reward manager."""
@@ -248,6 +249,7 @@ class ConstraintManager(ManagerBase):
         extras["Episode/EnergyConsumed"] = self._episode_energy_consumed[env_ids].mean().item()
         extras["Episode/MaxActionRate"] = self._episode_max_action_rate[env_ids].mean().item()
         extras["Episode/MaxAirTime"] = self._episode_max_air_time[env_ids].mean().item()
+        extras["Episode/MaxFootContactForce"] = self._episode_max_foot_contact_force[env_ids].mean().item()
 
         self._episode_max_applied_torque[env_ids] = 0.0
         self._episode_max_joint_vel[env_ids] = 0.0
@@ -255,6 +257,7 @@ class ConstraintManager(ManagerBase):
         self._episode_energy_consumed[env_ids] = 0.0
         self._episode_max_action_rate[env_ids] = 0.0
         self._episode_max_air_time[env_ids] = 0.0
+        self._episode_max_foot_contact_force[env_ids] = 0.0
 
         # reset all the constraints terms
         for term_cfg in self._class_term_cfgs:
@@ -287,19 +290,24 @@ class ConstraintManager(ManagerBase):
         # See constraints.py for where these calculations come from
         robot = self._env.scene["robot"]
         data = robot.data
-        names = [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"] if "Go2" in self._env.spec.id else [".*_HAA", ".*_HFE", ".*_KFE"]
-        joint_ids, _ = robot.find_joints(names, preserve_order=True)
+        joint_names = [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"] if "Go2" in self._env.spec.id else [".*_HAA", ".*_HFE", ".*_KFE"]
+        foot_names = [".*_foot"] if "Go2" in self._env.spec.id else [".*_FOOT"]
+        joint_ids, _ = robot.find_joints(joint_names, preserve_order=True)
 
         # See constraints.py for where these calculations come from
         contact_sensor = self._env.scene["contact_forces"]
-        feet_ids, _ = contact_sensor.find_bodies([".*_foot"] if "Go2" in self._env.spec.id else [".*_FOOT"], preserve_order=True)
+        feet_ids, _ = contact_sensor.find_bodies(foot_names, preserve_order=True)
         touchdown = contact_sensor.compute_first_contact(self._env.step_dt)[:, feet_ids]
         last_air_time = contact_sensor.data.last_air_time[:, feet_ids] * touchdown.float()
+
+        net_contact_forces = contact_sensor.data.net_forces_w_history
+        max_foot_contact_forces_all_envs = torch.max(torch.norm(net_contact_forces[:, :, feet_ids], dim=-1), dim=1).values
 
         current_max_torque = torch.max(torch.abs(data.applied_torque), dim=1).values
         current_max_action_rate = torch.max(torch.abs(self._env.action_manager._action[:, joint_ids] - self._env.action_manager._prev_action[:, joint_ids]) / self._env.step_dt, dim=1).values
         current_max_air_time = torch.max(last_air_time, dim=1).values
         current_max_joint_vel = torch.max(torch.abs(data.joint_vel), dim=1).values
+        current_max_foot_contact_force = torch.max(max_foot_contact_forces_all_envs, dim=1).values
 
         energy_step = torch.sum(torch.abs(data.applied_torque * data.joint_vel), dim=1) * self._env.step_dt
         self._episode_energy_consumed += energy_step
@@ -310,6 +318,7 @@ class ConstraintManager(ManagerBase):
         self._episode_max_joint_vel = torch.max(self._episode_max_joint_vel, current_max_joint_vel)
         self._episode_max_joint_pos = torch.max(self._episode_max_joint_pos, current_max_joint_pos)
         self._episode_max_air_time = torch.max(self._episode_max_air_time, current_max_air_time)
+        self._episode_max_foot_contact_force = torch.max(self._episode_max_foot_contact_force, current_max_foot_contact_force)
 
         return cstr_prob
 
