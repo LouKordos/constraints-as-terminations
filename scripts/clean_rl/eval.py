@@ -390,6 +390,7 @@ def main():
             scene_data.body_link_pos_w[0, scene_data.body_names.index(link)].cpu().numpy()
             for link in foot_links
         ])
+        # Important: This does not account for body rotation, use a rotation/transformation matrix for proper body frame transformation
         foot_positions_buffer.append(foot_positions - world_position)
 
         cumulative_reward += reward.mean().item()
