@@ -320,7 +320,8 @@ def main():
     policy_observation = observations['policy']
     total_steps = args.video_length
 
-    foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot']
+    foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] # Go2
+    # foot_links = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT'] # SOLO12
 
     previous_action = None
     for t in range(total_steps):
