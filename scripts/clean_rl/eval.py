@@ -274,6 +274,8 @@ def main():
     policy_observation = observations['policy']
     total_steps = args.video_length
 
+    foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot']
+
     previous_action = None
     for t in range(total_steps):
         with torch.no_grad():
@@ -288,7 +290,7 @@ def main():
         joint_velocities_buffer.append(joint_velocities)
 
         contact_sensors = env.unwrapped.scene['contact_forces']
-        feet_ids,_ = contact_sensors.find_bodies(['FL_foot','FR_foot','RL_foot','RR_foot'], preserve_order=True)
+        feet_ids,_ = contact_sensors.find_bodies(foot_links, preserve_order=True)
         net_forces = contact_sensors.data.net_forces_w_history
         forces_history = net_forces[0].cpu()[:, feet_ids, :]
         force_magnitudes = torch.norm(forces_history,dim=-1)
@@ -336,7 +338,7 @@ def main():
 
         height_map_sequence = height_map_grid(env.unwrapped, SceneEntityCfg(name="ray_caster")).cpu().numpy()
         height_map_buffer.append(height_map_sequence[0])
-        foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot']
+        
         foot_positions = np.stack([
             scene_data.body_link_pos_w[0, scene_data.body_names.index(link)].cpu().numpy()
             for link in foot_links
