@@ -17,6 +17,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Play an RL agent with detailed logging.")
     parser.add_argument("--run_dir", type=str, required=True,
                         help="ABSOLUTE path to directory containing model checkpoints and params.")
+    parser.add_argument("--eval_checkpoint", type=str, default=None,
+                        help="Optionally specify the model save checkpoint number instead of automatically using the last saved one.")
     parser.add_argument("--video", action="store_true", default=False,
                         help="Record videos during playback.")
     parser.add_argument("--video_length", type=int, default=4000,
@@ -204,6 +206,18 @@ def main():
 
     constraint_limits = load_constraint_limits(os.path.join(args.run_dir, 'params'))
 
+    if args.eval_checkpoint is None:
+        checkpoint_path = get_latest_checkpoint(args.run_dir)
+    else:
+        checkpoint_path = os.path.join(args.run_dir, f"model_{args.eval_checkpoint}.pt")
+        if not os.path.isfile(checkpoint_path):
+            print(f"ERROR: checkpoint file does not exist, exiting: {checkpoint_path}")
+            exit(1)
+
+    print(f"[INFO] Loading model from: {checkpoint_path}")
+    log_parent = os.path.dirname(checkpoint_path)
+    model_state = torch.load(checkpoint_path)
+
     # Launch Isaac Lab environment
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
@@ -231,11 +245,6 @@ def main():
 
     import cli_args  # isort: skip
     agent_configuration = cli_args.parse_clean_rl_cfg(args.task, args)
-
-    checkpoint_path = get_latest_checkpoint(args.run_dir)
-    print(f"[INFO] Loading model from: {checkpoint_path}")
-    log_parent = os.path.dirname(checkpoint_path)
-    model_state = torch.load(checkpoint_path)
 
     env = gym.make(args.task, cfg=env_configuration, render_mode="rgb_array" if args.video else None)
     if args.video:
@@ -507,7 +516,7 @@ def main():
         ax.set_ylabel('Force [N]')
         ax.legend()
     fig.tight_layout()
-    fig.savefig(os.path.join(plots_directory, 'foot_contact_each.pdf'), dpi=600)
+    fig.savefig(os.path.join(plots_directory, 'foot_contact_force_each.pdf'), dpi=600)
 
     # ------------------------------------------------
     # 2) Joint metrics: 4×3 grid and overview per metric
