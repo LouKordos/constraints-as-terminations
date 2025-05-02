@@ -97,7 +97,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         print("\n\n----------------------------------------------------------------------------------")
         print("ERROR: Please set ENV_NAME environment variable before running this script, exiting.")
         print("----------------------------------------------------------------------------------")
-        return
+        exit(1)
 
     # override configurations with non-hydra CLI arguments
     agent_cfg = cli_args.update_clean_rl_cfg(agent_cfg, args_cli)
