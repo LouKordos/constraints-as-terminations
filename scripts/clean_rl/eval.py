@@ -469,6 +469,7 @@ def main():
 
     # Individual plots for each metric
     figs = []
+    linewidth = 1
 
     # ----------------------------------------
     # 1) Foot contact‐force per‐foot in 2×2 grid
@@ -476,7 +477,7 @@ def main():
     foot_labels = ['front left','front right','rear left','rear right']
     fig, axes = plt.subplots(2, 2, sharex=True, figsize=(16, 8))
     for i, ax in enumerate(axes.flat):
-        ax.plot(time_steps, contact_forces_array[:, i], label='force')
+        ax.plot(time_steps, contact_forces_array[:, i], label='force', linewidth=linewidth)
         # identify contiguous contact intervals
         in_contact = contact_state_array[:, i].astype(bool)
         segments = []
@@ -536,7 +537,7 @@ def main():
             if row is None or col is None:
                 raise ValueError("Could not determine joint row/col for plotting based on names")
             ax = axes[row, col]
-            ax.plot(time_steps, data[:, j])
+            ax.plot(time_steps, data[:, j], linewidth=linewidth)
             foot_idx = foot_from_joint[j]
             if foot_idx is not None: # shade when that foot is in contact
                 in_contact = contact_state_array[:, foot_idx].astype(bool)
@@ -558,7 +559,7 @@ def main():
         # overview: all joints in one plot
         fig, ax = plt.subplots(figsize=(12, 6))
         for j in range(data.shape[1]):
-            ax.plot(time_steps, data[:, j], label=joint_names[j])
+            ax.plot(time_steps, data[:, j], label=joint_names[j], linewidth=linewidth)
         ax.set_xlabel('Timestep')
         ax.set_ylabel("Joint " + (name.replace('_', ' ')[:-1] if name != 'velocities' else 'velocity'))
         ax.legend(loc='upper right', ncol=2)
@@ -569,7 +570,7 @@ def main():
     FIGSIZE = (16, 9)
     fig_bp, axes_bp = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, axis_label in enumerate(['X', 'Y', 'Z']):
-        axes_bp[i].plot(time_steps, base_position_array[:, i], label=f'position_{axis_label}')
+        axes_bp[i].plot(time_steps, base_position_array[:, i], label=f'position_{axis_label}', linewidth=linewidth)
         axes_bp[i].set_ylabel(f'Position {axis_label}')
         axes_bp[i].legend()
         axes_bp[i].grid(True)
@@ -581,7 +582,7 @@ def main():
 
     fig_bo, axes_bo = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, orient_label in enumerate(['Yaw', 'Pitch', 'Roll']):
-        axes_bo[i].plot(time_steps, base_orientation_array[:, i], label=orient_label)
+        axes_bo[i].plot(time_steps, base_orientation_array[:, i], label=orient_label, linewidth=linewidth)
         axes_bo[i].set_ylabel(orient_label)
         axes_bo[i].legend()
         axes_bo[i].grid(True)
@@ -593,7 +594,7 @@ def main():
 
     fig_blv, axes_blv = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, vel_label in enumerate(['VX', 'VY', 'VZ']):
-        axes_blv[i].plot(time_steps, base_linear_velocity_array[:, i], label=vel_label)
+        axes_blv[i].plot(time_steps, base_linear_velocity_array[:, i], label=vel_label, linewidth=linewidth)
         axes_blv[i].set_ylabel(vel_label)
         axes_blv[i].legend()
         axes_blv[i].grid(True)
@@ -605,7 +606,7 @@ def main():
 
     fig_bav, axes_bav = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, vel_label in enumerate(['WX', 'WY', 'WZ']):
-        axes_bav[i].plot(time_steps, base_angular_velocity_array[:, i], label=vel_label)
+        axes_bav[i].plot(time_steps, base_angular_velocity_array[:, i], label=vel_label, linewidth=linewidth)
         axes_bav[i].set_ylabel(vel_label)
         axes_bav[i].legend()
         axes_bav[i].grid(True)
@@ -622,7 +623,7 @@ def main():
     labels = [['X', 'Y', 'Z'], ['Yaw', 'Pitch', 'Roll'], ['VX', 'VY', 'VZ'], ['WX', 'WY', 'WZ']]
     for ax, data_array, title, axis_labels in zip(overview_axes.flatten(), cats, titles, labels):
         for i, lbl in enumerate(axis_labels):
-            ax.plot(time_steps, data_array[:, i], label=lbl)
+            ax.plot(time_steps, data_array[:, i], label=lbl, linewidth=linewidth)
         ax.set_title(title)
         ax.set_xlabel('Timestep')
         ax.legend()
@@ -639,6 +640,7 @@ def main():
 
     plt.ion()
     plt.show(block=True)
+    print("Saving video, do not close the program!")
 
     env.close()
     simulation_app.close()
