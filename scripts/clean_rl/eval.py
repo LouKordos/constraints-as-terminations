@@ -38,10 +38,18 @@ def parse_arguments():
     return arguments
 
 def get_latest_checkpoint(run_directory: str) -> str:
-    checkpoint_files = sorted(glob.glob(os.path.join(run_directory, "*.pt")))
-    if not checkpoint_files:
+    pattern = os.path.join(run_directory, "model_*.pt")
+    files = glob.glob(pattern)
+    if not files:
         raise FileNotFoundError(f"No checkpoint files found in {run_directory}")
-    return checkpoint_files[-1]
+
+    def extract_index(path: str) -> int:
+        name = os.path.basename(path)
+        num_str = name.split("_")[-1].split(".")[0]
+        return int(num_str)
+
+    latest = max(files, key=extract_index)
+    return latest
 
 def load_constraint_limits(params_directory: str) -> dict:
     yaml_file = os.path.join(params_directory, 'env.yaml')
