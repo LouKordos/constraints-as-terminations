@@ -111,6 +111,8 @@ def PPO(envs, ppo_cfg, run_path):
     if ppo_cfg.logger == "wandb":
         from rsl_rl.utils.wandb_utils import WandbSummaryWriter
 
+        # Replace project name with timestamp + experiment name for easier cross referencing. This also corrects the timestamp so that project name and run_path use the same one
+        ppo_cfg.wandb_project = ppo_cfg.experiment_name
         writer = WandbSummaryWriter(log_dir=run_path, flush_secs=10, cfg=ppo_cfg.to_dict())
     elif ppo_cfg.logger == "tensorboard":
         from torch.utils.tensorboard import SummaryWriter as TensorboardSummaryWriter

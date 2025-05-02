@@ -82,7 +82,7 @@ from cat_envs.tasks.utils.cleanrl.ppo import PPO
 
 # Import extensions to set up environment tasks
 import cat_envs.tasks  # noqa: F401
-
+from os import environ
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cudnn.deterministic = False
@@ -90,11 +90,15 @@ torch.backends.cudnn.benchmark = False
 
 
 @hydra_task_config(args_cli.task, "clean_rl_cfg_entry_point")
-def main(
-    env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg,
-    agent_cfg,
-):
+def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg,):
     """Train with CleanRL agent."""
+
+    if environ.get("ENV_NAME") is None:
+        print("\n\n----------------------------------------------------------------------------------")
+        print("ERROR: Please set ENV_NAME environment variable before running this script, exiting.")
+        print("----------------------------------------------------------------------------------")
+        return
+
     # override configurations with non-hydra CLI arguments
     agent_cfg = cli_args.update_clean_rl_cfg(agent_cfg, args_cli)
     env_cfg.scene.num_envs = (

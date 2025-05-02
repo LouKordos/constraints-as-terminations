@@ -5,7 +5,7 @@
 
 from isaaclab.utils import configclass
 from cat_envs.tasks.utils.cleanrl.rl_cfg import CleanRlPpoActorCriticCfg
-
+from os import environ
 
 @configclass
 class Solo12FlatPPORunnerCfg(CleanRlPpoActorCriticCfg):
@@ -26,9 +26,9 @@ class Solo12FlatPPORunnerCfg(CleanRlPpoActorCriticCfg):
     clip_vloss = True
     anneal_lr = True
 
-    experiment_name = "solo12_flat"
-    logger = "tensorboard"
-    wandb_project = "solo12_flat"
+    experiment_name = environ.get("ENV_NAME") # Existence is checked in train.py
+    logger = "wandb"
+    wandb_project = "THISWILLBEREPLACEDINPPO.PY"
 
     load_run = ".*"
     load_checkpoint = "model_.*.pt"
