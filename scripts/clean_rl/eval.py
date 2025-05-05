@@ -158,48 +158,64 @@ def create_height_map_animation(height_map_sequence: np.ndarray, foot_positions_
     animation_obj.save(output_path, fps=fps)
     plt.close()
 
-def plot_gait_diagram(contact_states: np.ndarray, foot_labels: list[str], output_path: str,	spacing: float = 1.0) -> plt.Figure:
-    """
-    contact_states: shape (timesteps, num_feet) of 0/1 ints
-    foot_labels:  a list of length num_feet, e.g. ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot']
-    spacing:  	vertical spacing between each foot's row
-    """
+def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, foot_labels: list[str], output_path: str, spacing: float = 1.0) -> plt.Figure:
     T, F = contact_states.shape
-    assert F == len(foot_labels), "label count must match number of feet"
+    assert sim_times.shape[0] == T, "sim_times length must match contact_states"
 
     fig, ax = plt.subplots(figsize=(12, F * 1.2))
-    time = np.arange(T)
+    ax.set_xlabel('Time [s]')
+    ax.set_title('Gait Diagram with Air Times')
 
-    # 1) Draw a light‐grey baseline for each foot
-    for i in range(F):
-        y0 = i * spacing
-        ax.hlines(y0, 0, T - 1, color='lightgrey', linewidth=1)
-
-    # 2) Fill contact segments in distinct colors
     for i, label in enumerate(foot_labels):
         y0 = i * spacing
-        y1 = y0 + contact_states[:, i] * (spacing * 0.8)
-        ax.fill_between(
-            time, y0, y1,
-            step='post',
-            alpha=0.8,
-            label=label
-        )
+        in_contact = contact_states[:, i].astype(bool)
 
-    # 3) Ticks, labels, limits
+        # Contact segments
+        contact_segs = []
+        start = None
+        for t, c in enumerate(in_contact):
+            if c and start is None:
+                start = t
+            elif not c and start is not None:
+                contact_segs.append((start, t))
+                start = None
+        if start is not None:
+            contact_segs.append((start, T))
+
+        # Plot contact
+        for s, e in contact_segs:
+            ax.fill_between(sim_times[s:e], y0, y0 + spacing * 0.8, step='post', alpha=0.8, label=label if s == contact_segs[0][0] else None)
+            t_start = sim_times[s]
+            t_end   = sim_times[e - 1]
+            duration = t_end - t_start
+            t_mid = 0.5 * (t_start + t_end)
+            y_text = y0 + spacing * 0.4
+            ax.text(t_mid, y_text, f"{duration:.3f}s", ha='center', va='center', color='white', fontsize=16)
+
+        # Air segments
+        air_segs = []
+        if contact_segs and contact_segs[0][0] > 0:
+            air_segs.append((0, contact_segs[0][0]))
+        for (s0, e0), (s1, e1) in zip(contact_segs, contact_segs[1:]):
+            air_segs.append((e0, s1))
+        if contact_segs and contact_segs[-1][1] < T:
+            air_segs.append((contact_segs[-1][1], T))
+
+        # Annotate durations
+        for a, b in air_segs:
+            t_start = sim_times[a]
+            t_end   = sim_times[b - 1]
+            duration = t_end - t_start
+            t_mid = 0.5 * (t_start + t_end)
+            ax.text(t_mid, y0 + spacing * 0.4, f"{duration:.3f}s", ha='center', va='center', fontsize=16)
+
     ax.set_yticks([i * spacing for i in range(F)])
     ax.set_yticklabels(foot_labels)
-    ax.set_xlim(0, T - 1)
     ax.set_ylim(-spacing * 0.5, (F - 1) * spacing + spacing)
-    ax.set_xlabel('Timestep')
-    ax.set_title('Gait Diagram')
     ax.grid(axis='x', linestyle=':')
     ax.legend(loc='upper right', ncol=1)
-
     fig.tight_layout()
     fig.savefig(output_path, dpi=600)
-    plt.show()
-    plt.close(fig)
     return fig
 
 def main():
