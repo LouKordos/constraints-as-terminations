@@ -598,6 +598,16 @@ def main():
         elif name.startswith('RR_') or name.startswith('HR_'): foot_from_joint.append(3)
         else:                    	 foot_from_joint.append(None) # unlikely
 
+    def get_leg_linestyle(joint_name):
+            if joint_name.startswith("FL"):
+                return "solid"
+            elif joint_name.startswith("FR"):
+                return "dotted"
+            elif joint_name.startswith("RL") or name.startswith("HL"):
+                return "dashed"
+            elif joint_name.startswith("RR") or name.startswith("HR"):
+                return "dashdot"
+
     for name, data in metrics.items():
         # 4×3 grid of separate joint plots
         fig, axes = plt.subplots(4, 3, sharex=True, figsize=(18, 12))
@@ -630,7 +640,7 @@ def main():
         # overview: all joints in one plot
         fig, ax = plt.subplots(figsize=(12, 6))
         for j in range(data.shape[1]):
-            ax.plot(time_steps, data[:, j], label=joint_names[j], linewidth=linewidth)
+            ax.plot(sim_times, data[:, j], label=joint_names[j], linewidth=linewidth, linestyle=get_leg_linestyle(joint_names[j]))
             draw_limit(ax, metric_to_constraint_term_mapping[name])
             draw_resets(ax)
         ax.set_xlabel('Timestep')
