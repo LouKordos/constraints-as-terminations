@@ -368,7 +368,7 @@ def main():
         next_observation, reward, terminated, truncated, info = step_tuple
         # print(f"terminated={terminated}, truncated={truncated}")
         # Because of CaT, terminated is actually a nonzero probability instead of a boolean, always remember this
-        if terminated.item() == 1 or truncated:
+        if env.unwrapped.episode_length_buf[0].item() == 0 and t > 0:
             reset_steps.append(t)
 
         scene_data = env.unwrapped.scene['robot'].data
