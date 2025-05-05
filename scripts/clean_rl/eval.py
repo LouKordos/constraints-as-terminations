@@ -224,7 +224,7 @@ def main():
 
     print(f"[INFO] Loading model from: {checkpoint_path}")
     log_parent = os.path.dirname(checkpoint_path)
-    model_state = torch.load(checkpoint_path)
+    model_state = torch.load(checkpoint_path, weights_only=True)
 
     # Launch Isaac Lab environment
     app_launcher = AppLauncher(args)
