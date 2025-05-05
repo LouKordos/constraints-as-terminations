@@ -525,10 +525,21 @@ def main():
 
     def draw_limit(ax, term):
         limit = constraint_limits.get(term)
-        if limit is not None:
-            ax.axhline(limit, linestyle='--', linewidth=1, color='red', label=f"{term}_limit={limit}")
-        else:
+
+        if limit is None:
             print(f"Constraint limit for {term} is None, cannot plot the limit.")
+            return
+
+        label_str = f"{term}_limit={limit}"
+        existing_labels = ax.get_legend_handles_labels()[1]
+
+        if label_str not in existing_labels:
+            ax.axhline(limit, linestyle='--', linewidth=1, color='red', label=label_str)
+            if term != "foot_contact_force": # Those are only positive
+                ax.axhline(-limit, linestyle='--', linewidth=1, color='red')
+        else:
+            ax.axhline(limit, linestyle='--', linewidth=1, color='red')
+            ax.axhline(-limit, linestyle='--', linewidth=1, color='red')
 
     def draw_resets(ax):
         for reset_time in reset_times:
