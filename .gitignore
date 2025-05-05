@@ -33,3 +33,4 @@ outputs/
 /isaacgymenvs/wandb
 runs*
 *.npy
+constraints-as-terminations-logs-and-runs.tar.zst
