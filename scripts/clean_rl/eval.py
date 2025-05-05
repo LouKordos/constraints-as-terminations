@@ -354,7 +354,7 @@ def main():
 
     observations, info = env.reset()
     policy_observation = observations['policy']
-    total_steps = args.video_length
+    total_steps = args.video_length + 1 # To stop video recording and generate video before plot generation
 
     foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] # Go2
     # foot_links = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT'] # SOLO12
@@ -517,6 +517,8 @@ def main():
     # Individual plots for each metric
     figs = []
     linewidth = 1
+
+    print("Video saved, starting plot generation...")
 
     def draw_limit(ax, term):
         limit = constraint_limits.get(term)
