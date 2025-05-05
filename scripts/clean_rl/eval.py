@@ -424,7 +424,7 @@ def main():
         base_linear_velocity_buffer.append(linear_velocity)
         base_angular_velocity_buffer.append(angular_velocity)
 
-        commanded_velocity_buffer.append(env.unwrapped.command_manager.get_command("base_velocity"))
+        commanded_velocity_buffer.append(env.unwrapped.command_manager.get_command("base_velocity").clone())
         contact_state = (max_per_foot > 0).astype(int)
         contact_state_buffer.append(contact_state)
 
