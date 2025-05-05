@@ -190,7 +190,7 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, foot_la
             duration = t_end - t_start
             t_mid = 0.5 * (t_start + t_end)
             y_text = y0 + spacing * 0.4
-            ax.text(t_mid, y_text, f"{duration:.3f}s", ha='center', va='center', color='white', fontsize=16)
+            ax.text(t_mid, y_text, f"{duration:.3f}s", ha='center', va='center', color='white', fontsize=12)
 
         # Air segments
         air_segs = []
@@ -207,7 +207,7 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, foot_la
             t_end   = sim_times[b - 1]
             duration = t_end - t_start
             t_mid = 0.5 * (t_start + t_end)
-            ax.text(t_mid, y0 + spacing * 0.4, f"{duration:.3f}s", ha='center', va='center', fontsize=16)
+            ax.text(t_mid, y0 + spacing * 0.4, f"{duration:.3f}s", ha='center', va='center', fontsize=12)
 
     ax.set_yticks([i * spacing for i in range(F)])
     ax.set_yticklabels(foot_labels)
@@ -350,6 +350,8 @@ def main():
     foot_positions_buffer = []
 
     cumulative_reward = 0.0
+    reset_steps = []
+
     observations, info = env.reset()
     policy_observation = observations['policy']
     total_steps = args.video_length
@@ -361,7 +363,13 @@ def main():
     for t in range(total_steps):
         with torch.no_grad():
             action, _, _, _ = policy_agent.get_action_and_value(policy_agent.obs_rms(policy_observation, update=False))
-        next_observation, reward, done, truncated, info = env.step(action)
+        step_tuple = env.step(action)
+        # print(step_tuple)
+        next_observation, reward, terminated, truncated, info = step_tuple
+        # print(f"terminated={terminated}, truncated={truncated}")
+        # Because of CaT, terminated is actually a nonzero probability instead of a boolean, always remember this
+        if terminated.item() == 1 or truncated:
+            reset_steps.append(t)
 
         scene_data = env.unwrapped.scene['robot'].data
 
@@ -431,7 +439,11 @@ def main():
         policy_observation = next_observation['policy']
 
     # Convert buffers to numpy arrays
-    time_steps = np.arange(total_steps)
+    time_indices = np.arange(total_steps)
+    step_dt = env.unwrapped.step_dt
+    sim_times = time_indices * step_dt
+    reset_times = [i * step_dt for i in reset_steps]
+    print("Reset times: ", reset_times)
     joint_positions_array = np.vstack(joint_positions_buffer)
     joint_velocities_array = np.vstack(joint_velocities_buffer)
     joint_torques_array = np.vstack(joint_torques_buffer)
@@ -443,6 +455,7 @@ def main():
     base_linear_velocity_array = np.vstack(base_linear_velocity_buffer)
     base_angular_velocity_array = np.vstack(base_angular_velocity_buffer)
     contact_state_array = np.vstack(contact_state_buffer)
+    commanded_velocity_array = np.vstack([cv.cpu().numpy() if isinstance(cv, torch.Tensor) else np.asarray(cv) for cv in commanded_velocity_buffer])
 
     # Compute constraint violations
     print("Constraint limits:", constraint_limits)
@@ -508,10 +521,13 @@ def main():
     def draw_limit(ax, term):
         limit = constraint_limits.get(term)
         if limit is not None:
-            ax.axhline(limit, linestyle='--', linewidth=1, color='red',
-                    label=f"{term}_limit={limit}")
+            ax.axhline(limit, linestyle='--', linewidth=1, color='red', label=f"{term}_limit={limit}")
         else:
             print(f"Constraint limit for {term} is None, cannot plot the limit.")
+
+    def draw_resets(ax):
+        for reset_time in reset_times:
+            ax.axvline(x=reset_time, linestyle=":", linewidth=1, color="orange", label='reset' if reset_time == reset_times[0] else None)
 
     # ----------------------------------------
     # 1) Foot contact‐force per‐foot in 2×2 grid
@@ -520,8 +536,9 @@ def main():
     fig, axes = plt.subplots(2, 2, sharex=True, figsize=(16, 8))
 
     for i, ax in enumerate(axes.flat):
-        ax.plot(time_steps, contact_forces_array[:, i], label='force', linewidth=linewidth)
+        ax.plot(sim_times, contact_forces_array[:, i], label='force', linewidth=linewidth)
         draw_limit(ax, "foot_contact_force")
+        draw_resets(ax)
         # identify contiguous contact intervals
         in_contact = contact_state_array[:, i].astype(bool)
         segments = []
@@ -533,14 +550,14 @@ def main():
                 segments.append((start_idx, idx))
                 start_idx = None
         if start_idx is not None:
-            segments.append((start_idx, len(time_steps)))
+            segments.append((start_idx, len(sim_times)))
 
         # shade each interval across the full y-axis
         first = True
         for s, e in segments:
             ax.axvspan(
-                time_steps[s],
-                time_steps[e-1],
+                sim_times[s],
+                sim_times[e-1],
                 facecolor='gray',
                 alpha=0.3,
                 label='in contact' if first else None
@@ -589,8 +606,9 @@ def main():
             if row is None or col is None:
                 raise ValueError("Could not determine joint row/col for plotting based on names")
             ax = axes[row, col]
-            ax.plot(time_steps, data[:, j], linewidth=linewidth)
+            ax.plot(sim_times, data[:, j], linewidth=linewidth)
             draw_limit(ax, metric_to_constraint_term_mapping[name])
+            draw_resets(ax)
             foot_idx = foot_from_joint[j]
             if foot_idx is not None: # shade when that foot is in contact
                 in_contact = contact_state_array[:, foot_idx].astype(bool)
@@ -600,7 +618,7 @@ def main():
                     if val and start is None:  start = t
                     if (not val or t == len(in_contact)-1) and start is not None:
                         end = t if not val else t+1
-                        ax.axvspan(time_steps[start], time_steps[end-1],
+                        ax.axvspan(sim_times[start], sim_times[end-1],
                                     facecolor='gray', alpha=0.5)
                         start = None
             ax.set_title(joint_names[j])
@@ -614,6 +632,7 @@ def main():
         for j in range(data.shape[1]):
             ax.plot(time_steps, data[:, j], label=joint_names[j], linewidth=linewidth)
             draw_limit(ax, metric_to_constraint_term_mapping[name])
+            draw_resets(ax)
         ax.set_xlabel('Timestep')
         ax.set_ylabel("Joint " + (name.replace('_', ' ')[:-1] if name != 'velocities' else 'velocity'))
         ax.legend(loc='upper right', ncol=2)
@@ -624,7 +643,8 @@ def main():
     FIGSIZE = (16, 9)
     fig_bp, axes_bp = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, axis_label in enumerate(['X', 'Y', 'Z']):
-        axes_bp[i].plot(time_steps, base_position_array[:, i], label=f'position_{axis_label}', linewidth=linewidth)
+        axes_bp[i].plot(sim_times, base_position_array[:, i], label=f'position_{axis_label}', linewidth=linewidth)
+        draw_resets(axes_bp[i])
         axes_bp[i].set_ylabel(f'Position {axis_label}')
         axes_bp[i].legend()
         axes_bp[i].grid(True)
@@ -636,7 +656,8 @@ def main():
 
     fig_bo, axes_bo = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, orient_label in enumerate(['Yaw', 'Pitch', 'Roll']):
-        axes_bo[i].plot(time_steps, base_orientation_array[:, i], label=orient_label, linewidth=linewidth)
+        axes_bo[i].plot(sim_times, base_orientation_array[:, i], label=orient_label, linewidth=linewidth)
+        draw_resets(axes_bo[i])
         axes_bo[i].set_ylabel(orient_label)
         axes_bo[i].legend()
         axes_bo[i].grid(True)
@@ -648,7 +669,8 @@ def main():
 
     fig_blv, axes_blv = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, vel_label in enumerate(['VX', 'VY', 'VZ']):
-        axes_blv[i].plot(time_steps, base_linear_velocity_array[:, i], label=vel_label, linewidth=linewidth)
+        axes_blv[i].plot(sim_times, base_linear_velocity_array[:, i], label=vel_label, linewidth=linewidth)
+        draw_resets(axes_blv[i])
         axes_blv[i].set_ylabel(vel_label)
         axes_blv[i].legend()
         axes_blv[i].grid(True)
@@ -660,7 +682,8 @@ def main():
 
     fig_bav, axes_bav = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, vel_label in enumerate(['WX', 'WY', 'WZ']):
-        axes_bav[i].plot(time_steps, base_angular_velocity_array[:, i], label=vel_label, linewidth=linewidth)
+        axes_bav[i].plot(sim_times, base_angular_velocity_array[:, i], label=vel_label, linewidth=linewidth)
+        draw_resets(axes_bav[i])
         axes_bav[i].set_ylabel(vel_label)
         axes_bav[i].legend()
         axes_bav[i].grid(True)
@@ -677,7 +700,8 @@ def main():
     labels = [['X', 'Y', 'Z'], ['Yaw', 'Pitch', 'Roll'], ['VX', 'VY', 'VZ'], ['WX', 'WY', 'WZ']]
     for ax, data_array, title, axis_labels in zip(overview_axes.flatten(), cats, titles, labels):
         for i, lbl in enumerate(axis_labels):
-            ax.plot(time_steps, data_array[:, i], label=lbl, linewidth=linewidth)
+            ax.plot(sim_times, data_array[:, i], label=lbl, linewidth=linewidth)
+            draw_resets(ax)
         ax.set_title(title)
         ax.set_xlabel('Timestep')
         ax.legend()
@@ -690,7 +714,7 @@ def main():
     create_height_map_animation(np.array(height_map_buffer),
                                 np.array(foot_positions_buffer),
                                 os.path.join(plots_directory, 'height_map.mp4'), sensor=env.unwrapped.scene["ray_caster"])
-    figs.append(plot_gait_diagram(np.array(contact_state_buffer), foot_labels, os.path.join(plots_directory, 'gait_diagram.pdf'), spacing=1.0))
+    figs.append(plot_gait_diagram(np.array(contact_state_buffer), sim_times, foot_labels, os.path.join(plots_directory, 'gait_diagram.pdf'), spacing=1.0))
 
     plt.ion()
     plt.show(block=True)
