@@ -206,12 +206,6 @@ def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
 
-    # Create output directories
-    plots_directory = os.path.join(args.run_dir, "eval/plots")
-    trajectories_directory = os.path.join(args.run_dir, "eval/trajectories")
-    os.makedirs(plots_directory, exist_ok=True)
-    os.makedirs(trajectories_directory, exist_ok=True)
-
     constraint_limits = load_constraint_limits(os.path.join(args.run_dir, 'params'))
 
     if args.eval_checkpoint is None:
@@ -221,6 +215,12 @@ def main():
         if not os.path.isfile(checkpoint_path):
             print(f"ERROR: checkpoint file does not exist, exiting: {checkpoint_path}")
             exit(1)
+
+    # Create output directories
+    plots_directory = os.path.join(args.run_dir, f"eval_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}/plots")
+    trajectories_directory = os.path.join(args.run_dir, f"eval_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}/trajectories")
+    os.makedirs(plots_directory, exist_ok=True)
+    os.makedirs(trajectories_directory, exist_ok=True)
 
     print(f"[INFO] Loading model from: {checkpoint_path}")
     log_parent = os.path.dirname(checkpoint_path)
@@ -456,7 +456,7 @@ def main():
         'cumulative_reward': cumulative_reward,
         'violations_percent': violations_percent
     }
-    summary_path = os.path.join(args.run_dir, 'eval/metrics_summary.txt')
+    summary_path = os.path.join(args.run_dir, f"eval_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}/metrics_summary.txt")
     with open(summary_path, 'w') as summary_file:
         json.dump(summary_metrics, summary_file, indent=2)
     print(json.dumps(summary_metrics, indent=2))
