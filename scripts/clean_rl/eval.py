@@ -258,6 +258,7 @@ def main():
     if args.video:
         video_configuration = {
             "video_folder": os.path.join(log_parent, "videos_play"),
+            "name_prefix": f"eval_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}",
             "step_trigger": lambda step: step == 0,
             "video_length": args.video_length,
             "disable_logger": True,
