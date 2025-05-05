@@ -488,13 +488,23 @@ def main():
     figs = []
     linewidth = 1
 
+    def draw_limit(ax, term):
+        limit = constraint_limits.get(term)
+        if limit is not None:
+            ax.axhline(limit, linestyle='--', linewidth=1, color='red',
+                    label=f"{term}_limit={limit}")
+        else:
+            print(f"Constraint limit for {term} is None, cannot plot the limit.")
+
     # ----------------------------------------
     # 1) Foot contact‐force per‐foot in 2×2 grid
     # ----------------------------------------
     foot_labels = ['front left','front right','rear left','rear right']
     fig, axes = plt.subplots(2, 2, sharex=True, figsize=(16, 8))
+
     for i, ax in enumerate(axes.flat):
         ax.plot(time_steps, contact_forces_array[:, i], label='force', linewidth=linewidth)
+        draw_limit(ax, "foot_contact_force")
         # identify contiguous contact intervals
         in_contact = contact_state_array[:, i].astype(bool)
         segments = []
@@ -537,6 +547,14 @@ def main():
         'action_rates': action_rate_array
     }
 
+    metric_to_constraint_term_mapping = {
+        'positions': 	None,
+        'velocities':	'joint_velocity',
+        'accelerations': 'joint_acceleration',
+        'torques':   	'joint_torque',
+        'action_rates': 'action_rate'
+    }
+
     # helper: map joint index → foot index (0=FL,1=FR,2=RL,3=RR)
     foot_from_joint = []
     for name in joint_names:
@@ -555,6 +573,7 @@ def main():
                 raise ValueError("Could not determine joint row/col for plotting based on names")
             ax = axes[row, col]
             ax.plot(time_steps, data[:, j], linewidth=linewidth)
+            draw_limit(ax, metric_to_constraint_term_mapping[name])
             foot_idx = foot_from_joint[j]
             if foot_idx is not None: # shade when that foot is in contact
                 in_contact = contact_state_array[:, foot_idx].astype(bool)
@@ -577,6 +596,7 @@ def main():
         fig, ax = plt.subplots(figsize=(12, 6))
         for j in range(data.shape[1]):
             ax.plot(time_steps, data[:, j], label=joint_names[j], linewidth=linewidth)
+            draw_limit(ax, metric_to_constraint_term_mapping[name])
         ax.set_xlabel('Timestep')
         ax.set_ylabel("Joint " + (name.replace('_', ' ')[:-1] if name != 'velocities' else 'velocity'))
         ax.legend(loc='upper right', ncol=2)
