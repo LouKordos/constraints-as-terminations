@@ -685,7 +685,7 @@ def main():
     fig_blv, axes_blv = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, vel_label in enumerate(['VX', 'VY', 'VZ']):
         axes_blv[i].plot(sim_times, base_linear_velocity_array[:, i], label=vel_label, linewidth=linewidth)
-        axes_blv[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f"cmd_{vel_label}", linewidth=linewidth)
+        axes_blv[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f"cmd_{vel_label}", linewidth=linewidth, color="black")
         draw_resets(axes_blv[i])
         axes_blv[i].set_ylabel(vel_label)
         axes_blv[i].legend()
@@ -720,7 +720,7 @@ def main():
             draw_resets(ax)
 
             if title == "Base Linear Velocity":
-                ax.plot(sim_times, commanded_velocity_array[:, i], linestyle="--", label=f"cmd_{lbl}", linewidth=linewidth)
+                ax.plot(sim_times, commanded_velocity_array[:, i], linestyle="--", label=f"cmd_{lbl}", linewidth=linewidth, color="black")
         ax.set_title(title)
         ax.set_xlabel('Time / s')
         ax.legend()
@@ -737,7 +737,6 @@ def main():
 
     plt.ion()
     plt.show(block=True)
-    print("Saving video, do not close the program!")
 
     env.close()
     simulation_app.close()
