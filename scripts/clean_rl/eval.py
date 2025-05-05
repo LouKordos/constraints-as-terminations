@@ -657,8 +657,8 @@ def main():
         fig, ax = plt.subplots(figsize=(12, 6))
         for j in range(data.shape[1]):
             ax.plot(sim_times, data[:, j], label=joint_names[j], linewidth=linewidth, linestyle=get_leg_linestyle(joint_names[j]))
-            draw_limit(ax, metric_to_constraint_term_mapping[name])
-            draw_resets(ax)
+        draw_limit(ax, metric_to_constraint_term_mapping[name])
+        draw_resets(ax)
         ax.set_xlabel('Time / s')
         ax.set_ylabel("Joint " + (name.replace('_', ' ')[:-1] if name != 'velocities' else 'velocity'))
         ax.legend(loc='upper right', ncol=2)
