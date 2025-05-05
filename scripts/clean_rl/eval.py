@@ -158,13 +158,16 @@ def create_height_map_animation(height_map_sequence: np.ndarray, foot_positions_
     animation_obj.save(output_path, fps=fps)
     plt.close()
 
-def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, foot_labels: list[str], output_path: str, spacing: float = 1.0) -> plt.Figure:
+def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_times: list[float], foot_labels: list[str], output_path: str, spacing: float = 1.0) -> plt.Figure:
     T, F = contact_states.shape
     assert sim_times.shape[0] == T, "sim_times length must match contact_states"
 
     fig, ax = plt.subplots(figsize=(12, F * 1.2))
     ax.set_xlabel('Time [s]')
     ax.set_title('Gait Diagram with Air Times')
+
+    for reset_time in reset_times:
+            ax.axvline(x=reset_time, linestyle=":", linewidth=1, color="orange", label='reset' if reset_time == reset_times[0] else None)
 
     for i, label in enumerate(foot_labels):
         y0 = i * spacing
@@ -730,7 +733,7 @@ def main():
     create_height_map_animation(np.array(height_map_buffer),
                                 np.array(foot_positions_buffer),
                                 os.path.join(plots_directory, 'height_map.mp4'), sensor=env.unwrapped.scene["ray_caster"])
-    figs.append(plot_gait_diagram(np.array(contact_state_buffer), sim_times, foot_labels, os.path.join(plots_directory, 'gait_diagram.pdf'), spacing=1.0))
+    figs.append(plot_gait_diagram(np.array(contact_state_buffer), sim_times, reset_times, foot_labels, os.path.join(plots_directory, 'gait_diagram.pdf'), spacing=1.0))
 
     plt.ion()
     plt.show(block=True)
