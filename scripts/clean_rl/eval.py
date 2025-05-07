@@ -29,6 +29,7 @@ def parse_arguments():
                         help="Number of environments to simulate.")
     parser.add_argument("--task", type=str, required=True,
                         help="Name of the task/environment.")
+    parser.add_argument("--seed", type=int, required=False, default=42, help="Seed for numpy, torch, env, terrain, terrain generator etc.")
     import cli_args  # isort: skip
     cli_args.add_clean_rl_args(parser)
     AppLauncher.add_app_launcher_args(parser)
@@ -230,7 +231,7 @@ def main():
         num_envs=args.num_envs,
         use_fabric=not args.disable_fabric
     )
-    env_configuration.seed = 42
+    env_configuration.seed = args.seed
     env_configuration.scene.terrain.terrain_generator.seed = env_configuration.seed
     env_configuration.scene.terrain.seed = env_configuration.seed
     # Viewer setup
@@ -240,9 +241,6 @@ def main():
     env_configuration.viewer.lookat = (0.0, 0.0, 0.5)
     env_configuration.sim.render.rendering_mode = "quality"
     env_configuration.viewer.resolution = (1920, 1080)
-
-    import cli_args  # isort: skip
-    agent_configuration = cli_args.parse_clean_rl_cfg(args.task, args)
 
     env = gym.make(args.task, cfg=env_configuration, render_mode="rgb_array" if args.video else None)
     if args.video:
