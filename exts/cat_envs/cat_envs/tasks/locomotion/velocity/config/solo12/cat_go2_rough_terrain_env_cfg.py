@@ -426,7 +426,7 @@ class ConstraintsCfg:
     joint_torque = ConstraintTerm(
         func=constraints.joint_torque,
         max_p=0.25,
-        params={"limit": 35.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
+        params={"limit": 20.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
     joint_velocity = ConstraintTerm(
         func=constraints.joint_velocity,
@@ -436,7 +436,7 @@ class ConstraintsCfg:
     joint_acceleration = ConstraintTerm(
         func=constraints.joint_acceleration,
         max_p=0.25,
-        params={"limit": 800.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
+        params={"limit": 400.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
     action_rate = ConstraintTerm(
         func=constraints.action_rate,
@@ -454,12 +454,12 @@ class ConstraintsCfg:
     foot_contact_force = ConstraintTerm(
         func=constraints.foot_contact_force,
         max_p=1.0,
-        params={"limit": 150.0, "names": [".*_foot"]},
+        params={"limit": 300.0, "names": [".*_foot"]},
     )
     front_hfe_position = ConstraintTerm(
         func=constraints.joint_position,
         max_p=1.0,
-        params={"limit": 1.5, "names": ["FL_thigh_joint", "FR_thigh_joint"]},
+        params={"limit": 1.5, "names": ["FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint"]},
     )
     upsidedown = ConstraintTerm(
         func=constraints.upsidedown, max_p=1.0, params={"limit": 0.0}
