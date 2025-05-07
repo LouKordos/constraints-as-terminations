@@ -18,6 +18,7 @@ from isaaclab.managers import SceneEntityCfg
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
+# IMPORTANT NOTE: This is an absolute upper bound on joint position, not relative to default position and no lower bound, because negative constraint violations are ignored / clipped to 0
 def joint_position(env: ManagerBasedRLEnv, limit: float, names: list[str], asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
     robot = env.scene[asset_cfg.name]
     pos0 = robot.data.root_pos_w[0]
@@ -28,6 +29,7 @@ def joint_position(env: ManagerBasedRLEnv, limit: float, names: list[str], asset
     cstr = torch.abs(data.joint_pos[:, joint_ids]) - limit
     return cstr
 
+# Joint position contraint relative to default position, use this in most cases.
 def joint_position_when_moving_forward(env: ManagerBasedRLEnv, limit: float, names: list[str], velocity_deadzone: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
     robot = env.scene[asset_cfg.name]
     data = env.scene[asset_cfg.name].data
@@ -69,6 +71,10 @@ def base_orientation(env: ManagerBasedRLEnv, limit: float, asset_cfg: SceneEntit
     data = env.scene[asset_cfg.name].data
     return torch.norm(data.projected_gravity_b[:, :2], dim=1) - limit
 
+# Important Note: Only punishes policy if foot actually touches the ground at some point due to compute_first_contact()
+# This filters any feet that are in the air and might have very high air time if they never touch down. 
+# Some experiments showed that the policy thus learns to keep the feet in the air constantly to avoid constration violation
+# Also, even if that were not the case, the code still only sets a lower bound on air time, no upper limit.
 def air_time(env: ManagerBasedRLEnv, limit: float, names: list[str], velocity_deadzone: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),) -> torch.Tensor:
     contact_sensor = env.scene[asset_cfg.name]
     feet_ids, _ = contact_sensor.find_bodies(names, preserve_order=True)
