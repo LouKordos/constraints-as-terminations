@@ -460,6 +460,21 @@ def main():
     contact_state_array = np.vstack(contact_state_buffer)
     commanded_velocity_array = np.vstack([cv.cpu().numpy() if isinstance(cv, torch.Tensor) else np.asarray(cv) for cv in commanded_velocity_buffer])
 
+    target_lin_vel_x = commanded_velocity_array[:, 0]
+    actual_lin_vel_x = base_linear_velocity_array[:, 0]
+    lin_vel_x_error = target_lin_vel_x - actual_lin_vel_x
+    lin_vel_x_rms = np.sqrt(np.mean(lin_vel_x_error**2))
+
+    target_lin_vel_y = commanded_velocity_array[:, 1]
+    actual_lin_vel_y = base_linear_velocity_array[:, 1]
+    lin_vel_y_error = target_lin_vel_y - actual_lin_vel_y
+    lin_vel_y_rms = np.sqrt(np.mean(lin_vel_y_error**2))
+
+    target_yaw_rate = commanded_velocity_array[:, 2]
+    actual_yaw_rate = base_angular_velocity_array[:, 2]
+    yaw_rate_error = target_yaw_rate - actual_yaw_rate
+    ang_vel_z_rms = np.sqrt(np.mean(yaw_rate_error**2))
+
     # Compute constraint violations
     print("Constraint limits:", constraint_limits)
     violations_percent = {}
@@ -487,6 +502,9 @@ def main():
     # Save summary metrics
     summary_metrics = {
         'cumulative_reward': cumulative_reward,
+        'base_linear_velocity_x_rms_error': str(lin_vel_x_rms),
+        'base_linear_velocity_y_rms_error': str(lin_vel_y_rms),
+        'base_angular_velocity_z_rms_error': str(ang_vel_z_rms),
         'violations_percent': violations_percent
     }
     summary_path = os.path.join(args.run_dir, f"eval_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}/metrics_summary.txt")
