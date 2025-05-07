@@ -70,38 +70,6 @@ def load_constraint_limits(params_directory: str) -> dict:
                 limits[term_name] = params['limit']
     return limits
 
-def plot_time_series_with_contact(time_steps: np.ndarray, values: np.ndarray, limits: dict, label: str, output_path: str, contact_states: np.ndarray | None = None) -> plt.Figure:
-    """
-    Plot a time series with optional constraint limit and shaded contact regions.
-    """
-    fig, ax = plt.subplots()
-    ax.plot(time_steps, values, label=label)
-    if label in limits:
-        ax.hlines(limits[label], time_steps[0], time_steps[-1], linestyles='--',
-                label=f"{label}_limit={limits[label]}")
-    if contact_states is not None:
-        in_contact = contact_states.any(axis=1)
-        segments = []
-        start_idx = None
-        for idx, contact in enumerate(in_contact):
-            if contact and start_idx is None:
-                start_idx = idx
-            if not contact and start_idx is not None:
-                segments.append((start_idx, idx))
-                start_idx = None
-        if start_idx is not None:
-            segments.append((start_idx, len(time_steps)))
-        for seg_idx, (s, e) in enumerate(segments):
-            ax.axvspan(time_steps[s], time_steps[e-1], color='gray', alpha=0.2,
-                    label='contact' if seg_idx == 0 else None)
-    ax.set_title(f"{label.replace('_',' ').title()} vs Time")
-    ax.set_xlabel('Time / s')
-    ax.set_ylabel(label.replace('_',' ').title())
-    ax.legend()
-    ax.grid(True)
-    fig.savefig(output_path, dpi=600)
-    return fig
-
 def create_height_map_animation(height_map_sequence: np.ndarray, foot_positions_sequence: np.ndarray, output_path: str, fps: int = 30, sensor=None):
     """
     Create and save an animation of the height map over time,
