@@ -424,7 +424,7 @@ def main():
         base_linear_velocity_buffer.append(linear_velocity)
         base_angular_velocity_buffer.append(angular_velocity)
 
-        commanded_velocity_buffer.append(env.unwrapped.command_manager.get_command("base_velocity").clone())
+        commanded_velocity_buffer.append(env.unwrapped.command_manager.get_command("base_velocity").clone()) # three components: lin_vel_x, lin_vel_y, ang_vel_z
         contact_state = (max_per_foot > 0).astype(int)
         contact_state_buffer.append(contact_state)
 
@@ -696,7 +696,8 @@ def main():
     fig_blv, axes_blv = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, vel_label in enumerate(['VX', 'VY', 'VZ']):
         axes_blv[i].plot(sim_times, base_linear_velocity_array[:, i], label=vel_label, linewidth=linewidth)
-        axes_blv[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f"cmd_{vel_label}", linewidth=linewidth, color="black")
+        if vel_label != "VZ": # Command format for UniformVelocityCommandCfg as used here is lin_vel_x, lin_vel_y, and ang_vel_z, so the third component belongs into another plot
+            axes_blv[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f"cmd_{vel_label}", linewidth=linewidth, color="black")
         draw_resets(axes_blv[i])
         axes_blv[i].set_ylabel(vel_label)
         axes_blv[i].legend()
@@ -710,6 +711,8 @@ def main():
     fig_bav, axes_bav = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, vel_label in enumerate(['WX', 'WY', 'WZ']):
         axes_bav[i].plot(sim_times, base_angular_velocity_array[:, i], label=vel_label, linewidth=linewidth)
+        if i == 2: # Only plot angular velocity around z, this is is the only angular velocity that is actually controlled.
+            axes_bav[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f"cmd_{vel_label}", linewidth=linewidth, color="black")
         draw_resets(axes_bav[i])
         axes_bav[i].set_ylabel(vel_label)
         axes_bav[i].legend()
@@ -730,8 +733,11 @@ def main():
             ax.plot(sim_times, data_array[:, i], label=lbl, linewidth=linewidth)
             draw_resets(ax)
 
-            if title == "Base Linear Velocity":
-                ax.plot(sim_times, commanded_velocity_array[:, i], linestyle="--", label=f"cmd_{lbl}", linewidth=linewidth, color="black")
+            # Wrong, need to only plot commanded_velocity_array[2] for angular velociy in angular vel plot and [0:2] 
+            # if title == "Base Linear Velocity":
+            #     ax.plot(sim_times, commanded_velocity_array[:, i], linestyle="--", label=f"cmd_{lbl}", linewidth=linewidth, color="black")
+            # elif title == "Base Angular Velocity":
+            #     ax.plot(sim_times, commanded_velocity_array[:, i+3], linestyle='--', label=f"cmd_{lbl}", linewidth=linewidth, color="black")
         ax.set_title(title)
         ax.set_xlabel('Time / s')
         ax.legend()
