@@ -741,9 +741,7 @@ def main():
     figs.append(fig_overview)
 
     # Height map animation and gait diagram
-    create_height_map_animation(np.array(height_map_buffer),
-                                np.array(foot_positions_buffer),
-                                os.path.join(plots_directory, 'height_map.mp4'), sensor=env.unwrapped.scene["ray_caster"])
+    # create_height_map_animation(np.array(height_map_buffer), np.array(foot_positions_buffer), os.path.join(plots_directory, 'height_map.mp4'), sensor=env.unwrapped.scene["ray_caster"])
     figs.append(plot_gait_diagram(np.array(contact_state_buffer), sim_times, reset_times, foot_labels, os.path.join(plots_directory, 'gait_diagram.pdf'), spacing=1.0))
 
     plt.ion()
