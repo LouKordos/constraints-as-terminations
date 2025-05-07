@@ -113,6 +113,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # set the environment seed
     # note: certain randomizations occur in the environment initialization so we set the seed here
     env_cfg.seed = agent_cfg.seed
+    if hasattr(env_cfg.scene.terrain, "terrain_generator"):
+        env_cfg.scene.terrain.terrain_generator.seed = env_cfg.seed
+        env_cfg.scene.terrain.seed = env_cfg.seed
+        
     env_cfg.sim.device = (
         args_cli.device if args_cli.device is not None else env_cfg.sim.device
     )

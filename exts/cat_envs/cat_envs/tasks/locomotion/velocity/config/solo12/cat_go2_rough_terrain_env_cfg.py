@@ -669,10 +669,10 @@ class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
             # and for the gym wrapper
             self.seed(self.seed)
 
-        # 2) Propagate that same seed into the terrain generator:
-        terr = self.scene.terrain.terrain_generator
-        if terr is not None:
-            terr.seed = self.seed
+            # 2) Propagate that same seed into the terrain generator:
+            terr = self.scene.terrain.terrain_generator
+            if terr is not None:
+                terr.seed = self.seed
 
         self.sim.physx.gpu_max_rigid_patch_count = 568462
 

@@ -262,6 +262,9 @@ def main():
         num_envs=args.num_envs,
         use_fabric=not args.disable_fabric
     )
+    env_configuration.seed = 42
+    env_configuration.scene.terrain.terrain_generator.seed = env_configuration.seed
+    env_configuration.scene.terrain.seed = env_configuration.seed
     # Viewer setup
     env_configuration.viewer.origin_type = "asset_root"
     env_configuration.viewer.asset_name = "robot"
