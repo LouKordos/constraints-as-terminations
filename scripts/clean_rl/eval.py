@@ -471,9 +471,9 @@ def main():
     # Save summary metrics
     summary_metrics = {
         'cumulative_reward': cumulative_reward,
-        'base_linear_velocity_x_rms_error': str(lin_vel_x_rms),
-        'base_linear_velocity_y_rms_error': str(lin_vel_y_rms),
-        'base_angular_velocity_z_rms_error': str(ang_vel_z_rms),
+        'base_linear_velocity_x_rms_error': float(lin_vel_x_rms),
+        'base_linear_velocity_y_rms_error': float(lin_vel_y_rms),
+        'base_angular_velocity_z_rms_error': float(ang_vel_z_rms),
         'violations_percent': violations_percent
     }
     summary_path = os.path.join(args.run_dir, f"eval_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}/metrics_summary.txt")
