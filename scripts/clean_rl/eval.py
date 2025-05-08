@@ -333,6 +333,9 @@ def main():
 
     previous_action = None
     for t in range(total_steps):
+        if t == total_steps - 2:
+            print("Saving video, sim and code will freeze for a while.")
+
         with torch.no_grad():
             action, _, _, _ = policy_agent.get_action_and_value(policy_agent.obs_rms(policy_observation, update=False))
         step_tuple = env.step(action)
@@ -409,6 +412,8 @@ def main():
 
         cumulative_reward += reward.mean().item()
         policy_observation = next_observation['policy']
+
+    print("Converting and saving recorded sim data...")
 
     # Convert buffers to numpy arrays
     time_indices = np.arange(total_steps)
@@ -508,7 +513,7 @@ def main():
     figs = []
     linewidth = 1
 
-    print("Video saved, starting plot generation...")
+    print("Data saved, starting plot generation...")
 
     def draw_limit(ax, term):
         limit = constraint_limits.get(term)
