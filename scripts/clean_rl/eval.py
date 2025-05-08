@@ -29,7 +29,8 @@ def parse_arguments():
                         help="Number of environments to simulate.")
     parser.add_argument("--task", type=str, required=True,
                         help="Name of the task/environment.")
-    parser.add_argument("--seed", type=int, required=False, default=42, help="Seed for numpy, torch, env, terrain, terrain generator etc.")
+    # Good seeds for eval: 44, 46, 49
+    parser.add_argument("--seed", type=int, required=False, default=49, help="Seed for numpy, torch, env, terrain, terrain generator etc.. Good seeds for eval are 44, 46, 49")
     import cli_args  # isort: skip
     cli_args.add_clean_rl_args(parser)
     AppLauncher.add_app_launcher_args(parser)
