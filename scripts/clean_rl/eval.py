@@ -204,9 +204,11 @@ def main():
             print(f"ERROR: checkpoint file does not exist, exiting: {checkpoint_path}")
             exit(1)
 
+    eval_base_dir = os.path.join(args.run_dir, f"eval_checkpoint_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}_seed_{args.seed}")
+
     # Create output directories
-    plots_directory = os.path.join(args.run_dir, f"eval_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}/plots")
-    trajectories_directory = os.path.join(args.run_dir, f"eval_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}/trajectories")
+    plots_directory = os.path.join(eval_base_dir, "plots")
+    trajectories_directory = os.path.join(eval_base_dir, "trajectories")
     os.makedirs(plots_directory, exist_ok=True)
     os.makedirs(trajectories_directory, exist_ok=True)
 
@@ -245,8 +247,8 @@ def main():
     env = gym.make(args.task, cfg=env_configuration, render_mode="rgb_array" if args.video else None)
     if args.video:
         video_configuration = {
-            "video_folder": os.path.join(args.run_dir, f"eval_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}"),
-            "name_prefix": f"eval_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}",
+            "video_folder": eval_base_dir,
+            "name_prefix": os.path.basename(eval_base_dir),
             "step_trigger": lambda step: step == 0,
             "video_length": args.video_length,
             "disable_logger": True,
@@ -481,7 +483,7 @@ def main():
         'base_angular_velocity_z_rms_error': float(ang_vel_z_rms),
         'violations_percent': violations_percent
     }
-    summary_path = os.path.join(args.run_dir, f"eval_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}/metrics_summary.txt")
+    summary_path = os.path.join(eval_base_dir, "metrics_summary.txt")
     with open(summary_path, 'w') as summary_file:
         json.dump(summary_metrics, summary_file, indent=2)
     print(json.dumps(summary_metrics, indent=2))
