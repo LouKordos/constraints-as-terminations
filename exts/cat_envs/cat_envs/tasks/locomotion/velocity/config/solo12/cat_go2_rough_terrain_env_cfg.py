@@ -319,6 +319,16 @@ def force_hard_terrain(env, env_ids: torch.Tensor | None):
     # Reconfigure env origins so every env starts on the hardest level
     ti.configure_env_origins(hard_origins)
 
+def force_easy_terrain(env, env_ids: torch.Tensor | None):
+    ti = env.scene.terrain  # runtime TerrainImporter
+    # Grab sub-terrain origins: [rows, cols, 3]
+    origins = ti.terrain_origins
+    row_idx = 0
+    # Select just that row → shape (1, cols, 3), then flatten to (cols, 3)
+    hard_origins = origins[row_idx:row_idx+1].reshape(-1, 3)
+    # Reconfigure env origins so every env starts on the hardest level
+    ti.configure_env_origins(hard_origins)
+
 # Reset robot to random orientation + position close to the flat patches calculated by the terrain config
 def reset_with_jitter(env, env_ids: torch.Tensor):
     # 1) place at flat‐patch centers
@@ -692,10 +702,10 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
         # Pick the hardest terrain when testing the model.
         # Technically, this is incorrect as it wlil only run after 
         # the first reset but it's good to see a baseline of it walking on flat terrain first
-        self.events.force_hard_terrain = EventTerm(
-            func=force_hard_terrain,
-            mode="startup",  # runs once at environment startup
-        )
+        # self.events.force_hard_terrain = EventTerm(
+        #     func=force_hard_terrain,
+        #     mode="startup",  # runs once at environment startup
+        # )
 
         # set velocity command
         self.commands.base_velocity.ranges.lin_vel_x = (-0.3, 1.0)
@@ -703,7 +713,8 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
         self.commands.base_velocity.ranges.ang_vel_z = (-0.78, 0.78)
 
         # spawn the robot randomly in the grid (instead of their terrain levels)
-        self.scene.terrain.max_init_terrain_level = None
+        self.scene.terrain.max_init_terrain_level = 0
+        self.scene.terrain.terrain_generator.difficult_range = (0.0, 0.2)
         # reduce the number of terrains to save memory
         if self.scene.terrain.terrain_generator is not None:
             self.scene.terrain.terrain_generator.num_rows = 5
