@@ -166,6 +166,19 @@ class MySceneCfg(InteractiveSceneCfg):
         ),
         debug_vis=True,
     )
+
+    # DO NOT REMOVE, DO NOT USE FOR ANYTHING!
+    # This is used in constraints to get relative body height to allow constraining it
+    ray_caster_height_constraints = RayCasterCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base",
+        update_period=0.0,  # will override in __post_init__
+        offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)),  # 1 m above base
+        mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
+        attach_yaw_only=True,
+        pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
+        debug_vis=True,
+    )
+
     # lights
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
@@ -430,6 +443,7 @@ class RewardsCfg:
     )
 
 
+# Never forget to also add a curriculum term for each added constraint
 @configclass
 class ConstraintsCfg:
     # Safety Soft constraints
@@ -485,7 +499,8 @@ class ConstraintsCfg:
         func=constraints.base_orientation, max_p=0.25, params={"limit": 0.1}
     )
     # Never forget to also add a curriculum term for each added constraint
-    # base_height = ConstraintTerm(func=constraints.max_base_height, max_p=0.25, params={"limit": 0.2})
+    # min_relative_base_height = ConstraintTerm(func=constraints.min_base_height_relative_to_ground, max_p=0.25, params={"limit": 0.2})
+
     air_time_lower_bound = ConstraintTerm(
         func=constraints.air_time_lower_bound,
         max_p=0.25,
@@ -599,7 +614,8 @@ class CurriculumCfg:
             "init_max_p": 0.25,
         },
     )
-    # base_height = CurrTerm(func=curriculums.modify_constraint_p, params={"term_name": "base_height", "num_steps": 24 * MAX_CURRICULUM_ITERATIONS, "init_max_p": 0.25})
+    # min_relative_base_height = CurrTerm(func=curriculums.modify_constraint_p, params={"term_name": "min_relative_base_height", "num_steps": 24 * MAX_CURRICULUM_ITERATIONS, "init_max_p": 0.25})
+
     air_time_lower_bound = CurrTerm(
         func=curriculums.modify_constraint_p,
         params={
@@ -675,6 +691,7 @@ class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
         if self.scene.contact_forces is not None:
             self.scene.contact_forces.update_period = self.sim.dt
         self.scene.ray_caster.update_period = self.sim.dt
+        self.scene.ray_caster_height_constraints.update_period = self.sim.dt
 
         # check if terrain levels curriculum is enabled - if so, enable curriculum for terrain generator
         # this generates terrains with increasing difficulty and is useful for training

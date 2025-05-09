@@ -120,13 +120,35 @@ def foot_contact_force(env: ManagerBasedRLEnv, limit: float, names: list[str], a
     net_contact_forces = contact_sensor.data.net_forces_w_history
     return (torch.max(torch.norm(net_contact_forces[:, :, feet_ids], dim=-1), dim=1)[0] - limit)
 
-def min_base_height(env: ManagerBasedRLEnv, limit: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
+# This is NOT world frame height, but instead adjusted for terrain height below the robot.
+def min_base_height_relative_to_ground(env: ManagerBasedRLEnv, limit: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
     robot = env.scene[asset_cfg.name]
-    return limit - robot.data.root_pos_w[:, 2]
+    root_world_z = robot.data.root_link_pos_w[:, 2]
+    terrain_z = env.scene["ray_caster_height_constraints"].data.ray_hits_w[:, 0, 2] # index 0 because single ray
+    height_relative_to_ground = root_world_z - terrain_z
+    
+    # print(f"terrain_z={terrain_z[0].item()}\troot_world_z={root_world_z[0].item()}\theight_relative_to_ground={height_relative_to_ground[0].item()}")
+    nonfinite_mask = ~torch.isfinite(terrain_z)
+    if nonfinite_mask.any(): # Occurs on some environment resets, if this happens often there might be an issue
+        print(f"ray caster for height constraint is nonfinite for {torch.count_nonzero(nonfinite_mask)} envs, reporting 0 constraint violation for these envs.")
+        height_relative_to_ground.masked_fill(nonfinite_mask, limit)
 
-def max_base_height(env: ManagerBasedRLEnv, limit: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
+    return limit - height_relative_to_ground
+
+# This is NOT world frame height, but instead adjusted for terrain height below the robot.
+def max_base_height_relative_to_ground(env: ManagerBasedRLEnv, limit: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
     robot = env.scene[asset_cfg.name]
-    return robot.data.root_pos_w[:, 2] - limit
+    root_world_z = robot.data.root_link_pos_w[:, 2]
+    terrain_z = env.scene["ray_caster_height_constraints"].data.ray_hits_w[:, 0, 2] # index 0 because single ray
+    height_relative_to_ground = root_world_z - terrain_z
+
+    # print(f"terrain_z={terrain_z[0].item()}\troot_world_z={root_world_z[0].item()}\theight_relative_to_ground={height_relative_to_ground[0].item()}")
+    nonfinite_mask = ~torch.isfinite(terrain_z)
+    if nonfinite_mask.any(): # Occurs on some environment resets, if this happens often there might be an issue
+        print(f"ray caster for height constraint is nonfinite for {torch.count_nonzero(nonfinite_mask)} envs, reporting 0 constraint violation for these envs.")
+        height_relative_to_ground.masked_fill(nonfinite_mask, limit)
+        
+    return height_relative_to_ground - limit
 
 def no_move(env: ManagerBasedRLEnv, names: list[str], velocity_deadzone: float, joint_vel_limit: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
     robot = env.scene[asset_cfg.name]
