@@ -84,26 +84,22 @@ def height_map_grid(env, asset_cfg: SceneEntityCfg):
 
     return height
 
-orig_gen = ROUGH_TERRAINS_CFG
-
-    # --- 2. Add "init_pos" sampling to each sub‑terrain ----------------------
+original_rough_terrain = ROUGH_TERRAINS_CFG
 patched_sub_terrains = {
-    name: sub_cfg.replace(                               # sub_cfg is a SubTerrainBaseCfg
+    name: sub_cfg.replace(
         flat_patch_sampling={
-            "init_pos": FlatPatchSamplingCfg(            # <- lives on the *sub‑terrain*
+            "init_pos": FlatPatchSamplingCfg(
                 num_patches=4000,
                 patch_radius=0.8, # This will be updated in __post_init__
                 max_height_diff=0.15,
             )
         }
     )
-    for name, sub_cfg in orig_gen.sub_terrains.items()
+    for name, sub_cfg in original_rough_terrain.sub_terrains.items()
 }
-
-# --- 3. Build a *new* TerrainGeneratorCfg with those patched sub‑terrains
-patched_generator = orig_gen.replace(
+patched_generator = original_rough_terrain.replace(
     sub_terrains=patched_sub_terrains,
-    use_cache=True,          # whatever other flags you want
+    use_cache=True,
 )
 
 @configclass
