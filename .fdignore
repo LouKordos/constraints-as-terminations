@@ -15,12 +15,15 @@ wandb
 exts/cat_envs/cat_envs.egg-info
 exts/cat_envs/setup.py
 */*.usd
-exts/cat_envs/cat_envs/assets/Robots/odri/solo12_description/meshes
+exts/cat_envs/cat_envs/assets/Robots/
 docker
-assets
+assets/**
+./exts/cat_envs/cat_envs/ui_extension_example.py
 pyproject.toml
 exts/cat_envs/config/extension.toml
 exts/cat_envs/docs/CHANGELOG.rst
 scripts/list_envs.py
+archive-logs-dir.sh
+create-env-isaac-lab-uv.sh
 .gitignore
 .fdignore
