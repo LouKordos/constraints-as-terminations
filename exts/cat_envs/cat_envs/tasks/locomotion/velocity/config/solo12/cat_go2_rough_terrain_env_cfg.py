@@ -486,11 +486,16 @@ class ConstraintsCfg:
     )
     # Never forget to also add a curriculum term for each added constraint
     # base_height = ConstraintTerm(func=constraints.max_base_height, max_p=0.25, params={"limit": 0.2})
-    air_time = ConstraintTerm(
-        func=constraints.air_time,
+    air_time_lower_bound = ConstraintTerm(
+        func=constraints.air_time_lower_bound,
         max_p=0.25,
         params={"limit": 0.25, "names": [".*_foot"], "velocity_deadzone": 0.1},
     )
+    # air_time_bound_bound = ConstraintTerm(
+    #     func=constraints.air_time_upper_bound,
+    #     max_p=0.25,
+    #     params={"limit": 0.5, "names": [".*_foot"], "velocity_deadzone": 0.1},
+    # )
     no_move = ConstraintTerm(
         func=constraints.no_move,
         max_p=0.1,
@@ -595,14 +600,22 @@ class CurriculumCfg:
         },
     )
     # base_height = CurrTerm(func=curriculums.modify_constraint_p, params={"term_name": "base_height", "num_steps": 24 * MAX_CURRICULUM_ITERATIONS, "init_max_p": 0.25})
-    air_time = CurrTerm(
+    air_time_lower_bound = CurrTerm(
         func=curriculums.modify_constraint_p,
         params={
-            "term_name": "air_time",
+            "term_name": "air_time_lower_bound",
             "num_steps": 24 * MAX_CURRICULUM_ITERATIONS,
             "init_max_p": 0.25,
         },
     )
+    # air_time_upper_bound = CurrTerm(
+    #     func=curriculums.modify_constraint_p,
+    #     params={
+    #         "term_name": "air_time_upper_bound",
+    #         "num_steps": 24 * MAX_CURRICULUM_ITERATIONS,
+    #         "init_max_p": 0.25,
+    #     },
+    # )
     two_foot_contact = CurrTerm(
         func=curriculums.modify_constraint_p,
         params={

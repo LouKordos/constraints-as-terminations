@@ -75,18 +75,23 @@ def base_orientation(env: ManagerBasedRLEnv, limit: float, asset_cfg: SceneEntit
 # This filters any feet that are in the air and might have very high air time if they never touch down. 
 # Some experiments showed that the policy thus learns to keep the feet in the air constantly to avoid constration violation
 # Also, even if that were not the case, the code still only sets a lower bound on air time, no upper limit.
-def air_time(env: ManagerBasedRLEnv, limit: float, names: list[str], velocity_deadzone: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),) -> torch.Tensor:
+def air_time_lower_bound(env: ManagerBasedRLEnv, limit: float, names: list[str], velocity_deadzone: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),) -> torch.Tensor:
     contact_sensor = env.scene[asset_cfg.name]
     feet_ids, _ = contact_sensor.find_bodies(names, preserve_order=True)
     touchdown = contact_sensor.compute_first_contact(env.step_dt)[:, feet_ids]
     last_air_time = contact_sensor.data.last_air_time[:, feet_ids]
-    # Like in CaT
+
     command_more_than_limit = ((torch.norm(env.command_manager.get_command("base_velocity")[:, :3], dim=1) > velocity_deadzone).float().unsqueeze(1))
-    # Like in Isaaclab
-    # command_more_than_limit = (
-    #     torch.norm(env.command_manager.get_command("base_velocity")[:, :2], dim=1) > 0.1
-    # )
     cstr = (limit - last_air_time) * touchdown.float() * command_more_than_limit
+    return cstr
+
+def air_time_upper_bound(env: ManagerBasedRLEnv, limit: float, names: list[str], velocity_deadzone: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),) -> torch.Tensor:
+    contact_sensor = env.scene[asset_cfg.name]
+    feet_ids, _ = contact_sensor.find_bodies(names, preserve_order=True)
+    touchdown = contact_sensor.compute_first_contact(env.step_dt)[:, feet_ids]
+    current_air_time = contact_sensor.data.current_air_time[:, feet_ids]
+    command_more_than_limit = ((torch.norm(env.command_manager.get_command("base_velocity")[:, :3], dim=1) > velocity_deadzone).float().unsqueeze(1))
+    cstr = (current_air_time - limit) * (1 - touchdown.float()) * command_more_than_limit
     return cstr
 
 def n_foot_contact(env: ManagerBasedRLEnv, names: list[str], number_of_desired_feet: int, min_command_value: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),) -> torch.Tensor:
