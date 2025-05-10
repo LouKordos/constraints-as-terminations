@@ -252,7 +252,6 @@ def main():
     random_sim_end = args.random_sim_step_length * step_dt # end of random-policy phase
     fixed_command_sim_steps = 500
     fixed_command_sim_time = fixed_command_sim_steps * step_dt
-    total_sim_steps = args.random_sim_step_length + 4 * fixed_command_sim_steps + 1 # One more to stop video recording and generate video before plot generation
 
     fixed_command_scenarios = [
         ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device)),
@@ -263,6 +262,7 @@ def main():
     fixed_spawn_position = torch.tensor([30, 30.0, 0.4], device=device)
     fixed_spawn_orientation_quat = torch.tensor([0.0, 0.0, 0.0, 1.0], device=device)  # (xyzw)
 
+    total_sim_steps = args.random_sim_step_length + len(fixed_command_scenarios) * fixed_command_sim_steps + 1 # One more to stop video recording and generate video before plot generation
     env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array" if args.video else None)
     if args.video:
         video_configuration = {
