@@ -259,13 +259,13 @@ def main():
     fixed_command_sim_time = fixed_command_sim_steps * step_dt
 
     fixed_command_scenarios = [
-        ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device)),
-        ("pure_spin",   torch.tensor([0.0, 0.0, 0.5], device=device)),
-        ("walk_x",      torch.tensor([0.1, 0.0, 0.0], device=device)),
-        ("walk_y",      torch.tensor([0.0, 0.1, 0.0], device=device)),
+        ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("pure_spin", torch.tensor([0.0, 0.0, 0.5], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("slow_walk_x_flat_terrain", torch.tensor([0.1, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("slow_walk_y_flat_terrain", torch.tensor([0.0, 0.1, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("fast_walk_x_uneven_terrain", torch.tensor([0.5, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("fast_walk_y_uneven_terrain", torch.tensor([0.0, 0.5, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
     ]
-    fixed_spawn_position = torch.tensor([30, 30.0, 0.4], device=device)
-    fixed_spawn_orientation_quat = torch.tensor([0.0, 0.0, 0.0, 1.0], device=device)  # (xyzw)
 
     total_sim_steps = args.random_sim_step_length + len(fixed_command_scenarios) * fixed_command_sim_steps
     env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array" if args.video else None)
@@ -376,12 +376,14 @@ def main():
         if t == total_sim_steps - len(fixed_command_scenarios) - 1:
             print("Saving video, sim and code execution will freeze for a while.")
 
+        # These should only ever run at the end of eval / after random sampling because set_fixed_velocity_command breaks random command sampling!
         if t >= args.random_sim_step_length and t % fixed_command_sim_steps == 0:
             scenario = fixed_command_scenarios[int(t-args.random_sim_step_length) // fixed_command_sim_steps]
             fixed_command = scenario[1]
+            spawn_point_pos, spawn_point_quat = scenario[2]
             print(f"Resetting env and setting fixed command + spawn point for scenario={scenario}...")
             obs, _ = env.reset()
-            teleport_robot(fixed_spawn_position, fixed_spawn_orientation_quat)
+            teleport_robot(spawn_point_pos, spawn_point_quat)
             set_fixed_velocity_command(fixed_command)
             policy_observation = obs["policy"]
 
