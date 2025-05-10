@@ -225,6 +225,7 @@ def main():
     from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
     from cat_envs.tasks.utils.cleanrl.ppo import Agent
     from cat_envs.tasks.locomotion.velocity.config.solo12.cat_go2_rough_terrain_env_cfg import height_map_grid
+    from isaaclab.managers import EventTermCfg
     from isaaclab.utils.math import euler_xyz_from_quat
     from isaaclab.envs.mdp.observations import root_quat_w
     from isaaclab.managers import SceneEntityCfg
@@ -245,12 +246,22 @@ def main():
     env_cfg.viewer.lookat = (0.0, 0.0, 0.5)
     env_cfg.sim.render.rendering_mode = "quality"
     env_cfg.viewer.resolution = (1920, 1080)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     step_dt = env_cfg.sim.dt
     random_sim_end = args.random_sim_step_length * step_dt # end of random-policy phase
     fixed_command_sim_steps = 500
     fixed_command_sim_time = fixed_command_sim_steps * step_dt
     total_sim_steps = args.random_sim_step_length + 4 * fixed_command_sim_steps + 1 # One more to stop video recording and generate video before plot generation
+
+    fixed_command_scenarios = [
+        ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device)),
+        ("pure_spin",   torch.tensor([0.0, 0.0, 0.5], device=device)),
+        ("walk_x",      torch.tensor([0.1, 0.0, 0.0], device=device)),
+        ("walk_y",      torch.tensor([0.0, 0.1, 0.0], device=device)),
+    ]
+    fixed_spawn_position = torch.tensor([30, 30.0, 0.4], device=device)
+    fixed_spawn_orientation_quat = torch.tensor([0.0, 0.0, 0.0, 1.0], device=device)  # (xyzw)
 
     env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array" if args.video else None)
     if args.video:
@@ -264,9 +275,24 @@ def main():
         print_dict(video_configuration, nesting=4)
         env = gym.wrappers.RecordVideo(env, **video_configuration)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     policy_agent = Agent(env).to(device)
     policy_agent.load_state_dict(model_state)
+
+    robot = env.unwrapped.scene["robot"]
+    vel_term = env.unwrapped.command_manager.get_term("base_velocity")
+
+    def set_fixed_velocity_command(vec:torch.Tensor):
+        # VERY dirty hack but this is just an eval script so it's ok. Basically don't allow the sampler to overwrite fixed commands
+        vel_term.cfg.resampling_time_range = (1000000, 1000000)
+        vel_term.cfg.heading_command = False
+        vel_term._update_command = lambda *_, **__: None 
+        vel_term.vel_command_b = vec.repeat(env.unwrapped.num_envs, 1)
+
+    def teleport_robot(pos_xyz, quat_xyzw):
+        pose = torch.cat([pos_xyz, quat_xyzw]).unsqueeze(0)
+        robot.write_root_pose_to_sim(pose, env_ids=torch.tensor([0],device=device))
+        env.unwrapped.scene.write_data_to_sim()
+
     joint_names = env.unwrapped.scene["robot"].data.joint_names
 
     # --- joint → leg-row + column index ---------------------------------
@@ -342,8 +368,17 @@ def main():
     previous_action = None
 
     for t in tqdm(range(total_sim_steps)):
-        if t == total_sim_steps - 2:
-            print("Saving video, sim and code will freeze for a while.")
+        if t == total_sim_steps - len(fixed_command_scenarios) - 1:
+            print("Saving video, sim and code execution will freeze for a while.")
+
+        if t >= random_sim_end and t % fixed_command_sim_steps == 0:
+            scenario = fixed_command_scenarios[int(t-random_sim_end) // fixed_command_sim_steps]
+            fixed_command = scenario[1]
+            print(f"Resetting env and setting fixed command + spawn point for scenario={scenario}...")
+            obs, _ = env.reset()
+            teleport_robot(fixed_spawn_position, fixed_spawn_orientation_quat)
+            set_fixed_velocity_command(fixed_command)
+            policy_observation = obs["policy"]
 
         with torch.no_grad():
             action, _, _, _ = policy_agent.get_action_and_value(policy_agent.obs_rms(policy_observation, update=False))
@@ -386,7 +421,7 @@ def main():
 
         world_position = scene_data.root_pos_w[0].cpu().numpy() # world-frame for env 0
         origin = env.unwrapped.scene.terrain.env_origins[0].cpu().numpy() # terrain origin for env 0
-        relative_position = world_position - origin # position relative to terrain
+        relative_position = world_position + origin # position relative to terrain
         # quat_xyzw = scene_data.root_quat_w[0]
         # quat_wxyz = torch.cat([quat_xyzw[3:], quat_xyzw[:3]]) # reorder to (w,x,y,z)
         quat_wxyz = root_quat_w(env.unwrapped, make_quat_unique=True, asset_cfg=SceneEntityCfg("robot"))
