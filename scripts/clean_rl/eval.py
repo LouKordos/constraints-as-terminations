@@ -371,8 +371,8 @@ def main():
         if t == total_sim_steps - len(fixed_command_scenarios) - 1:
             print("Saving video, sim and code execution will freeze for a while.")
 
-        if t >= random_sim_end and t % fixed_command_sim_steps == 0:
-            scenario = fixed_command_scenarios[int(t-random_sim_end) // fixed_command_sim_steps]
+        if t >= args.random_sim_step_length and t % fixed_command_sim_steps == 0:
+            scenario = fixed_command_scenarios[int(t-args.random_sim_step_length) // fixed_command_sim_steps]
             fixed_command = scenario[1]
             print(f"Resetting env and setting fixed command + spawn point for scenario={scenario}...")
             obs, _ = env.reset()
