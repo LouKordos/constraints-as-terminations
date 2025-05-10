@@ -529,7 +529,7 @@ def main():
         'base_angular_velocity_z_rms_error': float(ang_vel_z_rms),
         'violations_percent': violations_percent,
         'fixed_command_scenarios': fixed_command_scenarios,
-        'random_sim_steps': args.random_sim_steps,
+        'random_sim_steps': args.random_sim_step_length,
         'total_sim_steps': total_sim_steps,
         'seed': args.seed
     }
