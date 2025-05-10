@@ -522,7 +522,11 @@ def main():
         'base_linear_velocity_x_rms_error': float(lin_vel_x_rms),
         'base_linear_velocity_y_rms_error': float(lin_vel_y_rms),
         'base_angular_velocity_z_rms_error': float(ang_vel_z_rms),
-        'violations_percent': violations_percent
+        'violations_percent': violations_percent,
+        'fixed_command_scenarios': fixed_command_scenarios,
+        'random_sim_steps': args.random_sim_steps,
+        'total_sim_steps': total_sim_steps,
+        'seed': args.seed
     }
     summary_path = os.path.join(eval_base_dir, "metrics_summary.txt")
     with open(summary_path, 'w') as summary_file:
