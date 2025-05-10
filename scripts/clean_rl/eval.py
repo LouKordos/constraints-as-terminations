@@ -537,7 +537,7 @@ def main():
     }
     summary_path = os.path.join(eval_base_dir, "metrics_summary.txt")
     with open(summary_path, 'w') as summary_file:
-        json.dump(summary_metrics, summary_file, indent=2)
+        json.dump(summary_metrics, summary_file, indent=2, default=lambda o: o.tolist()) # lambda for torch tensor conversion or any other nested objects
     print(json.dumps(summary_metrics, indent=2))
 
     # Write trajectories to JSONL
