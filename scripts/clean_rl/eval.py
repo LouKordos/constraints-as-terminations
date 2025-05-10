@@ -9,6 +9,7 @@ import gymnasium as gym
 from isaaclab.app import AppLauncher
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from tqdm import tqdm
 
 # Disable interactive display so saves don't pop up windows immediately
 plt.ioff()
@@ -21,8 +22,8 @@ def parse_arguments():
                         help="Optionally specify the model save checkpoint number instead of automatically using the last saved one.")
     parser.add_argument("--video", action="store_true", default=False,
                         help="Record videos during playback.")
-    parser.add_argument("--video_length", type=int, default=4000,
-                        help="Length of the recorded video (in steps).")
+    parser.add_argument("--random_sim_step_length", type=int, default=4000,
+                        help="Number of steps to run with random commands and spawn points. Standardized tests like standing and walking forward will always run.")
     parser.add_argument("--disable_fabric", action="store_true", default=False,
                         help="Disable fabric and use USD I/O operations.")
     parser.add_argument("--num_envs", type=int, default=1,
@@ -228,30 +229,36 @@ def main():
     from isaaclab.envs.mdp.observations import root_quat_w
     from isaaclab.managers import SceneEntityCfg
 
-    env_configuration = parse_env_cfg(
+    env_cfg = parse_env_cfg(
         args.task,
         device=args.device,
         num_envs=args.num_envs,
         use_fabric=not args.disable_fabric
     )
-    env_configuration.seed = args.seed
-    env_configuration.scene.terrain.terrain_generator.seed = env_configuration.seed
-    env_configuration.scene.terrain.seed = env_configuration.seed
+    env_cfg.seed = args.seed
+    env_cfg.scene.terrain.terrain_generator.seed = env_cfg.seed
+    env_cfg.scene.terrain.seed = env_cfg.seed
     # Viewer setup
-    env_configuration.viewer.origin_type = "asset_root"
-    env_configuration.viewer.asset_name = "robot"
-    env_configuration.viewer.eye = (0.0, -3.0, 2.0)
-    env_configuration.viewer.lookat = (0.0, 0.0, 0.5)
-    env_configuration.sim.render.rendering_mode = "quality"
-    env_configuration.viewer.resolution = (1920, 1080)
+    env_cfg.viewer.origin_type = "asset_root"
+    env_cfg.viewer.asset_name = "robot"
+    env_cfg.viewer.eye = (0.0, -3.0, 2.0)
+    env_cfg.viewer.lookat = (0.0, 0.0, 0.5)
+    env_cfg.sim.render.rendering_mode = "quality"
+    env_cfg.viewer.resolution = (1920, 1080)
 
-    env = gym.make(args.task, cfg=env_configuration, render_mode="rgb_array" if args.video else None)
+    step_dt = env_cfg.sim.dt
+    random_sim_end = args.random_sim_step_length * step_dt # end of random-policy phase
+    fixed_command_sim_steps = 500
+    fixed_command_sim_time = fixed_command_sim_steps * step_dt
+    total_sim_steps = args.random_sim_step_length + 4 * fixed_command_sim_steps + 1 # One more to stop video recording and generate video before plot generation
+
+    env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array" if args.video else None)
     if args.video:
         video_configuration = {
             "video_folder": eval_base_dir,
             "name_prefix": os.path.basename(eval_base_dir),
             "step_trigger": lambda step: step == 0,
-            "video_length": args.video_length,
+            "video_length": total_sim_steps - 1, # One more to stop video recording and generate video before plot generation
             "disable_logger": True,
         }
         print_dict(video_configuration, nesting=4)
@@ -277,6 +284,9 @@ def main():
         1: ("thigh","hfe"),      	# 1st column  = thigh/ HFE  (flex-ext)
         2: ("calf", "kfe"),      	# 2nd column  = calf / KFE  (knee flex-ext)
     }
+
+    foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] # Go2
+    # foot_links = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT'] # SOLO12
 
     def _column_from_name(jname: str) -> int | None:
         """
@@ -329,14 +339,10 @@ def main():
 
     observations, info = env.reset()
     policy_observation = observations['policy']
-    total_steps = args.video_length + 1 # To stop video recording and generate video before plot generation
-
-    foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] # Go2
-    # foot_links = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT'] # SOLO12
-
     previous_action = None
-    for t in range(total_steps):
-        if t == total_steps - 2:
+
+    for t in tqdm(range(total_sim_steps)):
+        if t == total_sim_steps - 2:
             print("Saving video, sim and code will freeze for a while.")
 
         with torch.no_grad():
@@ -419,8 +425,7 @@ def main():
     print("Converting and saving recorded sim data...")
 
     # Convert buffers to numpy arrays
-    time_indices = np.arange(total_steps)
-    step_dt = env.unwrapped.step_dt
+    time_indices = np.arange(total_sim_steps)
     sim_times = time_indices * step_dt
     reset_times = [i * step_dt for i in reset_steps]
     print("Reset times: ", reset_times)
@@ -461,7 +466,7 @@ def main():
             'joint_torque':   	joint_torques_array,
             'joint_acceleration': joint_accelerations_array,
             'action_rate':    	action_rate_array,
-            'foot_contact_force': contact_forces_array.reshape(total_steps, -1).mean(axis=1),
+            'foot_contact_force': contact_forces_array.reshape(total_sim_steps, -1).mean(axis=1),
         }
 
         for term, limit in constraint_limits.items():
@@ -492,7 +497,7 @@ def main():
     # Write trajectories to JSONL
     trajectories_path = os.path.join(trajectories_directory, 'trajectory.jsonl')
     with open(trajectories_path, 'w') as traj_file:
-        for idx in range(total_steps):
+        for idx in range(total_sim_steps):
             record = {
                 'step': int(idx),
                 'joint_positions': joint_positions_buffer[idx].tolist(),
