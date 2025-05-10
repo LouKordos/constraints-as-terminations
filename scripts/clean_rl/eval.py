@@ -248,7 +248,7 @@ def main():
     env_cfg.viewer.resolution = (1920, 1080)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    step_dt = env_cfg.sim.dt
+    step_dt = env_cfg.sim.dt * env_cfg.decimation # Physics run at higher frequency, action is applied `decimation` physics-steps, but video uses env steps as unit
     random_sim_end = args.random_sim_step_length * step_dt # end of random-policy phase
     fixed_command_sim_steps = 500
     fixed_command_sim_time = fixed_command_sim_steps * step_dt
