@@ -196,6 +196,11 @@ def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
 
+    if not "play" in args.task.lower():
+        input("\n\n-------------------------------------------------------------------\n\
+              Keyword 'Play' not found in task name, are you sure you are using the correct task/environment?\n" \
+              "-------------------------------------------------------------------\n\n")
+
     constraint_limits = load_constraint_limits(os.path.join(args.run_dir, 'params'))
 
     if args.eval_checkpoint is None:
