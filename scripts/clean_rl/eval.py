@@ -395,6 +395,7 @@ def main():
 
     joint_names = env.unwrapped.scene["robot"].data.joint_names
     foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] if "go2" in args.task.lower() else ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
+    foot_labels = ['front left','front right','rear left','rear right']
     constraint_bounds = load_constraint_bounds(os.path.join(args.run_dir, 'params'))
 
     # --- joint → leg-row + column index ---------------------------------
@@ -613,6 +614,30 @@ def main():
         'foot_contact_force': contact_forces_array.reshape(total_sim_steps, -1).mean(axis=1),
     }
 
+    metrics = {
+        'position': 	joint_positions_array,
+        'velocity':	joint_velocities_array,
+        'acceleration': joint_accelerations_array,
+        'torque':   	joint_torques_array,
+        'action_rate': action_rate_array
+    }
+
+    metric_to_constraint_term_mapping = {
+        'position': 	None,
+        'velocity':	'joint_velocity',
+        'acceleration': 'joint_acceleration',
+        'torque':   	'joint_torque',
+        'action_rate': 'action_rate'
+    }
+
+    metric_to_unit_mapping = {
+        'position': 	'm',
+        'velocity':	'rad*s^(-1)',
+        'acceleration': 'rad * s^(-2) ',
+        'torque':   	'Nm',
+        'action_rate': 'rad * s^(-1)'
+    }
+
     for term, (lb, ub) in constraint_bounds.items():
         metric = data_map.get(term)
         if metric is None:
@@ -640,12 +665,81 @@ def main():
             violation_mask = above_ub | below_lb
             violations_percent[term] = float(violation_mask.mean() * 100)
 
+    per_joint_summary: Dict[str, Dict[str, Dict[str, float]]] = {}
+    for j, jn in enumerate(joint_names):
+        per_joint_summary[jn] = {}
+        for metric_name, data in metrics.items():
+            # data is shape (T, J); select column j → shape (T,)
+            col = data[:, j]
+            per_joint_summary[jn][metric_name] = {
+                'mean': float(col.mean()),
+                'min': float(col.min()),
+                'max': float(col.max()),
+                'median': float(np.median(col)),
+                '90th_percentile': float(np.percentile(col, 90)),
+            }
+
+    # --- build per‐foot air‐time summaries ----------------------------------
+    # contact_state_array: shape (T, F); 1=in contact, 0=in air
+    air_segments_per_foot: Dict[str, List[float]] = {label: [] for label in foot_labels}
+
+    for i, label in enumerate(foot_labels):
+        in_contact = contact_state_array[:, i].astype(bool)
+        start = None
+        segments: List[Tuple[int,int]] = []
+        # find all [start, end) intervals where in_contact==False
+        for t, c in enumerate(in_contact):
+            if not c and start is None:
+                start = t
+            elif c and start is not None:
+                segments.append((start, t))
+                start = None
+        # if still airborne at end
+        if start is not None:
+            segments.append((start, len(in_contact)))
+        # convert to durations in seconds
+        durations = [(end - begin) * step_dt for begin, end in segments]
+        air_segments_per_foot[label] = durations
+
+    # now compute summary stats for each foot
+    air_time_summary: Dict[str, Dict[str, float]] = {}
+    for label, durations in air_segments_per_foot.items():
+        arr = np.array(durations, dtype=np.float64)
+        if arr.size == 0:
+            # no air‐time segments: fill zeros
+            air_time_summary[label] = {k: 0.0 for k in 
+                ('mean','min','max','median','90th_percentile')}
+        else:
+            air_time_summary[label] = {
+                'mean':            float(arr.mean()),
+                'min':             float(arr.min()),
+                'max':             float(arr.max()),
+                'median':          float(np.median(arr)),
+                '90th_percentile': float(np.percentile(arr, 90)),
+            }
+
+    # --- build contact-forces summary ------------------------------------
+    # contact_forces_array is shape (T, F)
+    contact_force_summary: Dict[str, Dict[str, float]] = {}
+    for i, label in enumerate(foot_labels):
+        col = contact_forces_array[:, i]
+        contact_force_summary[label] = {
+            'mean':             float(col.mean()),
+            'min':              float(col.min()),
+            'max':              float(col.max()),
+            'median':           float(np.median(col)),
+            '90th_percentile':  float(np.percentile(col, 90)),
+        }
+
     # Save summary metrics
     summary_metrics = {
         'cumulative_reward': cumulative_reward,
         'base_linear_velocity_x_rms_error': float(lin_vel_x_rms),
         'base_linear_velocity_y_rms_error': float(lin_vel_y_rms),
         'base_angular_velocity_z_rms_error': float(ang_vel_z_rms),
+        'per_joint_summary': per_joint_summary,
+        'air_time_seconds_per_foot': air_time_summary,
+        'contact_force_summary': contact_force_summary,
         'violations_percent': violations_percent,
         'fixed_command_scenarios': fixed_command_scenarios,
         'random_sim_steps': args.random_sim_step_length,
@@ -693,7 +787,6 @@ def main():
     # ----------------------------------------
     # 1) Foot contact‐force per‐foot in 2×2 grid
     # ----------------------------------------
-    foot_labels = ['front left','front right','rear left','rear right']
     fig, axes = plt.subplots(2, 2, sharex=True, figsize=(16, 8))
 
     for i, ax in enumerate(axes.flat):
@@ -734,29 +827,6 @@ def main():
     # ------------------------------------------------
     # 2) Joint metrics: 4×3 grid and overview per metric
     # ------------------------------------------------
-    metrics = {
-        'position': 	joint_positions_array,
-        'velocity':	joint_velocities_array,
-        'acceleration': joint_accelerations_array,
-        'torque':   	joint_torques_array,
-        'action_rate': action_rate_array
-    }
-
-    metric_to_constraint_term_mapping = {
-        'position': 	None,
-        'velocity':	'joint_velocity',
-        'acceleration': 'joint_acceleration',
-        'torque':   	'joint_torque',
-        'action_rate': 'action_rate'
-    }
-
-    metric_to_unit_mapping = {
-        'position': 	'm',
-        'velocity':	'rad*s^(-1)',
-        'acceleration': 'rad * s^(-2) ',
-        'torque':   	'Nm',
-        'action_rate': 'rad * s^(-1)'
-    }
 
     # helper: map joint index → foot index (0=FL,1=FR,2=RL,3=RR)
     foot_from_joint = []
