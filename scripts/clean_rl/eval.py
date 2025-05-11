@@ -777,6 +777,7 @@ def main():
     # Individual plots for each metric
     figs = []
     linewidth = 1
+    FIGSIZE = (16, 9)
 
     print("Data saved, starting plot generation...")
 
@@ -899,8 +900,86 @@ def main():
         fig.tight_layout()
         fig.savefig(os.path.join(plots_directory, f'joint_{name}_overview.pdf'), dpi=600)
 
+    # --- 4×3 grid of histograms for each joint metric --------------------
+    for mname, data in metrics.items():  # metrics_map: {'position':…, 'velocity':…, …}
+        fig, axes = plt.subplots(4, 3, figsize=(18, 12), sharex=False, sharey=False)
+        fig.suptitle(f"Histogram of Joint {mname.replace('_', ' ').title()}", fontsize=18)
+        for j, jn in enumerate(joint_names):
+            row = leg_row[j]
+            col = leg_col[j]
+            ax = axes[row, col]
+            ax.hist(data[:, j], bins='auto', alpha=0.7)
+            ax.set_title(jn, fontsize=12)
+            ax.set_xlabel(f"{mname.capitalize()} / {metric_to_unit_mapping[mname]}")
+            ax.set_ylabel("Count")
+        fig.tight_layout()
+        fig.savefig(os.path.join(plots_directory, f"hist_joint_{mname}_grid.pdf"), dpi=600)
+
+    # --- 2×2 grid of histograms for contact forces per foot -------------
+    fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
+    fig.suptitle("Histogram of Foot Contact Forces", fontsize=18)
+    for i, label in enumerate(foot_labels):
+        ax = axes.flat[i]
+        ax.hist(contact_forces_array[:, i], bins='auto', alpha=0.7)
+        ax.set_title(label, fontsize=14)
+        ax.set_xlabel("Force / N")
+        ax.set_ylabel("Count")
+    fig.tight_layout()
+    fig.savefig(os.path.join(plots_directory, "hist_contact_forces_grid.pdf"), dpi=600)
+
+    # --- 2×2 grid of histograms for air-time durations per foot ----------
+    # air_segments_per_foot: Dict[label, List[durations]]
+    fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
+    fig.suptitle("Histogram of Air-Time Durations per Foot", fontsize=18)
+    for i, label in enumerate(foot_labels):
+        durations = air_segments_per_foot[label]
+        ax = axes.flat[i]
+        if durations:
+            ax.hist(durations, bins='auto', alpha=0.7)
+        ax.set_title(label, fontsize=14)
+        ax.set_xlabel("Air Time / s")
+        ax.set_ylabel("Count")
+    fig.tight_layout()
+    fig.savefig(os.path.join(plots_directory, "hist_air_time_grid.pdf"), dpi=600)
+
+    # --- histogram plots for per‐joint metrics ----------------------------
+    for metric_name, data in metrics.items():
+        fig, ax = plt.subplots(figsize=FIGSIZE)
+        # data shape (T, J)
+        for j, jn in enumerate(joint_names):
+            ax.hist(data[:, j], bins='auto', alpha=0.6, label=jn)
+        ax.set_title(f"Histogram of joint {metric_name.replace('_',' ')}", fontsize=16)
+        ax.set_xlabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}")
+        ax.set_ylabel("Frequency")
+        ax.legend(loc='upper right', fontsize=8)
+        fig.tight_layout()
+        fig.savefig(os.path.join(plots_directory, f"hist_joint_{metric_name}_overview.pdf"), dpi=600)
+
+    # --- histogram plot for contact forces per foot -----------------------
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    for i, label in enumerate(foot_labels):
+        ax.hist(contact_forces_array[:, i], bins='auto', alpha=0.6, label=label)
+    ax.set_title("Histogram of Foot Contact Forces", fontsize=16)
+    ax.set_xlabel("Force / N")
+    ax.set_ylabel("Frequency")
+    ax.legend(loc='upper right', fontsize=8)
+    fig.tight_layout()
+    fig.savefig(os.path.join(plots_directory, "hist_contact_forces_overview.pdf"), dpi=600)
+
+    # --- histogram plots for air‐time durations per foot -------------------
+    # air_segments_per_foot: Dict[label, List[durations]]
+    for label, durations in air_segments_per_foot.items():
+        fig, ax = plt.subplots(figsize=FIGSIZE)
+        if len(durations) > 0:
+            ax.hist(durations, bins='auto', alpha=0.7)
+        ax.set_title(f"Histogram of Air‐Time Durations ({label})", fontsize=16)
+        ax.set_xlabel("Air Time / s")
+        ax.set_ylabel("Frequency")
+        fig.tight_layout()
+        safe_label = label.replace(' ', '_')
+        fig.savefig(os.path.join(plots_directory, f"hist_air_time_{safe_label}_overview.pdf"), dpi=600)
+
     # Combined subplots for base position, orientation, linear and angular velocity
-    FIGSIZE = (16, 9)
     fig_bp, axes_bp = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, axis_label in enumerate(['X', 'Y', 'Z']):
         axes_bp[i].plot(sim_times, base_position_array[:, i], label=f'position_{axis_label}', linewidth=linewidth)
