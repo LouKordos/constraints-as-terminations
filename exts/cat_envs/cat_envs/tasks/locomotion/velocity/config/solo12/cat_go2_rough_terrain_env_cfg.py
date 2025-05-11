@@ -490,8 +490,8 @@ class ConstraintsCfg:
     # Style constraints
     hip_position = ConstraintTerm(
         func=constraints.relative_joint_position_upper_and_lower_bound_when_moving_forward,
-        max_p=0.3,
-        params={"limit": 0.2, "names": [".*_hip_joint"], "velocity_deadzone": 0.1},
+        max_p=0.25,
+        params={"limit": 0.3, "names": [".*_hip_joint"], "velocity_deadzone": 0.1},
     )
     base_orientation = ConstraintTerm(
         func=constraints.base_orientation, max_p=0.25, params={"limit": 0.1}
@@ -558,7 +558,7 @@ def terrain_levels_with_ray_caster_refresh(env, env_ids):
     
     return levels
 
-MAX_CURRICULUM_ITERATIONS = 1000
+MAX_CURRICULUM_ITERATIONS = 5000
 
 @configclass
 class CurriculumCfg:
