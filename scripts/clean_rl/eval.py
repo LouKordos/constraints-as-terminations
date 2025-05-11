@@ -588,6 +588,51 @@ def main():
     contact_state_array = np.vstack(contact_state_buffer)
     commanded_velocity_array = np.vstack([cv.cpu().numpy() if isinstance(cv, torch.Tensor) else np.asarray(cv) for cv in commanded_velocity_buffer])
 
+    # --- energy & cost-of-transport ------------------------------------
+    # instantaneous joint power: torque (Nm) * angular velocity (rad/s)
+    power_array = joint_torques_array * joint_velocities_array  # shape (T, J)
+
+    # cumulative per-joint energy (J) via trapezoidal/integral: ∑ |P| * dt
+    energy_per_joint = np.cumsum(np.abs(power_array), axis=0) * step_dt  # shape (T, J)
+
+    # cumulative total energy (J) across all joints
+    combined_energy = np.cumsum(np.abs(power_array).sum(axis=1)) * step_dt  # shape (T,)
+
+    # 1) Compute raw displacements
+    raw_displacement = np.linalg.norm(np.diff(base_position_array, axis=0), axis=1)
+
+    # 2) Build a mask of “real” steps
+    mask = np.ones_like(raw_displacement, dtype=bool)
+
+    # Zero-out after environment resets
+    for reset_step in reset_steps:
+        # reset_step is the time-step index at which reset happened
+        # the jump appears at displacement index reset_step-1
+        if reset_step > 0 and reset_step-1 < len(mask):
+            mask[reset_step-1] = False
+
+    # Zero-out after teleports
+    for k in range(len(fixed_command_scenarios)):
+        t0 = args.random_sim_step_length + k * fixed_command_sim_steps
+        if t0 > 0 and t0-1 < len(mask):
+            mask[t0-1] = False
+
+    # 3) Sum only the valid displacements
+    true_distance = float(raw_displacement[mask].sum())
+
+    # robot mass (kg): you can pull from your env if available, else hard-code/supply
+    total_robot_mass = float(env.unwrapped.scene["robot"].data.default_mass.sum().item())
+
+    # instantaneous cost of transport (dimensionless): P_total / (m g v)
+    instantaneous_speed = np.linalg.norm(base_linear_velocity_array[:, :2], axis=1)
+    # avoid division by zero
+    cost_of_transport_time_series = combined_energy.copy() # placeholder
+    with np.errstate(divide='ignore', invalid='ignore'):
+        cost_of_transport_time_series = (np.abs(power_array).sum(axis=1) / (total_robot_mass * 9.81 * instantaneous_speed + 1e-12))
+
+    # average cost of transport over the whole run
+    mean_cost_of_transport = float(np.nanmean(cost_of_transport_time_series))
+
     target_lin_vel_x = commanded_velocity_array[:, 0]
     actual_lin_vel_x = base_linear_velocity_array[:, 0]
     lin_vel_x_error = target_lin_vel_x - actual_lin_vel_x
@@ -606,7 +651,7 @@ def main():
     # Compute constraint violations
     print("Constraint limits:", constraint_bounds)
     violations_percent = {}
-    data_map = {
+    constraint_violation_data_map = {
         'joint_velocity': 	joint_velocities_array,
         'joint_torque':   	joint_torques_array,
         'joint_acceleration': joint_accelerations_array,
@@ -615,31 +660,39 @@ def main():
     }
 
     metrics = {
-        'position': 	joint_positions_array,
+        'position': joint_positions_array,
         'velocity':	joint_velocities_array,
         'acceleration': joint_accelerations_array,
-        'torque':   	joint_torques_array,
-        'action_rate': action_rate_array
+        'torque': joint_torques_array,
+        'action_rate': action_rate_array,
+        'energy': energy_per_joint,
+        'power': power_array,
     }
 
     metric_to_constraint_term_mapping = {
-        'position': 	None,
+        'position': None,
         'velocity':	'joint_velocity',
         'acceleration': 'joint_acceleration',
-        'torque':   	'joint_torque',
-        'action_rate': 'action_rate'
+        'torque': 'joint_torque',
+        'action_rate': 'action_rate',
+        'energy': None,
+        'power': None
     }
 
     metric_to_unit_mapping = {
-        'position': 	'm',
+        'position': 'm',
         'velocity':	'rad*s^(-1)',
         'acceleration': 'rad * s^(-2) ',
-        'torque':   	'Nm',
-        'action_rate': 'rad * s^(-1)'
+        'torque': 'Nm',
+        'action_rate': 'rad * s^(-1)',
+        'energy': 'J',
+        'combined_energy': 'J',
+        'cost_of_transport': '-',
+        'power': 'W'
     }
 
     for term, (lb, ub) in constraint_bounds.items():
-        metric = data_map.get(term)
+        metric = constraint_violation_data_map.get(term)
         if metric is None:
             # skip globals not in map
             print(f"Skipping metric for term={term}")
@@ -740,6 +793,13 @@ def main():
         'per_joint_summary': per_joint_summary,
         'air_time_seconds_per_foot': air_time_summary,
         'contact_force_summary': contact_force_summary,
+        'energy_consumption_per_joint': {
+            jn: float(energy_per_joint[-1, j])
+            for j, jn in enumerate(joint_names)
+        },
+        'total_energy_consumption': float(combined_energy[-1]),
+        'mean_cost_of_transport': mean_cost_of_transport,
+        'cost_of_transport_time_series': cost_of_transport_time_series.tolist(),
         'violations_percent': violations_percent,
         'fixed_command_scenarios': fixed_command_scenarios,
         'random_sim_steps': args.random_sim_step_length,
@@ -965,6 +1025,37 @@ def main():
     ax.legend(loc='upper right', fontsize=8)
     fig.tight_layout()
     fig.savefig(os.path.join(plots_directory, "hist_contact_forces_overview.pdf"), dpi=600)
+
+    # Combined energy over time
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.plot(sim_times, combined_energy, label='total_energy', linewidth=linewidth)
+    draw_resets(ax)
+    ax.set_xlabel('Time / s')
+    ax.set_ylabel('Energy / J')
+    ax.set_title('Total Cumulative Joint Energy', fontsize=16)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(os.path.join(plots_directory, 'combined_energy_overview.pdf'), dpi=600)
+
+    # Instantaneous cost of transport over time
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.plot(sim_times, cost_of_transport_time_series, label='cost_of_transport', linewidth=linewidth)
+    draw_resets(ax)
+    ax.set_xlabel('Time / s')
+    ax.set_ylabel('COT (dimensionless)')
+    ax.set_title('Instantaneous Cost of Transport', fontsize=16)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(os.path.join(plots_directory, 'cost_of_transport_over_time.pdf'), dpi=600)
+
+    # Histogram of cost of transport
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.hist(cost_of_transport_time_series[~np.isnan(cost_of_transport_time_series)], bins='auto', alpha=0.7)
+    ax.set_xlabel('COT')
+    ax.set_ylabel('Count')
+    ax.set_title('Histogram of Cost of Transport', fontsize=16)
+    fig.tight_layout()
+    fig.savefig(os.path.join(plots_directory, 'hist_cot_overview.pdf'), dpi=600)
 
     # --- histogram plots for air‐time durations per foot -------------------
     # air_segments_per_foot: Dict[label, List[durations]]
