@@ -231,8 +231,8 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
     assert sim_times.shape[0] == T, "sim_times length must match contact_states"
 
     fig, ax = plt.subplots(figsize=(12, F * 1.2))
-    ax.set_xlabel('Time [s]')
-    ax.set_title('Gait Diagram with Air Times')
+    ax.set_xlabel('Time / s')
+    ax.set_title('Gait Diagram with Air Times', fontsize=16)
 
     for reset_time in reset_times:
             ax.axvline(x=reset_time, linestyle=":", linewidth=1, color="orange", label='reset' if reset_time == reset_times[0] else None)
@@ -697,7 +697,7 @@ def main():
     fig, axes = plt.subplots(2, 2, sharex=True, figsize=(16, 8))
 
     for i, ax in enumerate(axes.flat):
-        ax.plot(sim_times, contact_forces_array[:, i], label='force', linewidth=linewidth)
+        ax.plot(sim_times, contact_forces_array[:, i], label=f'force_mag_{foot_labels[i]}', linewidth=linewidth)
         draw_limits(ax, "foot_contact_force", constraint_bounds)
         draw_resets(ax)
         # identify contiguous contact intervals
@@ -725,8 +725,8 @@ def main():
             )
             first = False
 
-        ax.set_title(foot_labels[i])
-        ax.set_ylabel('Force [N]')
+        ax.set_title(f"Foot contact force magnitude {foot_labels[i]}", fontsize=16)
+        ax.set_ylabel(f'Force / N')
         ax.legend()
     fig.tight_layout()
     fig.savefig(os.path.join(plots_directory, 'foot_contact_force_each.pdf'), dpi=600)
@@ -735,19 +735,27 @@ def main():
     # 2) Joint metrics: 4×3 grid and overview per metric
     # ------------------------------------------------
     metrics = {
-        'positions': 	joint_positions_array,
-        'velocities':	joint_velocities_array,
-        'accelerations': joint_accelerations_array,
-        'torques':   	joint_torques_array,
-        'action_rates': action_rate_array
+        'position': 	joint_positions_array,
+        'velocity':	joint_velocities_array,
+        'acceleration': joint_accelerations_array,
+        'torque':   	joint_torques_array,
+        'action_rate': action_rate_array
     }
 
     metric_to_constraint_term_mapping = {
-        'positions': 	None,
-        'velocities':	'joint_velocity',
-        'accelerations': 'joint_acceleration',
-        'torques':   	'joint_torque',
-        'action_rates': 'action_rate'
+        'position': 	None,
+        'velocity':	'joint_velocity',
+        'acceleration': 'joint_acceleration',
+        'torque':   	'joint_torque',
+        'action_rate': 'action_rate'
+    }
+
+    metric_to_unit_mapping = {
+        'position': 	'm',
+        'velocity':	'rad*s^(-1)',
+        'acceleration': 'rad * s^(-2) ',
+        'torque':   	'Nm',
+        'action_rate': 'rad * s^(-1)'
     }
 
     # helper: map joint index → foot index (0=FL,1=FR,2=RL,3=RR)
@@ -779,7 +787,7 @@ def main():
             ax = axes[row, col]
             ax.plot(sim_times, data[:, j], linewidth=linewidth)
 
-            if name == 'positions':
+            if name == 'position':
                 # use the joint’s own limit
                 draw_limits(ax, joint_names[j], constraint_bounds)
             else:
@@ -798,8 +806,8 @@ def main():
                         ax.axvspan(sim_times[start], sim_times[end-1],
                                     facecolor='gray', alpha=0.5)
                         start = None
-            ax.set_title(joint_names[j])
-            ax.set_ylabel("Joint " + (name.replace('_', ' ')[:-1] if name != 'velocities' else 'velocity'))
+            ax.set_title(f"Joint {name.replace('_', ' ')} for {joint_names[j]}", fontsize=16)
+            ax.set_ylabel(f"{name.capitalize()} / {metric_to_unit_mapping[name]}")
         axes[-1, 0].set_xlabel('Time / s')
         fig.tight_layout()
         fig.savefig(os.path.join(plots_directory, f'joint_{name}_grid.pdf'), dpi=600)
@@ -808,14 +816,15 @@ def main():
         fig, ax = plt.subplots(figsize=(12, 6))
         for j in range(data.shape[1]):
             ax.plot(sim_times, data[:, j], label=joint_names[j], linewidth=linewidth, linestyle=get_leg_linestyle(joint_names[j]))
-        if name == 'positions': # Handle each joint position limit separetely
+        if name == 'position': # Handle each joint position limit separetely
             for jn in joint_names:
                 draw_limits(ax, jn, constraint_bounds)
         else:
             draw_limits(ax, metric_to_constraint_term_mapping[name], constraint_bounds)
         draw_resets(ax)
         ax.set_xlabel('Time / s')
-        ax.set_ylabel("Joint " + (name.replace('_', ' ')[:-1] if name != 'velocities' else 'velocity'))
+        ax.set_title(f"Joint {name.replace('_', ' ')} overview", fontsize=16)
+        ax.set_ylabel(f"{name.capitalize()} / {metric_to_unit_mapping[name]}")
         ax.legend(loc='upper right', ncol=2)
         fig.tight_layout()
         fig.savefig(os.path.join(plots_directory, f'joint_{name}_overview.pdf'), dpi=600)
@@ -826,10 +835,10 @@ def main():
     for i, axis_label in enumerate(['X', 'Y', 'Z']):
         axes_bp[i].plot(sim_times, base_position_array[:, i], label=f'position_{axis_label}', linewidth=linewidth)
         draw_resets(axes_bp[i])
-        axes_bp[i].set_ylabel(f'World Position {axis_label}')
+        axes_bp[i].set_title(f'World Position {axis_label}')
+        axes_bp[i].set_ylabel(f'Position / m')
         axes_bp[i].legend()
         axes_bp[i].grid(True)
-    axes_bp[0].set_title('World Base Position Subplots')
     axes_bp[-1].set_xlabel('Time / s')
     fig_bp.tight_layout()
     fig_bp.savefig(os.path.join(plots_directory, 'base_position_subplots_world.pdf'), dpi=600)
@@ -839,40 +848,40 @@ def main():
     for i, orient_label in enumerate(['Yaw', 'Pitch', 'Roll']):
         axes_bo[i].plot(sim_times, base_orientation_array[:, i], label=orient_label, linewidth=linewidth)
         draw_resets(axes_bo[i])
-        axes_bo[i].set_ylabel(orient_label)
+        axes_bo[i].set_ylabel(orient_label + " / rad")
+        axes_bo[i].set_title(f'World Orientation {axis_label}')
         axes_bo[i].legend()
         axes_bo[i].grid(True)
-    axes_bo[0].set_title('Base Orientation Subplots')
     axes_bo[-1].set_xlabel('Time / s')
     fig_bo.tight_layout()
     fig_bo.savefig(os.path.join(plots_directory, 'base_orientation_subplots.pdf'), dpi=600)
     figs.append(fig_bo)
 
     fig_blv, axes_blv = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
-    for i, vel_label in enumerate(['VX', 'VY', 'VZ']):
+    for i, vel_label in enumerate(['Velocity X', 'Velocity Y', 'Velocity Z']):
         axes_blv[i].plot(sim_times, base_linear_velocity_array[:, i], label=vel_label, linewidth=linewidth)
-        if vel_label != "VZ": # Command format for UniformVelocityCommandCfg as used here is lin_vel_x, lin_vel_y, and ang_vel_z, so the third component belongs into another plot
+        if i != 2: # Command format for UniformVelocityCommandCfg as used here is lin_vel_x, lin_vel_y, and ang_vel_z, so the third component belongs into another plot
             axes_blv[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f"cmd_{vel_label}", linewidth=linewidth, color="black")
         draw_resets(axes_blv[i])
-        axes_blv[i].set_ylabel(vel_label)
+        axes_blv[i].set_ylabel(vel_label + " / m * sec^(-1)")
+        axes_blv[i].set_title(f'Base Linear {vel_label}')
         axes_blv[i].legend()
         axes_blv[i].grid(True)
-    axes_blv[0].set_title('Base Linear Velocity Subplots')
     axes_blv[-1].set_xlabel('Time / s')
     fig_blv.tight_layout()
     fig_blv.savefig(os.path.join(plots_directory, 'base_linear_velocity_subplots.pdf'), dpi=600)
     figs.append(fig_blv)
 
     fig_bav, axes_bav = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
-    for i, vel_label in enumerate(['WX', 'WY', 'WZ']):
+    for i, vel_label in enumerate(['Omega X', 'Omega Y', 'Omega Z']):
         axes_bav[i].plot(sim_times, base_angular_velocity_array[:, i], label=vel_label, linewidth=linewidth)
         if i == 2: # Only plot angular velocity around z, this is is the only angular velocity that is actually controlled.
             axes_bav[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f"cmd_{vel_label}", linewidth=linewidth, color="black")
         draw_resets(axes_bav[i])
-        axes_bav[i].set_ylabel(vel_label)
+        axes_bav[i].set_ylabel(vel_label + " / rad * sec^(-1)")
+        axes_bav[i].set_title(f'Base {vel_label}')
         axes_bav[i].legend()
         axes_bav[i].grid(True)
-    axes_bav[0].set_title('Base Angular Velocity Subplots')
     axes_bav[-1].set_xlabel('Time / s')
     fig_bav.tight_layout()
     fig_bav.savefig(os.path.join(plots_directory, 'base_angular_velocity_subplots.pdf'), dpi=600)
@@ -893,7 +902,7 @@ def main():
             #     ax.plot(sim_times, commanded_velocity_array[:, i], linestyle="--", label=f"cmd_{lbl}", linewidth=linewidth, color="black")
             # elif title == "Base Angular Velocity":
             #     ax.plot(sim_times, commanded_velocity_array[:, i+3], linestyle='--', label=f"cmd_{lbl}", linewidth=linewidth, color="black")
-        ax.set_title(title)
+        ax.set_title(title, fontsize=16)
         ax.set_xlabel('Time / s')
         ax.legend()
         ax.grid(True)
