@@ -527,12 +527,19 @@ def main():
         # quat_wxyz = torch.cat([quat_xyzw[3:], quat_xyzw[:3]]) # reorder to (w,x,y,z)
         quat_wxyz = root_quat_w(env.unwrapped, make_quat_unique=True, asset_cfg=SceneEntityCfg("robot"))
         roll_t, pitch_t, yaw_t = euler_xyz_from_quat(quat_wxyz)
-        roll = roll_t.cpu().numpy().item()
-        pitch = pitch_t.cpu().numpy().item()
-        yaw = yaw_t.cpu().numpy().item()
-        # roll = np.unwrap(roll_t.cpu().numpy(), axis=0).item()
-        # pitch = np.unwrap(pitch_t.cpu().numpy(), axis=0).item()
-        # yaw = np.unwrap(yaw_t.cpu().numpy(), axis=0).item()
+        # Isaaclab returns 0 to 2pi euler angles, so small negative angles wrap around to ~2pi.
+        # Rescale to [-pi, pi] for better plotting
+        def convert_to_signed_angle(a): return (a + np.pi) % (2*np.pi) - np.pi
+        # roll = roll_t.cpu().numpy().item()
+        # pitch = pitch_t.cpu().numpy().item()
+        # yaw = yaw_t.cpu().numpy().item()
+
+        # IMPORTANT: THESE ANGLES ARE NOT UNWRAPPED YET, HAPPENS AFTER THE FULL ROLLOUT
+        roll = convert_to_signed_angle(roll_t.cpu().numpy().item())
+        pitch = convert_to_signed_angle(pitch_t.cpu().numpy().item())
+        yaw = convert_to_signed_angle(yaw_t.cpu().numpy().item())
+        # print(f"UNWRAPPED roll={roll}\tUNWRAPPED pitch={pitch}")
+
         base_position_buffer.append(world_position)
         base_orientation_buffer.append([yaw, pitch, roll])
 
@@ -572,7 +579,9 @@ def main():
     action_rate_array = np.vstack(action_rate_buffer)
     contact_forces_array = np.stack(contact_forces_buffer)
     base_position_array = np.vstack(base_position_buffer)
-    base_orientation_array = np.vstack(base_orientation_buffer)
+    print(np.vstack(base_orientation_buffer).shape)
+    base_orientation_array = np.unwrap(np.vstack(base_orientation_buffer), axis=0)
+    print(base_orientation_array.shape)
     base_linear_velocity_array = np.vstack(base_linear_velocity_buffer)
     base_angular_velocity_array = np.vstack(base_angular_velocity_buffer)
     contact_state_array = np.vstack(contact_state_buffer)
@@ -643,10 +652,10 @@ def main():
         'total_sim_steps': total_sim_steps,
         'seed': args.seed
     }
-    summary_path = os.path.join(eval_base_dir, "metrics_summary.txt")
+    summary_path = os.path.join(eval_base_dir, "metrics_summary.json")
     with open(summary_path, 'w') as summary_file:
-        json.dump(summary_metrics, summary_file, indent=2, default=lambda o: o.tolist()) # lambda for torch tensor conversion or any other nested objects
-    print(json.dumps(summary_metrics, indent=2, default=lambda o: o.tolist()))
+        json.dump(summary_metrics, summary_file, indent=4, default=lambda o: o.tolist()) # lambda for torch tensor conversion or any other nested objects
+    print(json.dumps(summary_metrics, indent=4, default=lambda o: o.tolist()))
 
     # Write trajectories to JSONL
     trajectories_path = os.path.join(trajectories_directory, 'trajectory.jsonl')
@@ -669,7 +678,7 @@ def main():
                 'height_map': height_map_buffer[idx].tolist(),
                 'foot_positions': foot_positions_buffer[idx].tolist(),
             }
-            traj_file.write(json.dumps(record) + "\n")
+            traj_file.write(json.dumps(record, indent=4, default=lambda o: o.tolist()) + "\n")
 
     # Individual plots for each metric
     figs = []
