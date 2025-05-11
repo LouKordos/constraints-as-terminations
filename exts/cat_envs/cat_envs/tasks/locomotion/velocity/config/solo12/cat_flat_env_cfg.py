@@ -364,7 +364,7 @@ class ConstraintsCfg:
         params={"limit": 50.0, "names": [".*_FOOT"]},
     )
     front_hfe_position = ConstraintTerm(
-        func=constraints.joint_position,
+        func=constraints.joint_position_absolute_upper_bound,
         max_p=1.0,
         params={"limit": 1.3, "names": ["FL_HFE", "FR_HFE"]},
     )
@@ -374,7 +374,7 @@ class ConstraintsCfg:
 
     # Style constraints
     hip_position = ConstraintTerm(
-        func=constraints.joint_position_when_moving_forward,
+        func=constraints.relative_joint_position_upper_and_lower_bound_when_moving_forward,
         max_p=0.25,
         params={"limit": 0.2, "names": [".*_HAA"], "velocity_deadzone": 0.1},
     )

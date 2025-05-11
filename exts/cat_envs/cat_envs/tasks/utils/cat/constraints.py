@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 # IMPORTANT NOTE: This is an absolute upper bound on joint position, not relative to default position and no lower bound, because negative constraint violations are ignored / clipped to 0
-def joint_position(env: ManagerBasedRLEnv, limit: float, names: list[str], asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
+def joint_position_absolute_upper_bound(env: ManagerBasedRLEnv, limit: float, names: list[str], asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
     robot = env.scene[asset_cfg.name]
     pos0 = robot.data.root_pos_w[0]
     x, y, z = pos0[0].item(), pos0[1].item(), pos0[2].item()
@@ -30,7 +30,7 @@ def joint_position(env: ManagerBasedRLEnv, limit: float, names: list[str], asset
     return cstr
 
 # Joint position contraint relative to default position, use this in most cases.
-def joint_position_when_moving_forward(env: ManagerBasedRLEnv, limit: float, names: list[str], velocity_deadzone: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
+def relative_joint_position_upper_and_lower_bound_when_moving_forward(env: ManagerBasedRLEnv, limit: float, names: list[str], velocity_deadzone: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
     robot = env.scene[asset_cfg.name]
     data = env.scene[asset_cfg.name].data
     joint_ids, _ = robot.find_joints(names, preserve_order=True)

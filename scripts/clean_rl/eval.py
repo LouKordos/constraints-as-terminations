@@ -77,8 +77,8 @@ def load_constraint_limits(params_directory: str, joint_names: list[str]) -> dic
     constraints_cfg = config.get('constraints', config.get('scene', {}).get('constraints', {}))
 
     JOINT_FUNCS = {
-        'cat_envs.tasks.utils.cat.constraints:joint_position',
-        'cat_envs.tasks.utils.cat.constraints:joint_position_when_moving_forward'
+        "cat_envs.tasks.utils.cat.constraints:joint_position_absolute_upper_bound",
+        "cat_envs.tasks.utils.cat.constraints:relative_joint_position_upper_and_lower_bound_when_moving_forward"
     }
 
     for term_name, term_config in constraints_cfg.items():
