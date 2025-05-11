@@ -481,7 +481,7 @@ class ConstraintsCfg:
     front_hfe_position = ConstraintTerm(
         func=constraints.joint_position_absolute_upper_bound,
         max_p=1.0,
-        params={"limit": 1.5, "names": ["FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint"]},
+        params={"limit": 1, "names": ["FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint"]},
     )
     upsidedown = ConstraintTerm(
         func=constraints.upsidedown, max_p=1.0, params={"limit": 0.0}
