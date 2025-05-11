@@ -299,6 +299,7 @@ def main():
         env.unwrapped.scene.write_data_to_sim()
 
     joint_names = env.unwrapped.scene["robot"].data.joint_names
+    foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] if "go2" in args.tasks.lower() else ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
 
     # --- joint → leg-row + column index ---------------------------------
     # recognised prefixes for the four legs
@@ -315,9 +316,6 @@ def main():
         1: ("thigh","hfe"),      	# 1st column  = thigh/ HFE  (flex-ext)
         2: ("calf", "kfe"),      	# 2nd column  = calf / KFE  (knee flex-ext)
     }
-
-    foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] # Go2
-    # foot_links = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT'] # SOLO12
 
     def _column_from_name(jname: str) -> int | None:
         """
