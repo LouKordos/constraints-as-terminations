@@ -54,23 +54,56 @@ def get_latest_checkpoint(run_directory: str) -> str:
     latest = max(files, key=extract_index)
     return latest
 
-def load_constraint_limits(params_directory: str) -> dict:
+import os
+import re
+import yaml
+
+def load_constraint_limits(params_directory: str, joint_names: list[str]) -> dict:
+    """
+    Load all constraint limits from env.yaml.
+
+    - Scalar constraints (e.g. torque, velocity) stay as {constraint_name: limit}.
+    - Joint-position constraints are expanded into per-joint entries:
+        {joint_name: limit, …}
+    """
     yaml_file = os.path.join(params_directory, 'env.yaml')
-    # Read and clean YAML to remove Python-specific tags (tuples, slices, etc.)
-    with open(yaml_file, 'r') as f:
-        raw_text = f.read()
-    import re
-    # Remove all !!python tags that safe_load cannot parse
-    cleaned_text = re.sub('!!python\\S*', '', raw_text)
+    raw_text = open(yaml_file, 'r').read()
+
+    # Strip out any Python-specific tags (!!python/…)
+    cleaned_text = re.sub(r'!!python\S*', '', raw_text)
     config = yaml.safe_load(cleaned_text)
+
     limits = {}
-    # Try top-level constraints, fallback under scene
     constraints_cfg = config.get('constraints', config.get('scene', {}).get('constraints', {}))
+
+    JOINT_FUNCS = {
+        'cat_envs.tasks.utils.cat.constraints:joint_position',
+        'cat_envs.tasks.utils.cat.constraints:joint_position_when_moving_forward'
+    }
+
     for term_name, term_config in constraints_cfg.items():
-        if isinstance(term_config, dict):
-            params = term_config.get('params', {})
-            if isinstance(params, dict) and 'limit' in params:
-                limits[term_name] = params['limit']
+        if not isinstance(term_config, dict):
+            continue
+
+        func = term_config.get('func', '')
+        params = term_config.get('params', {})
+        if not isinstance(params, dict) or 'limit' not in params:
+            continue
+
+        limit = params['limit']
+        names = params.get('names', [])
+
+        # If this is one the joint position constraints, expand per name
+        if func in JOINT_FUNCS:
+            # treat each pattern in names[] as a regex and expand it
+            for pattern in names:
+                regex = re.compile(f"^{pattern}$")
+                for jn in joint_names:
+                    if regex.match(jn):
+                        limits[jn] = limit
+        else:
+            limits[term_name] = float(limit)
+
     return limits
 
 def create_height_map_animation(height_map_sequence: np.ndarray, foot_positions_sequence: np.ndarray, output_path: str, fps: int = 30, sensor=None):
@@ -201,8 +234,6 @@ def main():
               Keyword 'Play' not found in task name, are you sure you are using the correct task/environment?\n" \
               "-------------------------------------------------------------------\n\n")
 
-    constraint_limits = load_constraint_limits(os.path.join(args.run_dir, 'params'))
-
     if args.eval_checkpoint is None:
         checkpoint_path = get_latest_checkpoint(args.run_dir)
     else:
@@ -299,7 +330,8 @@ def main():
         env.unwrapped.scene.write_data_to_sim()
 
     joint_names = env.unwrapped.scene["robot"].data.joint_names
-    foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] if "go2" in args.tasks.lower() else ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
+    foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] if "go2" in args.task.lower() else ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
+    constraint_limits = load_constraint_limits(os.path.join(args.run_dir, 'params'), joint_names)
 
     # --- joint → leg-row + column index ---------------------------------
     # recognised prefixes for the four legs
@@ -677,8 +709,14 @@ def main():
                 raise ValueError("Could not determine joint row/col for plotting based on names")
             ax = axes[row, col]
             ax.plot(sim_times, data[:, j], linewidth=linewidth)
-            draw_limit(ax, metric_to_constraint_term_mapping[name])
+
+            if name == 'positions':
+                # use the joint’s own limit
+                draw_limit(ax, joint_names[j])
+            else:
+                draw_limit(ax, metric_to_constraint_term_mapping[name])
             draw_resets(ax)
+
             foot_idx = foot_from_joint[j]
             if foot_idx is not None: # shade when that foot is in contact
                 in_contact = contact_state_array[:, foot_idx].astype(bool)
@@ -701,7 +739,11 @@ def main():
         fig, ax = plt.subplots(figsize=(12, 6))
         for j in range(data.shape[1]):
             ax.plot(sim_times, data[:, j], label=joint_names[j], linewidth=linewidth, linestyle=get_leg_linestyle(joint_names[j]))
-        draw_limit(ax, metric_to_constraint_term_mapping[name])
+        if name == 'positions': # Handle each joint position limit separetely
+            for jn in joint_names:
+                draw_limit(ax, jn)
+        else:
+            draw_limit(ax, metric_to_constraint_term_mapping[name])
         draw_resets(ax)
         ax.set_xlabel('Time / s')
         ax.set_ylabel("Joint " + (name.replace('_', ' ')[:-1] if name != 'velocities' else 'velocity'))
