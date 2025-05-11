@@ -375,6 +375,8 @@ def reset_with_jitter(env, env_ids: torch.Tensor):
     # push new root poses into the sim
     robot.write_root_pose_to_sim(root_pose, env_ids=env_ids)
     env.scene["ray_caster"]._initialize_warp_meshes()
+    env.scene["ray_caster_height_constraints"]._initialize_warp_meshes()
+
 
 @configclass
 class EventCfg:
@@ -552,7 +554,8 @@ class TerminationsCfg:
 def terrain_levels_with_ray_caster_refresh(env, env_ids):
     levels = mdp.terrain_levels_vel(env, env_ids)
     env.scene["ray_caster"]._initialize_warp_meshes()
-
+    env.scene["ray_caster_height_constraints"]._initialize_warp_meshes()
+    
     return levels
 
 MAX_CURRICULUM_ITERATIONS = 1000
