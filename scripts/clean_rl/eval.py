@@ -58,53 +58,117 @@ import os
 import re
 import yaml
 
-def load_constraint_limits(params_directory: str, joint_names: list[str]) -> dict:
-    """
-    Load all constraint limits from env.yaml.
+import os
+import re
+import yaml
+from typing import Dict, Tuple, Optional, List
 
-    - Scalar constraints (e.g. torque, velocity) stay as {constraint_name: limit}.
-    - Joint-position constraints are expanded into per-joint entries:
-        {joint_name: limit, …}
+def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
+    """
+    Returns a dict mapping each constraint key (either a global term
+    like 'joint_torque' or an individual joint name) to a (lb, ub) tuple.
+    - joint_position    → (None, limit)
+    - joint_position_when_moving_forward → (default-limit, default+limit)
+    - foot_contact_force → (0, limit)
+    - everything else   → (-limit, +limit)
     """
     yaml_file = os.path.join(params_directory, 'env.yaml')
-    raw_text = open(yaml_file, 'r').read()
+    text = open(yaml_file).read()
+    # strip Python tags
+    text = re.sub(r'!!python\S*', '', text)
+    cfg = yaml.safe_load(text)
 
-    # Strip out any Python-specific tags (!!python/…)
-    cleaned_text = re.sub(r'!!python\S*', '', raw_text)
-    config = yaml.safe_load(cleaned_text)
+    # 1) gather all joint names
+    joint_names: List[str] = cfg['actions']['joint_pos']['joint_names']
 
-    limits = {}
-    constraints_cfg = config.get('constraints', config.get('scene', {}).get('constraints', {}))
+    # 2) build default_pos[joint_name] from the init_state patterns
+    default_pos: Dict[str, float] = {}
+    init_jpos = cfg['scene']['robot']['init_state']['joint_pos']
+    for pattern, default in init_jpos.items():
+        regex = re.compile(f"^{pattern}$")
+        for jn in joint_names:
+            if regex.match(jn):
+                default_pos[jn] = float(default)
 
-    JOINT_FUNCS = {
-        "cat_envs.tasks.utils.cat.constraints:joint_position_absolute_upper_bound",
-        "cat_envs.tasks.utils.cat.constraints:relative_joint_position_upper_and_lower_bound_when_moving_forward"
-    }
+    # 3) walk through constraints
+    raw_constraints = cfg.get('constraints', {})
+    bounds: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
 
-    for term_name, term_config in constraints_cfg.items():
-        if not isinstance(term_config, dict):
+    for term, term_cfg in raw_constraints.items():
+        if not isinstance(term_cfg, dict):
+            continue
+        func = term_cfg.get('func', '')
+        params = term_cfg.get('params', {})
+        if 'limit' not in params:
             continue
 
-        func = term_config.get('func', '')
-        params = term_config.get('params', {})
-        if not isinstance(params, dict) or 'limit' not in params:
-            continue
+        limit = float(params['limit'])
+        # patterns that name joints in this constraint
+        patterns = params.get('names', [])
 
-        limit = params['limit']
-        names = params.get('names', [])
-
-        # If this is one the joint position constraints, expand per name
-        if func in JOINT_FUNCS:
-            # treat each pattern in names[] as a regex and expand it
-            for pattern in names:
-                regex = re.compile(f"^{pattern}$")
+        # helper: expand any list of patterns into the actual joint names
+        def expand_patterns(pats):
+            out = set()
+            for pat in pats:
+                rx = re.compile(f"^{pat}$")
                 for jn in joint_names:
-                    if regex.match(jn):
-                        limits[jn] = limit
-        else:
-            limits[term_name] = float(limit)
+                    if rx.match(jn):
+                        out.add(jn)
+            return sorted(out)
 
-    return limits
+        # 3a) joint_position → only upper bound
+        if func.endswith('joint_position_absolute_upper_bound'):
+            joints = expand_patterns(patterns)
+            for jn in joints:
+                bounds[jn] = (None, limit)
+
+        # 3b) joint_position_when_moving_forward → relative bound about default
+        elif func.endswith('relative_joint_position_upper_and_lower_bound_when_moving_forward'):
+            joints = expand_patterns(patterns)
+            for jn in joints:
+                base = default_pos.get(jn, 0.0)
+                bounds[jn] = (base - limit, base + limit)
+
+        # 3c) foot_contact_force → only positive
+        elif term == 'foot_contact_force':
+            bounds[term] = (0.0, limit)
+
+        # 3d) everything else → symmetric ±limit
+        else:
+            bounds[term] = (-limit, limit)
+
+    return bounds
+
+def draw_limits(ax, term, bounds):
+    """
+    ax     : matplotlib Axes
+    term   : either a joint name or a global constraint key
+    bounds : the dict returned by load_constraint_bounds()
+    """
+    lb, ub = bounds.get(term, (None, None))
+
+    if lb is None and ub is None:
+        print(f"[warn] no bounds for {term}, skipping.")
+        return
+
+    handles, labels = ax.get_legend_handles_labels()
+
+    # helper to draw one line if that bound exists
+    def _draw(val: float, suffix: str):
+        lbl = f"{term}_{suffix}={val:.3f}"
+        if lbl not in labels:
+            ax.axhline(val, linestyle='--', linewidth=1, color='red', label=lbl)
+            labels.append(lbl)  # so we don’t dup next time
+        else:
+            ax.axhline(val, linestyle='--', linewidth=1, color='red')
+
+    # upper bound
+    if ub is not None:
+        _draw(ub, 'ub')
+
+    # lower bound
+    if lb is not None:
+        _draw(lb, 'lb')
 
 def create_height_map_animation(height_map_sequence: np.ndarray, foot_positions_sequence: np.ndarray, output_path: str, fps: int = 30, sensor=None):
     """
@@ -331,7 +395,7 @@ def main():
 
     joint_names = env.unwrapped.scene["robot"].data.joint_names
     foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] if "go2" in args.task.lower() else ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
-    constraint_limits = load_constraint_limits(os.path.join(args.run_dir, 'params'), joint_names)
+    constraint_bounds = load_constraint_bounds(os.path.join(args.run_dir, 'params'))
 
     # --- joint → leg-row + column index ---------------------------------
     # recognised prefixes for the four legs
@@ -530,28 +594,42 @@ def main():
     ang_vel_z_rms = np.sqrt(np.mean(yaw_rate_error**2))
 
     # Compute constraint violations
-    print("Constraint limits:", constraint_limits)
+    print("Constraint limits:", constraint_bounds)
     violations_percent = {}
-    for term, limit in constraint_limits.items():
-        data_map = {
-            'joint_velocity': 	joint_velocities_array,
-            'joint_torque':   	joint_torques_array,
-            'joint_acceleration': joint_accelerations_array,
-            'action_rate':    	action_rate_array,
-            'foot_contact_force': contact_forces_array.reshape(total_sim_steps, -1).mean(axis=1),
-        }
+    data_map = {
+        'joint_velocity': 	joint_velocities_array,
+        'joint_torque':   	joint_torques_array,
+        'joint_acceleration': joint_accelerations_array,
+        'action_rate':    	action_rate_array,
+        'foot_contact_force': contact_forces_array.reshape(total_sim_steps, -1).mean(axis=1),
+    }
 
-        for term, limit in constraint_limits.items():
-            metric = data_map.get(term)
-            if metric is None:
-                continue
+    for term, (lb, ub) in constraint_bounds.items():
+        metric = data_map.get(term)
+        if metric is None:
+            # skip globals not in map
+            print(f"Skipping metric for term={term}")
+            continue
 
-            # vector metrics → percent per joint
-            if metric.ndim == 2:
-                percent_per_joint = (metric > limit).mean(axis=0) * 100
-                violations_percent[term] = dict(zip(joint_names, percent_per_joint.tolist()))
-            else:
-                violations_percent[term] = float((metric > limit).mean() * 100)
+        # build a violation mask: same shape as metric
+        #  - True wherever metric > ub
+        #  - True wherever metric < lb (only if lb is not None)
+        if metric.ndim == 2:
+            # per‐joint: shape (T, J)
+            above_ub = (ub is not None) * (metric > ub)
+            below_lb = (lb is not None) * (metric < lb)
+            violation_mask = above_ub | below_lb
+
+            # percent over time for each joint
+            violation_percentage = violation_mask.mean(axis=0) * 100
+            violations_percent[term] = dict(zip(joint_names, violation_percentage.tolist()))
+
+        else:
+            # 1D time-series
+            above_ub = (ub is not None) and (metric > ub)
+            below_lb = (lb is not None) and (metric < lb)
+            violation_mask = above_ub | below_lb
+            violations_percent[term] = float(violation_mask.mean() * 100)
 
     # Save summary metrics
     summary_metrics = {
@@ -599,24 +677,6 @@ def main():
 
     print("Data saved, starting plot generation...")
 
-    def draw_limit(ax, term):
-        limit = constraint_limits.get(term)
-
-        if limit is None:
-            print(f"Constraint limit for {term} is None, cannot plot the limit.")
-            return
-
-        label_str = f"{term}_limit={limit}"
-        existing_labels = ax.get_legend_handles_labels()[1]
-
-        if label_str not in existing_labels:
-            ax.axhline(limit, linestyle='--', linewidth=1, color='red', label=label_str)
-            if term != "foot_contact_force": # Those are only positive
-                ax.axhline(-limit, linestyle='--', linewidth=1, color='red')
-        else:
-            ax.axhline(limit, linestyle='--', linewidth=1, color='red')
-            ax.axhline(-limit, linestyle='--', linewidth=1, color='red')
-
     def draw_resets(ax):
         for reset_time in reset_times:
             ax.axvline(x=reset_time, linestyle=":", linewidth=1, color="orange", label='reset' if reset_time == reset_times[0] else None)
@@ -629,7 +689,7 @@ def main():
 
     for i, ax in enumerate(axes.flat):
         ax.plot(sim_times, contact_forces_array[:, i], label='force', linewidth=linewidth)
-        draw_limit(ax, "foot_contact_force")
+        draw_limits(ax, "foot_contact_force", constraint_bounds)
         draw_resets(ax)
         # identify contiguous contact intervals
         in_contact = contact_state_array[:, i].astype(bool)
@@ -712,9 +772,9 @@ def main():
 
             if name == 'positions':
                 # use the joint’s own limit
-                draw_limit(ax, joint_names[j])
+                draw_limits(ax, joint_names[j], constraint_bounds)
             else:
-                draw_limit(ax, metric_to_constraint_term_mapping[name])
+                draw_limits(ax, metric_to_constraint_term_mapping[name], constraint_bounds)
             draw_resets(ax)
 
             foot_idx = foot_from_joint[j]
@@ -741,9 +801,9 @@ def main():
             ax.plot(sim_times, data[:, j], label=joint_names[j], linewidth=linewidth, linestyle=get_leg_linestyle(joint_names[j]))
         if name == 'positions': # Handle each joint position limit separetely
             for jn in joint_names:
-                draw_limit(ax, jn)
+                draw_limits(ax, jn, constraint_bounds)
         else:
-            draw_limit(ax, metric_to_constraint_term_mapping[name])
+            draw_limits(ax, metric_to_constraint_term_mapping[name], constraint_bounds)
         draw_resets(ax)
         ax.set_xlabel('Time / s')
         ax.set_ylabel("Joint " + (name.replace('_', ' ')[:-1] if name != 'velocities' else 'velocity'))
