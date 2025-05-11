@@ -491,10 +491,10 @@ def main():
         if env.unwrapped.episode_length_buf[0].item() == 0 and t > 0:
             reset_steps.append(t)
 
-        scene_data = env.unwrapped.scene['robot'].data
+        scene_robot_data = env.unwrapped.scene['robot'].data
 
-        joint_positions = scene_data.joint_pos[0].cpu().numpy()
-        joint_velocities = scene_data.joint_vel[0].cpu().numpy()
+        joint_positions = scene_robot_data.joint_pos[0].cpu().numpy()
+        joint_velocities = scene_robot_data.joint_vel[0].cpu().numpy()
         joint_positions_buffer.append(joint_positions)
         joint_velocities_buffer.append(joint_velocities)
 
@@ -506,10 +506,10 @@ def main():
         max_per_foot = force_magnitudes.max(dim=0)[0].numpy()
         contact_forces_buffer.append(max_per_foot)
 
-        torques = scene_data.applied_torque[0].cpu().numpy()
+        torques = scene_robot_data.applied_torque[0].cpu().numpy()
         joint_torques_buffer.append(torques)
 
-        accelerations = scene_data.joint_acc[0].cpu().numpy()
+        accelerations = scene_robot_data.joint_acc[0].cpu().numpy()
         joint_accelerations_buffer.append(accelerations)
 
         action_np = action.cpu().numpy()
@@ -520,9 +520,9 @@ def main():
         action_rate_buffer.append(action_rate)
         previous_action = action_np
 
-        world_position = scene_data.root_pos_w[0].cpu().numpy() # world-frame for env 0
-        origin = env.unwrapped.scene.terrain.env_origins[0].cpu().numpy() # terrain origin for env 0
-        relative_position = world_position + origin # position relative to terrain
+        world_position = scene_robot_data.root_link_pos_w[0].cpu().numpy() # world-frame for env 0
+        # origin = env.unwrapped.scene.terrain.env_origins[0].cpu().numpy() # terrain origin for env 0
+        # relative_position = world_position + origin # position relative to terrain
         # quat_xyzw = scene_data.root_quat_w[0]
         # quat_wxyz = torch.cat([quat_xyzw[3:], quat_xyzw[:3]]) # reorder to (w,x,y,z)
         quat_wxyz = root_quat_w(env.unwrapped, make_quat_unique=True, asset_cfg=SceneEntityCfg("robot"))
@@ -533,11 +533,11 @@ def main():
         # roll = np.unwrap(roll_t.cpu().numpy(), axis=0).item()
         # pitch = np.unwrap(pitch_t.cpu().numpy(), axis=0).item()
         # yaw = np.unwrap(yaw_t.cpu().numpy(), axis=0).item()
-        base_position_buffer.append(relative_position)
+        base_position_buffer.append(world_position)
         base_orientation_buffer.append([yaw, pitch, roll])
 
-        linear_velocity = scene_data.root_lin_vel_w[0].cpu().numpy()
-        angular_velocity = scene_data.root_ang_vel_w[0].cpu().numpy()
+        linear_velocity = scene_robot_data.root_lin_vel_w[0].cpu().numpy()
+        angular_velocity = scene_robot_data.root_ang_vel_w[0].cpu().numpy()
         base_linear_velocity_buffer.append(linear_velocity)
         base_angular_velocity_buffer.append(angular_velocity)
 
@@ -549,7 +549,7 @@ def main():
         height_map_buffer.append(height_map_sequence[0])
         
         foot_positions = np.stack([
-            scene_data.body_link_pos_w[0, scene_data.body_names.index(link)].cpu().numpy()
+            scene_robot_data.body_link_pos_w[0, scene_robot_data.body_names.index(link)].cpu().numpy()
             for link in foot_links
         ])
         # Important: This does not account for body rotation, use a rotation/transformation matrix for proper body frame transformation
@@ -817,13 +817,13 @@ def main():
     for i, axis_label in enumerate(['X', 'Y', 'Z']):
         axes_bp[i].plot(sim_times, base_position_array[:, i], label=f'position_{axis_label}', linewidth=linewidth)
         draw_resets(axes_bp[i])
-        axes_bp[i].set_ylabel(f'Position {axis_label}')
+        axes_bp[i].set_ylabel(f'World Position {axis_label}')
         axes_bp[i].legend()
         axes_bp[i].grid(True)
-    axes_bp[0].set_title('Base Position Subplots')
+    axes_bp[0].set_title('World Base Position Subplots')
     axes_bp[-1].set_xlabel('Time / s')
     fig_bp.tight_layout()
-    fig_bp.savefig(os.path.join(plots_directory, 'base_position_subplots.pdf'), dpi=600)
+    fig_bp.savefig(os.path.join(plots_directory, 'base_position_subplots_world.pdf'), dpi=600)
     figs.append(fig_bp)
 
     fig_bo, axes_bo = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
@@ -872,7 +872,7 @@ def main():
     fig_overview, overview_axes = plt.subplots(2, 2, figsize=(20, 16))
     cats = [base_position_array, base_orientation_array,
             base_linear_velocity_array, base_angular_velocity_array]
-    titles = ['Base Position', 'Base Orientation', 'Base Linear Velocity', 'Base Angular Velocity']
+    titles = ['Base World Position', 'Base Orientation', 'Base Linear Velocity', 'Base Angular Velocity']
     labels = [['X', 'Y', 'Z'], ['Yaw', 'Pitch', 'Roll'], ['VX', 'VY', 'VZ'], ['WX', 'WY', 'WZ']]
     for ax, data_array, title, axis_labels in zip(overview_axes.flatten(), cats, titles, labels):
         for i, lbl in enumerate(axis_labels):
@@ -889,7 +889,7 @@ def main():
         ax.legend()
         ax.grid(True)
     fig_overview.tight_layout()
-    fig_overview.savefig(os.path.join(plots_directory, 'base_overview.pdf'), dpi=600)
+    fig_overview.savefig(os.path.join(plots_directory, 'base_overview_world.pdf'), dpi=600)
     figs.append(fig_overview)
 
     # Height map animation and gait diagram
