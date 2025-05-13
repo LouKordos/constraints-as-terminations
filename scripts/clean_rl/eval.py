@@ -361,6 +361,14 @@ def main():
         ("fast_walk_y_uneven_terrain", torch.tensor([0.0, 0.5, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
     ]
 
+    # See main training loop for detailed explanation, but in summary, hard constraints terminate the environment or at least return terminated = 1
+    # which results in zero reward and can't be recovered by rescaling. Thus, we update the constraint limits based on the loaded values from
+    # the training environment. Only contact force and thigh position limit are updated because other values are handled more robustly by the rescaling in the loop.
+    # This allows more constraints to be added or removed without leading to issues in this eval script.
+    constraint_bounds = load_constraint_bounds(os.path.join(args.run_dir, 'params'))
+    env_cfg.constraints.foot_contact_force.params["limit"] = constraint_bounds["foot_contact_force"][1]
+    env_cfg.constraints.front_hfe_position.params["limit"] = constraint_bounds["RL_thigh_joint"][1]
+
     total_sim_steps = args.random_sim_step_length + len(fixed_command_scenarios) * fixed_command_sim_steps
     env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array" if args.video else None)
     if args.video:
@@ -395,7 +403,6 @@ def main():
     joint_names = env.unwrapped.scene["robot"].data.joint_names
     foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] if "go2" in args.task.lower() else ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
     foot_labels = ['front left','front right','rear left','rear right']
-    constraint_bounds = load_constraint_bounds(os.path.join(args.run_dir, 'params'))
 
     # --- joint → leg-row + column index ---------------------------------
     # recognised prefixes for the four legs
@@ -459,7 +466,7 @@ def main():
     height_map_buffer = []
     foot_positions_buffer = []
 
-    cumulative_reward = 0.0
+    cumulative_unscaled_raw_reward = 0.0
     reset_steps = []
 
     observations, info = env.reset()
@@ -486,6 +493,19 @@ def main():
         step_tuple = env.step(action)
         # print(step_tuple)
         next_observation, reward, terminated, truncated, info = step_tuple
+        # Idea of constraints as terminations is to scale reward by max constraint violation, but since policies
+        # being tested here might differ in the constraints they were trained with, it makes sense to remove this scaling
+        # while evaluating a policy. This division just reverts the scaling done in cat_env.py and thus should yield the
+        # "raw" rewards collected in the environment.
+        # If this were omitted, a policy trained with e.g. higher joint position constraint limits would result in very low
+        # rewards in this eval environment as it always calculates based on the limits specified in the local code, not what
+        # the policy was trained with. Additionally, any hard constraints (max_p=1.0) need to be manually increased earlier
+        # in the setup because those terminate the environment and thus break the reproducibility and the if check below.
+        if terminated != 1.0:
+            # print(f"reward_before_scaling={reward}")
+            reward /= (1.0 - terminated)
+            # print(f"reward_after_scaling={reward}\tterminated={terminated}")
+        
         # print(f"terminated={terminated}, truncated={truncated}")
         # Because of CaT, terminated is actually a nonzero probability instead of a boolean, always remember this
         if env.unwrapped.episode_length_buf[0].item() == 0 and t > 0:
@@ -562,7 +582,7 @@ def main():
         # Important: This does not account for body rotation, use a rotation/transformation matrix for proper body frame transformation
         foot_positions_buffer.append(foot_positions - world_position)
 
-        cumulative_reward += reward.mean().item()
+        cumulative_unscaled_raw_reward += reward.mean().item()
         policy_observation = next_observation['policy']
 
     print("Converting and saving recorded sim data...")
@@ -786,7 +806,7 @@ def main():
 
     # Save summary metrics
     summary_metrics = {
-        'cumulative_reward': cumulative_reward,
+        'cumulative_unscaled_raw_reward': cumulative_unscaled_raw_reward,
         'base_linear_velocity_x_rms_error': float(lin_vel_x_rms),
         'base_linear_velocity_y_rms_error': float(lin_vel_y_rms),
         'base_angular_velocity_z_rms_error': float(ang_vel_z_rms),
