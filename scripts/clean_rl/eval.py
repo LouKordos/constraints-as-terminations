@@ -315,7 +315,6 @@ def main():
     os.makedirs(trajectories_directory, exist_ok=True)
 
     print(f"[INFO] Loading model from: {checkpoint_path}")
-    log_parent = os.path.dirname(checkpoint_path)
     model_state = torch.load(checkpoint_path, weights_only=True)
 
     # Launch Isaac Lab environment
@@ -649,8 +648,8 @@ def main():
     ang_vel_z_rms = np.sqrt(np.mean(yaw_rate_error**2))
 
     # Compute constraint violations
-    print("Constraint limits:", constraint_bounds)
-    violations_percent = {}
+    print("Constraint bounds:", constraint_bounds)
+    constraint_violations_percent = {}
     constraint_violation_data_map = {
         'joint_velocity': 	joint_velocities_array,
         'joint_torque':   	joint_torques_array,
@@ -669,6 +668,7 @@ def main():
         'power': power_array,
     }
 
+    # TODO: Move this into draw_limits and just pass the name to it, so that None check can output which name returned None
     metric_to_constraint_term_mapping = {
         'position': None,
         'velocity':	'joint_velocity',
@@ -709,14 +709,14 @@ def main():
 
             # percent over time for each joint
             violation_percentage = violation_mask.mean(axis=0) * 100
-            violations_percent[term] = dict(zip(joint_names, violation_percentage.tolist()))
+            constraint_violations_percent[term] = dict(zip(joint_names, violation_percentage.tolist()))
 
         else:
             # 1D time-series
             above_ub = (ub is not None) and (metric > ub)
             below_lb = (lb is not None) and (metric < lb)
             violation_mask = above_ub | below_lb
-            violations_percent[term] = float(violation_mask.mean() * 100)
+            constraint_violations_percent[term] = float(violation_mask.mean() * 100)
 
     per_joint_summary: Dict[str, Dict[str, Dict[str, float]]] = {}
     for j, jn in enumerate(joint_names):
@@ -799,8 +799,8 @@ def main():
         },
         'total_energy_consumption': float(combined_energy[-1]),
         'mean_cost_of_transport': mean_cost_of_transport,
-        'cost_of_transport_time_series': cost_of_transport_time_series.tolist(),
-        'violations_percent': violations_percent,
+        # 'cost_of_transport_time_series': cost_of_transport_time_series.tolist(),
+        'constraint_violations_percent': constraint_violations_percent,
         'fixed_command_scenarios': fixed_command_scenarios,
         'random_sim_steps': args.random_sim_step_length,
         'total_sim_steps': total_sim_steps,
@@ -1068,7 +1068,7 @@ def main():
         ax.set_ylabel("Frequency")
         fig.tight_layout()
         safe_label = label.replace(' ', '_')
-        fig.savefig(os.path.join(plots_directory, f"hist_air_time_{safe_label}_overview.pdf"), dpi=600)
+        fig.savefig(os.path.join(plots_directory, f"hist_air_time_{safe_label}.pdf"), dpi=600)
 
     # Combined subplots for base position, orientation, linear and angular velocity
     fig_bp, axes_bp = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
