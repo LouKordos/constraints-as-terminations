@@ -230,9 +230,9 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
     T, F = contact_states.shape
     assert sim_times.shape[0] == T, "sim_times length must match contact_states"
 
-    fig, ax = plt.subplots(figsize=(12, F * 1.2))
+    fig, ax = plt.subplots(figsize=(180, F * 1.2))
     ax.set_xlabel('Time / s')
-    ax.set_title('Gait Diagram with Air Times', fontsize=16)
+    ax.set_title('Gait Diagram with Air and Contact Times (white text = contact/stance phase, black text = air/swing phase)', fontsize=14)
 
     for reset_time in reset_times:
             ax.axvline(x=reset_time, linestyle=":", linewidth=1, color="orange", label='reset' if reset_time == reset_times[0] else None)
@@ -255,13 +255,13 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
 
         # Plot contact
         for s, e in contact_segs:
-            ax.fill_between(sim_times[s:e], y0, y0 + spacing * 0.8, step='post', alpha=0.8, label=label if s == contact_segs[0][0] else None)
+            ax.fill_between(sim_times[s:e], y0, y0 + spacing * 0.8, step='post', alpha=0.8, label=label + " contact phase" if s == contact_segs[0][0] else None)
             t_start = sim_times[s]
             t_end   = sim_times[e - 1]
             duration = t_end - t_start
             t_mid = 0.5 * (t_start + t_end)
-            y_text = y0 + spacing * 0.4
-            ax.text(t_mid, y_text, f"{duration:.3f}s", ha='center', va='center', color='white', fontsize=12)
+            y_text = y0 + spacing * 0.3
+            ax.text(t_mid, y_text, f"{duration:.3f}s", ha='center', va='center', color='white', fontsize=6, rotation=90)
 
         # Air segments
         air_segs = []
@@ -278,10 +278,11 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
             t_end   = sim_times[b - 1]
             duration = t_end - t_start
             t_mid = 0.5 * (t_start + t_end)
-            ax.text(t_mid, y0 + spacing * 0.4, f"{duration:.3f}s", ha='center', va='center', fontsize=12)
+            ax.text(t_mid, y0 + spacing * 0.5, f"{duration:.3f}s", ha='center', va='center', fontsize=6)
 
     ax.set_yticks([i * spacing for i in range(F)])
     ax.set_yticklabels(foot_labels)
+    ax.margins(x=0.005)
     ax.set_ylim(-spacing * 0.5, (F - 1) * spacing + spacing)
     ax.grid(axis='x', linestyle=':')
     ax.legend(loc='upper right', ncol=1)
