@@ -744,13 +744,14 @@ def main():
         per_joint_summary[jn] = {}
         for metric_name, data in metrics.items():
             # data is shape (T, J); select column j → shape (T,)
-            col = data[:, j]
+            joint_column = data[:, j]
             per_joint_summary[jn][metric_name] = {
-                'mean': float(col.mean()),
-                'min': float(col.min()),
-                'max': float(col.max()),
-                'median': float(np.median(col)),
-                '90th_percentile': float(np.percentile(col, 90)),
+                'mean': float(joint_column.mean()),
+                'min': float(joint_column.min()),
+                'max': float(joint_column.max()),
+                'median': float(np.median(joint_column)),
+                '90th_percentile': float(np.percentile(joint_column, 90)),
+                '99th_percentile': float(np.percentile(joint_column, 99))
             }
 
     # --- build per‐foot air‐time summaries ----------------------------------
@@ -796,13 +797,13 @@ def main():
     # contact_forces_array is shape (T, F)
     contact_force_summary: Dict[str, Dict[str, float]] = {}
     for i, label in enumerate(foot_labels):
-        col = contact_forces_array[:, i]
+        joint_column = contact_forces_array[:, i]
         contact_force_summary[label] = {
-            'mean':             float(col.mean()),
-            'min':              float(col.min()),
-            'max':              float(col.max()),
-            'median':           float(np.median(col)),
-            '90th_percentile':  float(np.percentile(col, 90)),
+            'mean':             float(joint_column.mean()),
+            'min':              float(joint_column.min()),
+            'max':              float(joint_column.max()),
+            'median':           float(np.median(joint_column)),
+            '90th_percentile':  float(np.percentile(joint_column, 90)),
         }
 
     # Save summary metrics
@@ -933,10 +934,10 @@ def main():
         # 4×3 grid of separate joint plots
         fig, axes = plt.subplots(4, 3, sharex=True, figsize=(18, 12))
         for j in range(len(joint_names)):
-            row, col = leg_row[j], leg_col[j]
-            if row is None or col is None:
+            row, joint_column = leg_row[j], leg_col[j]
+            if row is None or joint_column is None:
                 raise ValueError("Could not determine joint row/col for plotting based on names")
-            ax = axes[row, col]
+            ax = axes[row, joint_column]
             ax.plot(sim_times, data[:, j], linewidth=linewidth)
 
             if name == 'position':
@@ -987,8 +988,8 @@ def main():
         fig.suptitle(f"Histogram of Joint {mname.replace('_', ' ').title()}", fontsize=18)
         for j, jn in enumerate(joint_names):
             row = leg_row[j]
-            col = leg_col[j]
-            ax = axes[row, col]
+            joint_column = leg_col[j]
+            ax = axes[row, joint_column]
             ax.hist(data[:, j], bins='auto', alpha=0.7)
             ax.set_title(jn, fontsize=12)
             ax.set_xlabel(f"{mname.capitalize()} / {metric_to_unit_mapping[mname]}")
