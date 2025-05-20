@@ -45,9 +45,6 @@ import cat_envs.tasks.utils.mdp.events as events
 import cat_envs.tasks.utils.mdp.commands as commands
 import numpy as np
 
-##
-# Pre-defined configs
-##
 from cat_envs.assets.odri import SOLO12_MINIMAL_CFG
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 from cat_envs.assets.go2_config import UNITREE_GO2_CFG  # isort: skip
@@ -65,10 +62,6 @@ torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.benchmark = False
 torch.manual_seed(HARDCODED_SEED)
 torch.cuda.manual_seed_all(HARDCODED_SEED)
-
-##
-# Scene definition
-##
 
 def height_map_grid(env, asset_cfg: SceneEntityCfg):
     ray_hit_positions_world_frame = env.scene[asset_cfg.name].data.ray_hits_w # [E, R, 3]
