@@ -11,7 +11,7 @@ from isaaclab.utils import configclass
 
 @configclass
 class CleanRlPpoActorCriticCfg:
-    seed: int = 42
+    seed: int = MISSING # WILL BE OVERWRITTEN IN train.py
 
     save_interval: int = MISSING
 

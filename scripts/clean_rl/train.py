@@ -1,5 +1,7 @@
 import argparse
 import sys
+import os
+from datetime import datetime
 from isaaclab.app import AppLauncher
 import cli_args  # isort: skip
 
@@ -36,16 +38,12 @@ args_cli, hydra_args = parser.parse_known_args()
 if args_cli.video:
     args_cli.enable_cameras = True
 
-# clear out sys.argv for Hydra
 sys.argv = [sys.argv[0]] + hydra_args
 
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import gymnasium as gym
-import os
-import torch
-from datetime import datetime
 
 from isaaclab.envs import (DirectMARLEnvCfg, DirectRLEnvCfg, ManagerBasedRLEnvCfg)
 from isaaclab.utils.dict import print_dict
@@ -53,12 +51,55 @@ from isaaclab.utils.io import dump_pickle, dump_yaml
 from isaaclab_tasks.utils.hydra import hydra_task_config
 from cat_envs.tasks.utils.cleanrl.ppo import PPO
 import cat_envs.tasks  # noqa: F401
-from os import environ
 
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
+from os import environ
+import random
+import numpy as np
+import torch
+
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8" # Determinism
+
+from pxr import Usd, UsdGeom, Tf
+import hashlib
+def _first_mesh_with_indices(prim):
+    """DFS until we find a UsdGeom.Mesh that actually has indices."""
+    if prim.IsA(UsdGeom.Mesh):
+        m = UsdGeom.Mesh(prim)
+        if m.GetFaceVertexIndicesAttr().HasAuthoredValueOpinion():
+            return m
+    for child in prim.GetChildren():
+        hit = _first_mesh_with_indices(child)
+        if hit:
+            return hit
+    return None
+
+def _hash_mesh(mesh: UsdGeom.Mesh):
+    pts  = np.asarray(mesh.GetPointsAttr().Get(), dtype=np.float32)
+    idx  = np.asarray(mesh.GetFaceVertexIndicesAttr().Get(
+                       Usd.TimeCode.Default()), dtype=np.int32)
+    return hashlib.sha1(pts.tobytes() + idx.tobytes()).hexdigest()
+
+def _hash_heightfield(prim):
+    # PhysX height-field data live on a custom attribute:
+    data_attr = prim.GetAttribute("physxHeightField:data")
+    if not data_attr or not data_attr.HasAuthoredValueOpinion():
+        raise RuntimeError("Height-field has no data attribute")
+    hf = np.asarray(data_attr.Get(), dtype=np.int16)
+    return hashlib.sha1(hf.tobytes()).hexdigest()
+
+def get_ground_hash(env):
+    stage  = env.unwrapped.scene.stage
+    root   = stage.GetPrimAtPath("/World/ground")
+    
+    mesh = _first_mesh_with_indices(root)
+    if mesh:
+        return _hash_mesh(mesh)
+    
+    # fall-back: maybe this is a PhysX height-field
+    if root.HasAPI(Tf.Type.FindByName("PhysxHeightField")):
+        return _hash_heightfield(root)
+    
+    raise ValueError(f"No usable mesh or height-field found under {root.GetPath()}")
 
 @hydra_task_config(args_cli.task, "clean_rl_cfg_entry_point")
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg,):
@@ -78,11 +119,18 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         else agent_cfg.num_iterations
     )
 
-    env_cfg.seed = agent_cfg.seed
+    # Horrible practice to hard-code this in the env but I spent a week on trying to pass the values via hydra config or changing via train.py but it never worked.
+    # Right now the seed is configured here and then passed to train.py to set all the libraries
+    agent_cfg.seed = env_cfg.seed
     print(f"agent_cfg and env_cfg seed={agent_cfg.seed}")
-    if hasattr(env_cfg.scene.terrain, "terrain_generator"):
-        env_cfg.scene.terrain.terrain_generator.seed = env_cfg.seed
-        env_cfg.scene.terrain.seed = env_cfg.seed
+    random.seed(agent_cfg.seed)
+    np.random.seed(agent_cfg.seed)
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.benchmark = False
+    torch.manual_seed(agent_cfg.seed)
 
     env_cfg.sim.device = (args_cli.device if args_cli.device is not None else env_cfg.sim.device)
 
@@ -106,6 +154,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     dump_pickle(os.path.join(log_root_path, log_dir, "params", "agent.pkl"), agent_cfg)
 
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+
+    print("Terrain hash:", get_ground_hash(env))
+
     if args_cli.video:
         video_kwargs = {
             "video_folder": os.path.join(log_dir, "videos_train"),

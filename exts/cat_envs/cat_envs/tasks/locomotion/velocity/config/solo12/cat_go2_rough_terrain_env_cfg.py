@@ -52,7 +52,18 @@ from cat_envs.assets.odri import SOLO12_MINIMAL_CFG
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 from cat_envs.assets.go2_config import UNITREE_GO2_CFG  # isort: skip
 import torch
-
+# Horrible practice to hard-code this in the env but I spent a week on trying to pass the values via hydra config or changing via train.py but it never worked.
+# Right now the seed is configured here and then passed to train.py to set all the libraries
+HARDCODED_SEED = 42
+import random
+random.seed(HARDCODED_SEED)
+np.random.seed(HARDCODED_SEED)
+torch.backends.cuda.matmul.allow_tf32 = False
+torch.backends.cudnn.allow_tf32 = False
+torch.backends.cudnn.deterministic = True
+torch.use_deterministic_algorithms(True)
+torch.backends.cudnn.benchmark = False
+torch.manual_seed(HARDCODED_SEED)
 
 ##
 # Scene definition
@@ -84,29 +95,29 @@ def height_map_grid(env, asset_cfg: SceneEntityCfg):
 
     return height
 
-original_rough_terrain = ROUGH_TERRAINS_CFG
+from copy import deepcopy
+seeded_rough_cfg = deepcopy(ROUGH_TERRAINS_CFG)
+seeded_rough_cfg.seed = HARDCODED_SEED
+seeded_rough_cfg.use_cache = True
 patched_sub_terrains = {
     name: sub_cfg.replace(
         flat_patch_sampling={
             "init_pos": FlatPatchSamplingCfg(
                 num_patches=4000,
-                patch_radius=0.8, # This will be updated in __post_init__
+                patch_radius=0.6,
                 max_height_diff=0.15,
             )
         }
     )
-    for name, sub_cfg in original_rough_terrain.sub_terrains.items()
+    for name, sub_cfg in seeded_rough_cfg.sub_terrains.items()
 }
-patched_generator = original_rough_terrain.replace(
-    sub_terrains=patched_sub_terrains,
-    use_cache=True,
-)
+seeded_rough_cfg.sub_terrains = patched_sub_terrains
 
 @configclass
 class MySceneCfg(InteractiveSceneCfg):
     """Configuration for the terrain scene with a legged robot."""
 
-    # # ground terrain
+    # ground terrain
     # terrain = TerrainImporterCfg(
     #     prim_path="/World/ground",
     #     terrain_type="plane",
@@ -128,7 +139,7 @@ class MySceneCfg(InteractiveSceneCfg):
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",
-        terrain_generator=patched_generator,
+        terrain_generator=seeded_rough_cfg,
         max_init_terrain_level=5,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -682,7 +693,10 @@ class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.max_velocity_iteration_count = 1
         self.sim.bounce_threshold_velocity = 0.2
         self.sim.gpu_max_rigid_contact_count = 33554432
-        self.sim.disable_contact_processing = True
+        self.sim.device = "cpu"
+        self.sim.physx.use_gpu = False
+        self.sim.num_threads = 1
+        self.sim.physx.enable_enhanced_determinism = True
         self.sim.physics_material = self.scene.terrain.physics_material
 
         # update sensor update periods
@@ -695,23 +709,19 @@ class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
         # check if terrain levels curriculum is enabled - if so, enable curriculum for terrain generator
         # this generates terrains with increasing difficulty and is useful for training
         if getattr(self.curriculum, "terrain_levels", None) is not None:
+            mdp.terrain_levels_vel.seed = HARDCODED_SEED
             if self.scene.terrain.terrain_generator is not None:
                 self.scene.terrain.terrain_generator.curriculum = True
         else:
             if self.scene.terrain.terrain_generator is not None:
                 self.scene.terrain.terrain_generator.curriculum = False
 
-        if self.seed is not None:
-            # this makes pyroTorch/NumPy/etc use the same seed as the env
-            self.sim.random_seed = self.seed
-            np.random.seed(self.seed)
-            # and for the gym wrapper
-            self.seed(self.seed)
-
-            # 2) Propagate that same seed into the terrain generator:
-            terr = self.scene.terrain.terrain_generator
-            if terr is not None:
-                terr.seed = self.seed
+        print("Setting seed to", HARDCODED_SEED)
+        self.sim.random_seed = HARDCODED_SEED
+        self.seed = HARDCODED_SEED
+        if self.scene.terrain.terrain_generator is not None:
+            self.scene.terrain.terrain_generator.seed = HARDCODED_SEED
+            print(f"Terrain generator seed in env post init={self.scene.terrain.terrain_generator.seed}")
 
         self.sim.physx.gpu_max_rigid_patch_count = 568462
 
