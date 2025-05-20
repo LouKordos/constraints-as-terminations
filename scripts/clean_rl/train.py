@@ -4,6 +4,8 @@ import os
 from datetime import datetime
 from isaaclab.app import AppLauncher
 import cli_args  # isort: skip
+from functools import partial
+print = partial(print, flush=True) # For cluster runs
 
 parser = argparse.ArgumentParser(description="Train an RL agent with CleanRL.")
 parser.add_argument(

@@ -43,12 +43,14 @@ import cat_envs.tasks.utils.mdp.observations as observations
 import cat_envs.tasks.utils.mdp.terminations as terminations
 import cat_envs.tasks.utils.mdp.events as events
 import cat_envs.tasks.utils.mdp.commands as commands
-import numpy as np
+from functools import partial
+print = partial(print, flush=True) # For cluster runs
 
 from cat_envs.assets.odri import SOLO12_MINIMAL_CFG
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 from cat_envs.assets.go2_config import UNITREE_GO2_CFG  # isort: skip
 import torch
+import numpy as np
 # Horrible practice to hard-code this in the env but I spent a week on trying to pass the values via hydra config or changing via train.py but it never worked.
 # Right now the seed is configured here and then passed to train.py to set all the libraries
 HARDCODED_SEED = 42
