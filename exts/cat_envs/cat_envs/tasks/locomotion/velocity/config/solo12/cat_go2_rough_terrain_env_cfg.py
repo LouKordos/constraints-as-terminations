@@ -199,11 +199,6 @@ class MySceneCfg(InteractiveSceneCfg):
         super().__post_init__()
         
 
-##
-# MDP settings
-##
-
-
 @configclass
 class CommandsCfg:
     """Command specifications for the MDP."""
@@ -419,8 +414,6 @@ class EventCfg:
             "velocity_range": (-0.05, 0.05),
         },
     )
-
-    # interval
 
     # set pushing every step, as only some of the environments are chosen
     # as in the isaacgym cat version
@@ -651,15 +644,8 @@ class CurriculumCfg:
         },
     )
 
-    terrain_levels = CurrTerm(
-        func=terrain_levels_with_ray_caster_refresh,
-    )
-
+    terrain_levels = CurrTerm(func=terrain_levels_with_ray_caster_refresh)
     # terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
-##
-# Environment configuration
-##
-
 
 @configclass
 class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
