@@ -131,6 +131,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     torch.use_deterministic_algorithms(True)
     torch.backends.cudnn.benchmark = False
     torch.manual_seed(agent_cfg.seed)
+    torch.cuda.manual_seed_all(agent_cfg.seed)
 
     env_cfg.sim.device = (args_cli.device if args_cli.device is not None else env_cfg.sim.device)
 

@@ -64,6 +64,7 @@ torch.backends.cudnn.deterministic = True
 torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.benchmark = False
 torch.manual_seed(HARDCODED_SEED)
+torch.cuda.manual_seed_all(HARDCODED_SEED)
 
 ##
 # Scene definition
