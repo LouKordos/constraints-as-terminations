@@ -673,9 +673,10 @@ class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.max_velocity_iteration_count = 1
         self.sim.bounce_threshold_velocity = 0.2
         self.sim.gpu_max_rigid_contact_count = 33554432
-        self.sim.device = "cpu"
-        self.sim.physx.use_gpu = False
-        self.sim.num_threads = 1
+        # self.sim.device = "cpu"
+        # self.sim.physx.use_gpu = False
+        # self.sim.solver_type = 1
+        # self.sim.num_threads = 1
         self.sim.physx.enable_enhanced_determinism = True
         self.sim.physics_material = self.scene.terrain.physics_material
 
