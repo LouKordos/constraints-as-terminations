@@ -48,7 +48,7 @@ print = partial(print, flush=True) # For cluster runs
 
 from cat_envs.assets.odri import SOLO12_MINIMAL_CFG
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
-from cat_envs.assets.go2_config import UNITREE_GO2_CFG  # isort: skip
+from cat_envs.assets.go2_config import UNITREE_GO2_CFG_TRAIN, UNITREE_GO2_CFG_EVAL  # isort: skip
 import torch
 import numpy as np
 # Horrible practice to hard-code this in the env but I spent a week on trying to pass the values via hydra config or changing via train.py but it never worked.
@@ -152,7 +152,7 @@ class MySceneCfg(InteractiveSceneCfg):
     )
 
     # robots
-    robot: ArticulationCfg = UNITREE_GO2_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = UNITREE_GO2_CFG_TRAIN.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # sensors
     contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
@@ -711,6 +711,9 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
         # make a smaller scene for play
         self.scene.num_envs = 1
         self.scene.env_spacing = 8
+    
+        # Original torque limit as specified in isaac lab example config
+        self.scene.robot = UNITREE_GO2_CFG_EVAL.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
         # disable randomization for play
         self.observations.policy.enable_corruption = False
