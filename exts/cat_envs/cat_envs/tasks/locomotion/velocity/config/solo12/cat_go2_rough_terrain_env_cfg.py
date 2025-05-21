@@ -53,7 +53,7 @@ import torch
 import numpy as np
 # Horrible practice to hard-code this in the env but I spent a week on trying to pass the values via hydra config or changing via train.py but it never worked.
 # Right now the seed is configured here and then passed to train.py to set all the libraries
-HARDCODED_SEED = 42
+HARDCODED_SEED = 46
 import random
 random.seed(HARDCODED_SEED)
 np.random.seed(HARDCODED_SEED)

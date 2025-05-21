@@ -5,6 +5,9 @@ import json
 import yaml
 import numpy as np
 import torch
+
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8" # Determinism
+
 import gymnasium as gym
 from isaaclab.app import AppLauncher
 import matplotlib.pyplot as plt
@@ -31,7 +34,8 @@ def parse_arguments():
     parser.add_argument("--task", type=str, required=True,
                         help="Name of the task/environment.")
     # Good seeds for eval: 44, 46, 49
-    parser.add_argument("--seed", type=int, required=False, default=46, help="Seed for numpy, torch, env, terrain, terrain generator etc.. Good seeds for eval are 44, 46, 49")
+    # DEPRECATED: Hardcoded seed in env config is used
+    # parser.add_argument("--seed", type=int, required=False, default=46, help="Seed for numpy, torch, env, terrain, terrain generator etc.. Good seeds for eval are 44, 46, 49")
     import cli_args  # isort: skip
     cli_args.add_clean_rl_args(parser)
     AppLauncher.add_app_launcher_args(parser)
@@ -53,10 +57,6 @@ def get_latest_checkpoint(run_directory: str) -> str:
 
     latest = max(files, key=extract_index)
     return latest
-
-import os
-import re
-import yaml
 
 import os
 import re
@@ -307,14 +307,6 @@ def main():
             print(f"ERROR: checkpoint file does not exist, exiting: {checkpoint_path}")
             exit(1)
 
-    eval_base_dir = os.path.join(args.run_dir, f"eval_checkpoint_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}_seed_{args.seed}")
-
-    # Create output directories
-    plots_directory = os.path.join(eval_base_dir, "plots")
-    trajectories_directory = os.path.join(eval_base_dir, "trajectories")
-    os.makedirs(plots_directory, exist_ok=True)
-    os.makedirs(trajectories_directory, exist_ok=True)
-
     print(f"[INFO] Loading model from: {checkpoint_path}")
     model_state = torch.load(checkpoint_path, weights_only=True)
 
@@ -336,9 +328,16 @@ def main():
         num_envs=args.num_envs,
         use_fabric=not args.disable_fabric
     )
-    env_cfg.seed = args.seed
-    env_cfg.scene.terrain.terrain_generator.seed = env_cfg.seed
-    env_cfg.scene.terrain.seed = env_cfg.seed
+    import random
+    random.seed(env_cfg.seed)
+    np.random.seed(env_cfg.seed)
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.benchmark = False
+    torch.manual_seed(env_cfg.seed)
+    torch.cuda.manual_seed_all(env_cfg.seed)
     # Viewer setup
     env_cfg.viewer.origin_type = "asset_root"
     env_cfg.viewer.asset_name = "robot"
@@ -348,10 +347,16 @@ def main():
     env_cfg.viewer.resolution = (1920, 1080)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    eval_base_dir = os.path.join(args.run_dir, f"eval_checkpoint_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}_seed_{env_cfg.seed}")
+
+    # Create output directories
+    plots_directory = os.path.join(eval_base_dir, "plots")
+    trajectories_directory = os.path.join(eval_base_dir, "trajectories")
+    os.makedirs(plots_directory, exist_ok=True)
+    os.makedirs(trajectories_directory, exist_ok=True)
+
     step_dt = env_cfg.sim.dt * env_cfg.decimation # Physics run at higher frequency, action is applied `decimation` physics-steps, but video uses env steps as unit
-    random_sim_end = args.random_sim_step_length * step_dt # end of random-policy phase
     fixed_command_sim_steps = 500
-    fixed_command_sim_time = fixed_command_sim_steps * step_dt
 
     fixed_command_scenarios = [
         ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
@@ -826,7 +831,7 @@ def main():
         'fixed_command_scenarios': fixed_command_scenarios,
         'random_sim_steps': args.random_sim_step_length,
         'total_sim_steps': total_sim_steps,
-        'seed': args.seed
+        'seed': env_cfg.seed
     }
     summary_path = os.path.join(eval_base_dir, "metrics_summary.json")
     with open(summary_path, 'w') as summary_file:
