@@ -406,8 +406,7 @@ class EventCfg:
         },
     )
 
-    # set pushing every step, as only some of the environments are chosen
-    # as in the isaacgym cat version
+    # set pushing every step, as only some of the environments are chosen as in the isaacgym cat version
     push_robot = EventTerm(
         # Standard push_by_setting_velocity also works, but interestingly results
         # in a different gait
@@ -437,6 +436,10 @@ class RewardsCfg:
 
 
 # Never forget to also add a curriculum term for each added constraint
+# IMPORTANT NOTE: The max_p defined here is ALWAYS overwritten by the curriculum whenever
+# it is enabled, so the specified value is meaningless and init_max_p defined in the curriculum terms
+# is used as the target max_p after curriculum ramp-up. For the terms without curriculum, such as hard
+# constraints, the values defined here are used.
 @configclass
 class ConstraintsCfg:
     # Safety Soft constraints
