@@ -407,15 +407,15 @@ class EventCfg:
     )
 
     # set pushing every step, as only some of the environments are chosen as in the isaacgym cat version
-    push_robot = EventTerm(
-        # Standard push_by_setting_velocity also works, but interestingly results
-        # in a different gait
-        func=events.push_by_setting_velocity_with_random_envs,
-        mode="interval",
-        is_global_time=True,
-        interval_range_s=(0.0, 0.005),
-        params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
-    )
+    # push_robot = EventTerm(
+    #     # Standard push_by_setting_velocity also works, but interestingly results
+    #     # in a different gait
+    #     func=events.push_by_setting_velocity_with_random_envs,
+    #     mode="interval",
+    #     is_global_time=True,
+    #     interval_range_s=(0.0, 0.005),
+    #     params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
+    # )
 
 
 @configclass
