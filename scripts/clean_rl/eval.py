@@ -5,6 +5,7 @@ import json
 import yaml
 import numpy as np
 import torch
+import time
 
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8" # Determinism
 
@@ -344,7 +345,11 @@ def main():
     env_cfg.viewer.eye = (0.0, -3.0, 2.0)
     env_cfg.viewer.lookat = (0.0, 0.0, 0.5)
     env_cfg.sim.render.rendering_mode = "quality"
-    env_cfg.viewer.resolution = (1920, 1080)
+    step_dt = env_cfg.sim.dt * env_cfg.decimation # Physics run at higher frequency, action is applied `decimation` physics-steps, but video uses env steps as unit
+    frame_width = 1920
+    frame_height = 1080
+    frame_rate = int(round(1.0 / step_dt))
+    env_cfg.viewer.resolution = (frame_width, frame_height)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     eval_base_dir = os.path.join(args.run_dir, f"eval_checkpoint_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}_seed_{env_cfg.seed}")
@@ -355,7 +360,6 @@ def main():
     os.makedirs(plots_directory, exist_ok=True)
     os.makedirs(trajectories_directory, exist_ok=True)
 
-    step_dt = env_cfg.sim.dt * env_cfg.decimation # Physics run at higher frequency, action is applied `decimation` physics-steps, but video uses env steps as unit
     fixed_command_sim_steps = 500
 
     fixed_command_scenarios = [
