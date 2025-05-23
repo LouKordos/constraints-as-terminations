@@ -743,3 +743,12 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
             self.scene.terrain.terrain_generator.num_rows = 5
             self.scene.terrain.terrain_generator.num_cols = 5
             self.scene.terrain.terrain_generator.curriculum = False
+
+        # Disable any rewards related to minimizing power during eval, since the parameters are subject to change and evals should be comparable to each other.
+        # HOWEVER: It's still best practice to look at cost of transport, energy consumption and RMS error instead of rewards!
+        self.rewards.minimize_power = None
+        # Automatically disable any curriculum whose term_name is "minimize_power"
+        for field_name in list(vars(self.curriculum)):
+            term = getattr(self.curriculum, field_name)
+            if isinstance(term, CurrTerm) and term.params.get("term_name") == "minimize_power":
+                setattr(self.curriculum, field_name, None)
