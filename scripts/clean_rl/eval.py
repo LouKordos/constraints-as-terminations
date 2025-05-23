@@ -722,7 +722,7 @@ def main():
     }
 
     metric_to_unit_mapping = {
-        'position': 'm',
+        'position': 'rad',
         'velocity':	'rad*s^(-1)',
         'acceleration': 'rad * s^(-2) ',
         'torque': 'Nm',
