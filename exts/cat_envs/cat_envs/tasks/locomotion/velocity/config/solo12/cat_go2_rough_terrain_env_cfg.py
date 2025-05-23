@@ -737,9 +737,9 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
 
         # spawn the robot randomly in the grid (instead of their terrain levels)
         self.scene.terrain.max_init_terrain_level = 0
-        self.scene.terrain.terrain_generator.difficult_range = (0.0, 0.2)
-        # reduce the number of terrains to save memory
+        # reduce the number of terrains to save memory and set lower difficulty range
         if self.scene.terrain.terrain_generator is not None:
+            self.scene.terrain.terrain_generator.difficulty_range = (0.0, 0.2)
             self.scene.terrain.terrain_generator.num_rows = 5
             self.scene.terrain.terrain_generator.num_cols = 5
             self.scene.terrain.terrain_generator.curriculum = False
