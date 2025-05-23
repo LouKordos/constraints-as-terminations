@@ -24,7 +24,7 @@ def parse_arguments():
                         help="ABSOLUTE path to directory containing model checkpoints and params.")
     parser.add_argument("--eval_checkpoint", type=str, default=None,
                         help="Optionally specify the model save checkpoint number instead of automatically using the last saved one.")
-    parser.add_argument("--video", action="store_true", default=False,
+    parser.add_argument("--video", action="store_true", default=True,
                         help="Record videos during playback.")
     parser.add_argument("--random_sim_step_length", type=int, default=4000,
                         help="Number of steps to run with random commands and spawn points. Standardized tests like standing and walking forward will always run.")
@@ -353,6 +353,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     eval_base_dir = os.path.join(args.run_dir, f"eval_checkpoint_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}_seed_{env_cfg.seed}")
+    print(f"eval_base_dir={eval_base_dir}")
 
     # Create output directories
     plots_directory = os.path.join(eval_base_dir, "plots")
@@ -380,17 +381,20 @@ def main():
     env_cfg.constraints.front_hfe_position.params["limit"] = constraint_bounds["RL_thigh_joint"][1]
 
     total_sim_steps = args.random_sim_step_length + len(fixed_command_scenarios) * fixed_command_sim_steps
-    env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array" if args.video else None)
+    frame_storage_interval = 1000
+    env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array")
     if args.video:
         video_configuration = {
-            "video_folder": eval_base_dir,
-            "name_prefix": os.path.basename(eval_base_dir),
-            "step_trigger": lambda step: step == 0,
-            "video_length": total_sim_steps - 1, # One more to stop video recording and generate video before plot generation
-            "disable_logger": True,
+            "pop_frames": True, # env.render() is called periodically in the sim loop to store the frames on disk and thus reduce memory usage. pop_frames clears the in-memory buffer after calling render()
+            "reset_clean": False, # Since sim loop resets the env for the hardcoded scenarios, the frames should be preserved on env.reset()
         }
         print_dict(video_configuration, nesting=4)
-        env = gym.wrappers.RecordVideo(env, **video_configuration)
+        env = gym.wrappers.RenderCollection(env, **video_configuration)
+
+    frame_memmap_file_path = os.path.join(eval_base_dir, "raw_frames.dat")
+    # Each env.reset() for fixed scenarios counts towards a frame, + 1 is because of initial env.reset()
+    frames_memmap = np.memmap(filename=frame_memmap_file_path, dtype=np.uint8, mode="w+", shape=(total_sim_steps + len(fixed_command_scenarios) + 1, frame_height, frame_width, 3))
+    frame_idx = 0
 
     policy_agent = Agent(env).to(device)
     policy_agent.load_state_dict(model_state)
@@ -484,8 +488,16 @@ def main():
     previous_action = None
 
     for t in tqdm(range(total_sim_steps)):
-        if t == total_sim_steps - len(fixed_command_scenarios) - 1:
-            print("Saving video, sim and code execution will freeze for a while.")
+        if t % frame_storage_interval == 0:
+            print("Moving frame buffer to memory-mapped file, sim and code execution will freeze for a while.")
+            start = time.time()
+            raw_frames = env.render()
+            for frame in raw_frames:
+                frames_memmap[frame_idx] = frame
+                frame_idx += 1
+            # frames_memmap.flush() # To reduce memory usage
+            end = time.time()
+            print(f"Moving {len(raw_frames)} frames to mmap took {end-start} seconds.")
 
         # These should only ever run at the end of eval / after random sampling because set_fixed_velocity_command breaks random command sampling!
         if t >= args.random_sim_step_length and t % fixed_command_sim_steps == 0:
@@ -595,7 +607,7 @@ def main():
         cumulative_unscaled_raw_reward += reward.mean().item()
         policy_observation = next_observation['policy']
 
-    print("Converting and saving recorded sim data...")
+    print("Sim loop done, converting and saving recorded sim data...")
 
     # Convert buffers to numpy arrays
     time_indices = np.arange(total_sim_steps)
@@ -865,12 +877,36 @@ def main():
             }
             traj_file.write(json.dumps(record, indent=4, default=lambda o: o.tolist()) + "\n")
 
+    print("Metrics and sim data saved, starting video generation...")
+
+    # TODO: Start async multithreaded plot generation before this because flushing and video generation take over 6min
+    print("Moving frame buffer to memory-mapped file, sim and code execution will freeze for a while.")
+    start = time.time()
+    raw_frames = env.render()
+    for frame in raw_frames:
+        frames_memmap[frame_idx] = frame
+        frame_idx += 1
+    # print("Flushing memmap...")
+    # frames_memmap.flush() # Not needed since file is deleted after ffmpeg conversion anyway and memmap is used, not the file
+    end = time.time()
+    print(f"Final flush of {len(raw_frames)} frames to disk took {end-start} seconds.")
+
+    import subprocess
+    ffmpeg_cmd = ["ffmpeg", "-y", "-hwaccel", "cuda", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{frame_width}x{frame_height}", "-framerate", str(frame_rate), "-i", "pipe:0", "-c:v", "hevc_nvenc", "-preset", "slow", os.path.join(eval_base_dir, f"{os.path.basename(eval_base_dir)}_run_{os.path.basename(args.run_dir)}.mp4")]
+    proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
+    for i in range(total_sim_steps):
+        proc.stdin.write(frames_memmap[i].tobytes())
+    proc.stdin.close()
+    proc.wait()
+
+    del frames_memmap
+    os.remove(frame_memmap_file_path)
+    print("Video saved, starting plot generation...")
+
     # Individual plots for each metric
     figs = []
     linewidth = 1
     FIGSIZE = (16, 9)
-
-    print("Data saved, starting plot generation...")
 
     def draw_resets(ax):
         for reset_time in reset_times:
