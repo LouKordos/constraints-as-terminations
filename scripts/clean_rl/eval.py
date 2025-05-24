@@ -6,6 +6,8 @@ import yaml
 import numpy as np
 import torch
 import time
+from functools import partial
+print = partial(print, flush=True) # For cluster runs
 
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8" # Determinism
 

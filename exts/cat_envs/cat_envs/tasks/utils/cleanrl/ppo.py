@@ -1,13 +1,12 @@
 import os
 import time
-
 import numpy as np
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.normal import Normal
-
+from functools import partial
+print = partial(print, flush=True) # For cluster runs
 
 class RunningMeanStd(nn.Module):
     def __init__(self, shape=(), epsilon=1e-08):
