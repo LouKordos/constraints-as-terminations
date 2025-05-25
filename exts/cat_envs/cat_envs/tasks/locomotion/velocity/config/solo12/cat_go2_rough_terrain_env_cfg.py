@@ -86,6 +86,7 @@ def height_map_grid(env, asset_cfg: SceneEntityCfg):
     # 4) compute local coordinates, then the height = z_hit - z_base
     local = hits_clean - base_expanded_to_match_shape_world_frame # [E, R, 3]
     height = local[..., 2] # [E, R]
+    # height = torch.zeros_like(height)
 
     # height = torch.nan_to_num(height, nan=0.0, posinf=0.0, neginf=0.0)
 
