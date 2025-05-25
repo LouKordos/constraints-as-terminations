@@ -161,7 +161,7 @@ def PPO(envs, ppo_cfg, run_path):
 
     BATCH_SIZE = int(NUM_ENVS * NUM_STEPS)
 
-    STORE_AND_HASH_TENSORS = False
+    STORE_AND_HASH_TENSORS = True
     if STORE_AND_HASH_TENSORS:
         import zarr
         from numcodecs import Blosc
