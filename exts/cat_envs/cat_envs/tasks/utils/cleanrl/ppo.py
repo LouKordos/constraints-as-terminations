@@ -102,8 +102,8 @@ class Agent(nn.Module):
         action_std = torch.exp(action_logstd)
         probs = Normal(action_mean, action_std)
         if action is None:
-            action = probs.sample()
-            # action = action_mean
+            # action = probs.sample()
+            action = action_mean
         return (action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x),)
 
 
