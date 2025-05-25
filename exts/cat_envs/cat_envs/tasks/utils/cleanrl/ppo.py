@@ -107,6 +107,19 @@ class Agent(nn.Module):
 
 
 def PPO(envs, ppo_cfg, run_path):
+    print("env seed in ppo.py=", envs.unwrapped.cfg.seed)
+
+    import random
+    random.seed(envs.unwrapped.cfg.seed)
+    np.random.seed(envs.unwrapped.cfg.seed)
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.benchmark = False
+    torch.manual_seed(envs.unwrapped.cfg.seed)
+    torch.cuda.manual_seed_all(envs.unwrapped.cfg.seed)
+
     if ppo_cfg.logger == "wandb":
         from rsl_rl.utils.wandb_utils import WandbSummaryWriter
 
@@ -162,7 +175,7 @@ def PPO(envs, ppo_cfg, run_path):
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
-    next_obs = envs.reset()[0]["policy"]
+    next_obs = envs.reset(seed=envs.unwrapped.cfg.seed)[0]["policy"]
     next_obs = agent.obs_rms(next_obs)
     next_done = torch.zeros(NUM_ENVS, dtype=torch.float).to(device)
     next_true_done = torch.zeros(NUM_ENVS, dtype=torch.float).to(device)
@@ -193,6 +206,7 @@ def PPO(envs, ppo_cfg, run_path):
 
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, rewards[step], next_done, timeouts, info = envs.step(action)
+            # next_obs, rewards[step], next_done, timeouts, info = envs.step(torch.rand_like(action) * 0.6 - torch.ones_like(action) * 0.3)
             next_done = next_done.to(torch.float)
             next_obs = next_obs["policy"]
             if torch.any(torch.isnan(next_obs)):
