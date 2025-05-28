@@ -88,8 +88,6 @@ def height_map_grid(env, asset_cfg: SceneEntityCfg):
     height = local[..., 2] # [E, R]
     # height = torch.zeros_like(height)
 
-    # height = torch.nan_to_num(height, nan=0.0, posinf=0.0, neginf=0.0)
-
     return height
 
 from copy import deepcopy
