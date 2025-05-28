@@ -108,8 +108,8 @@ class Agent(nn.Module):
 
 
 def PPO(envs, ppo_cfg, run_path):
+    print(f"Env in PPO function:\n{os.environ}")
     print("env seed in ppo.py=", envs.unwrapped.cfg.seed)
-
     import random
     random.seed(envs.unwrapped.cfg.seed)
     np.random.seed(envs.unwrapped.cfg.seed)
