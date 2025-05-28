@@ -221,7 +221,7 @@ def main():
     os.makedirs(plots_directory, exist_ok=True)
     os.makedirs(trajectories_directory, exist_ok=True)
 
-    fixed_command_sim_steps = 500
+    fixed_command_sim_steps = 600
 
     fixed_command_scenarios = [
         ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
@@ -443,9 +443,6 @@ def main():
         # Isaaclab returns 0 to 2pi euler angles, so small negative angles wrap around to ~2pi.
         # Rescale to [-pi, pi] for better plotting
         def convert_to_signed_angle(a): return (a + np.pi) % (2*np.pi) - np.pi
-        # roll = roll_t.cpu().numpy().item()
-        # pitch = pitch_t.cpu().numpy().item()
-        # yaw = yaw_t.cpu().numpy().item()
 
         # IMPORTANT: THESE ANGLES ARE NOT UNWRAPPED YET, HAPPENS AFTER THE FULL ROLLOUT
         roll = convert_to_signed_angle(roll_t.cpu().numpy().item())
@@ -691,7 +688,6 @@ def main():
         },
         'total_energy_consumption': float(combined_energy[-1]),
         'mean_cost_of_transport': mean_cost_of_transport,
-        # 'cost_of_transport_time_series': cost_of_transport_time_series.tolist(),
         'constraint_violations_percent': constraint_violations_percent,
         'fixed_command_scenarios': fixed_command_scenarios,
         'random_sim_steps': args.random_sim_step_length,
@@ -703,35 +699,29 @@ def main():
         json.dump(summary_metrics, summary_file, indent=4, default=lambda o: o.tolist()) # lambda for torch tensor conversion or any other nested objects
     print(json.dumps(summary_metrics, indent=4, default=lambda o: o.tolist()))
 
-    # at end of eval.py, before starting plot generation
     np_data_file = os.path.join(plots_directory, "sim_data.npz")
     np.savez(
         np_data_file,
         sim_times=sim_times,
         reset_times=np.array(reset_times),
-        # per‐joint / per‐time arrays (renamed with “_array” suffix)
         joint_positions_array=joint_positions_array,
         joint_velocities_array=joint_velocities_array,
         joint_torques_array=joint_torques_array,
         joint_accelerations_array=joint_accelerations_array,
         action_rate_array=action_rate_array,
         contact_forces_array=contact_forces_array,
-        # base & commanded state arrays
         base_position_array=base_position_array,
         base_orientation_array=base_orientation_array,
         base_linear_velocity_array=base_linear_velocity_array,
         base_angular_velocity_array=base_angular_velocity_array,
         commanded_velocity_array=commanded_velocity_array,
-        # contact & terrain
         contact_state_array=contact_state_array,
         height_map_array=np.array(height_map_buffer),
         foot_positions_array=np.array(foot_positions_buffer),
-        # energy & power
         combined_energy=combined_energy,
         energy_per_joint=energy_per_joint,
         power_array=power_array,
         cost_of_transport_time_series=cost_of_transport_time_series,
-        # metadata
         foot_labels=np.array(foot_labels),
         leg_row=np.array(leg_row),
         leg_col=np.array(leg_col),
@@ -779,7 +769,6 @@ def main():
     for frame in raw_frames:
         frame_q.put(frame.tobytes())
     end = time.time()
-    print(f"Final frame copy of {len(raw_frames)} frames to disk took {end-start} seconds.")
     
     frame_q.put(None)
     ffmpeg_process.wait()
