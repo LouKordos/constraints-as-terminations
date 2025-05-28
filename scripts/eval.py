@@ -16,9 +16,11 @@ from isaaclab.app import AppLauncher
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from tqdm import tqdm
+import sys
 
 # Disable interactive display so saves don't pop up
 plt.ioff()
+eval_script_path = os.path.dirname(os.path.abspath(__file__))
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Play an RL agent with detailed logging.")
@@ -39,6 +41,8 @@ def parse_arguments():
     # Good seeds for eval: 44, 46, 49
     # DEPRECATED: Hardcoded seed in env config is used
     # parser.add_argument("--seed", type=int, required=False, default=46, help="Seed for numpy, torch, env, terrain, terrain generator etc.. Good seeds for eval are 44, 46, 49")
+
+    sys.path.insert(0, os.path.join(eval_script_path, "clean_rl"))
     import cli_args  # isort: skip
     cli_args.add_clean_rl_args(parser)
     AppLauncher.add_app_launcher_args(parser)
@@ -754,7 +758,6 @@ def main():
     print("Metrics and sim data saved, starting plot generation...")
     plot_process_log_path  = os.path.join(plots_directory, "generate_plots.log")
     import subprocess
-    eval_script_path = os.path.dirname(os.path.abspath(__file__))
     generate_plots_script_path = os.path.join(eval_script_path, "generate_plots.py")
     plot_cmd = [
         "python", generate_plots_script_path,
