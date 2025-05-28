@@ -17,6 +17,10 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from tqdm import tqdm
 import sys
+import fcntl
+from queue import Queue
+import threading
+import subprocess
 
 # Disable interactive display so saves don't pop up
 plt.ioff()
@@ -242,7 +246,6 @@ def main():
     env_cfg.constraints.front_hfe_position.params["limit"] = constraint_bounds["RL_thigh_joint"][1]
 
     total_sim_steps = args.random_sim_step_length + len(fixed_command_scenarios) * fixed_command_sim_steps
-    frame_storage_interval = 1000
     env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array")
     if args.video:
         video_configuration = {
@@ -251,11 +254,6 @@ def main():
         }
         print_dict(video_configuration, nesting=4)
         env = gym.wrappers.RenderCollection(env, **video_configuration)
-
-    frame_memmap_file_path = os.path.join(eval_base_dir, "raw_frames.dat")
-    # Each env.reset() for fixed scenarios counts towards a frame, + 1 is because of initial env.reset()
-    frames_memmap = np.memmap(filename=frame_memmap_file_path, dtype=np.uint8, mode="w+", shape=(total_sim_steps + len(fixed_command_scenarios) + 1, frame_height, frame_width, 3))
-    frame_idx = 0
 
     policy_agent = Agent(env).to(device)
     policy_agent.load_state_dict(model_state)
@@ -348,20 +346,25 @@ def main():
     policy_observation = observations['policy']
     previous_action = None
 
-    print("-----------WARNING: TEMPORARY FRAME BUFFER WILL BE CREATED ON DISK AND MAY CONSUME UP TO 100GiB RAM+DISK STORAGE COMBINED!----------")
+    video_output_path = os.path.join(eval_base_dir, f"{os.path.basename(eval_base_dir)}_run_{os.path.basename(args.run_dir)}.mp4")
+    frame_storage_interval = 1
+    ffmpeg_cmd = ["ffmpeg", "-y", "-hwaccel", "cuda", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{frame_width}x{frame_height}", "-framerate", str(frame_rate), "-i", "pipe:0", "-c:v", "hevc_nvenc", "-preset", "slow", "-movflags", "+use_metadata_tags", "-metadata", f"env_name={env_name}", video_output_path]
+    ffmpeg_process_log_path = os.path.join(eval_base_dir, "ffmpeg_encode.log")
+    with open(ffmpeg_process_log_path, "w") as ffmpeg_process_logfile:
+        ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdout=ffmpeg_process_logfile, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, bufsize=4*1024*1024)
+    # enlarge kernel pipe so the writer thread gets big, contiguous chunks
+    # fcntl.fcntl(ffmpeg_proc.stdin, fcntl.F_SETPIPE_SZ, 16*1024*1024)    
+    frame_q = Queue(maxsize=frame_storage_interval + 2)
+    def frame_writer(q, pipe):
+        while True:
+            buf = q.get()
+            if buf is None:
+                break
+            pipe.write(buf)
+        pipe.close()
+    threading.Thread(target=frame_writer, args=(frame_q, ffmpeg_process.stdin), daemon=True).start()
 
     for t in tqdm(range(total_sim_steps)):
-        if t % frame_storage_interval == 0:
-            print("Moving frame buffer to memory-mapped file, sim and code execution will freeze for a while.")
-            start = time.time()
-            raw_frames = env.render()
-            for frame in raw_frames:
-                frames_memmap[frame_idx] = frame
-                frame_idx += 1
-            # frames_memmap.flush() # To reduce memory usage
-            end = time.time()
-            print(f"Moving {len(raw_frames)} frames to mmap took {end-start} seconds.")
-
         # These should only ever run at the end of eval / after random sampling because set_fixed_velocity_command breaks random command sampling!
         if t >= args.random_sim_step_length and t % fixed_command_sim_steps == 0:
             scenario = fixed_command_scenarios[int(t-args.random_sim_step_length) // fixed_command_sim_steps]
@@ -395,6 +398,11 @@ def main():
         # Because of CaT, terminated is actually a nonzero probability instead of a boolean, always remember this
         if env.unwrapped.episode_length_buf[0].item() == 0 and t > 0:
             reset_steps.append(t)
+
+        if t % frame_storage_interval == 0:
+            raw_frames = env.render()
+            for frame in raw_frames:
+                frame_q.put(frame.tobytes())
 
         scene_robot_data = env.unwrapped.scene['robot'].data
 
@@ -756,8 +764,7 @@ def main():
             traj_file.write(json.dumps(record, indent=4, default=lambda o: o.tolist()) + "\n")
 
     print("Metrics and sim data saved, starting plot generation...")
-    plot_process_log_path  = os.path.join(plots_directory, "generate_plots.log")
-    import subprocess
+    plot_process_log_path  = os.path.join(eval_base_dir, "generate_plots.log")
     generate_plots_script_path = os.path.join(eval_script_path, "generate_plots.py")
     plot_cmd = [
         "python", generate_plots_script_path,
@@ -772,26 +779,13 @@ def main():
     start = time.time()
     raw_frames = env.render()
     for frame in raw_frames:
-        frames_memmap[frame_idx] = frame
-        frame_idx += 1
-    # print("Flushing memmap...")
-    # frames_memmap.flush() # Not needed since file is deleted after ffmpeg conversion anyway and memmap is used, not the file
+        frame_q.put(frame.tobytes())
     end = time.time()
     print(f"Final frame copy of {len(raw_frames)} frames to disk took {end-start} seconds.")
     
-    video_gen_start = time.time()
-    ffmpeg_cmd = ["ffmpeg", "-y", "-hwaccel", "cuda", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{frame_width}x{frame_height}", "-framerate", str(frame_rate), "-i", "pipe:0", "-c:v", "hevc_nvenc", "-preset", "slow", "-movflags", "+use_metadata_tags", "-metadata", f"env_name={env_name}", os.path.join(eval_base_dir, f"{os.path.basename(eval_base_dir)}_run_{os.path.basename(args.run_dir)}.mp4")]
-    proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
-    for i in range(total_sim_steps):
-        proc.stdin.write(frames_memmap[i].tobytes())
-    proc.stdin.close()
-    proc.wait()
+    frame_q.put(None)
+    ffmpeg_process.wait()
 
-    del frames_memmap
-    os.remove(frame_memmap_file_path)
-
-    video_gen_end = time.time()
-    print(f"[INFO] Video generation took {(video_gen_end - video_gen_start):.4f} seconds, waiting for generate_plots.py (PID={plot_proc.pid}) to complete...")
     plot_proc.wait()
     print(f"[INFO] Plot generation exited with return code {plot_proc.returncode}. See generate_plots.log below:")
     with open(plot_process_log_path, "r") as plot_process_logfile:
