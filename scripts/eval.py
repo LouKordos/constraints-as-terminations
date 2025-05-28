@@ -740,6 +740,17 @@ def main():
         constraint_bounds=np.array(constraint_bounds, dtype=object),
     )
 
+    print("Starting plot generation...")
+    plot_process_log_path  = os.path.join(eval_base_dir, "generate_plots.log")
+    generate_plots_script_path = os.path.join(eval_script_path, "generate_plots.py")
+    plot_cmd = [
+        "python", generate_plots_script_path,
+        "--data", np_data_file,
+        "--interactive"
+    ]
+    with open(plot_process_log_path, "w") as plot_process_logfile:
+        plot_proc = subprocess.Popen(plot_cmd, stdout=plot_process_logfile, stderr=subprocess.STDOUT)
+
     # Write trajectories to JSONL
     trajectories_path = os.path.join(trajectories_directory, 'trajectory.jsonl')
     with open(trajectories_path, 'w') as traj_file:
@@ -763,19 +774,6 @@ def main():
             }
             traj_file.write(json.dumps(record, indent=4, default=lambda o: o.tolist()) + "\n")
 
-    print("Metrics and sim data saved, starting plot generation...")
-    plot_process_log_path  = os.path.join(eval_base_dir, "generate_plots.log")
-    generate_plots_script_path = os.path.join(eval_script_path, "generate_plots.py")
-    plot_cmd = [
-        "python", generate_plots_script_path,
-        "--data", np_data_file,
-        "--interactive"
-    ]
-    with open(plot_process_log_path, "w") as plot_process_logfile:
-        plot_proc = subprocess.Popen(plot_cmd, stdout=plot_process_logfile, stderr=subprocess.STDOUT)
-    print("Plot generation started asynchronously, starting video generation in parallel.")
-
-    print("Moving frame buffer to memory-mapped file, sim and code execution will freeze for a while.")
     start = time.time()
     raw_frames = env.render()
     for frame in raw_frames:
