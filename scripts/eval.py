@@ -164,7 +164,7 @@ def main():
     model_state = torch.load(checkpoint_path, weights_only=True)
 
     # Launch Isaac Lab environment
-    args.device = "cpu" # Using CPU Increases iterations/sec in some cases and reduces VRAM usage which allows parallel runs. Replace with "cuda" if you want pure GPU, because on more recent GPUs this might be faster depending on your hardware
+    args.device = "cuda" # Using CPU Increases iterations/sec in some cases and reduces VRAM usage which allows parallel runs. Replace with "cuda" if you want pure GPU, because on more recent GPUs this might be faster depending on your hardware
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
     from isaaclab.utils.dict import print_dict
