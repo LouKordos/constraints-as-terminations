@@ -8,9 +8,6 @@ import torch
 import time
 from functools import partial
 print = partial(print, flush=True) # For cluster runs
-
-os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8" # Determinism
-
 import gymnasium as gym
 from isaaclab.app import AppLauncher
 import matplotlib.pyplot as plt
@@ -21,9 +18,13 @@ import fcntl
 from queue import Queue
 import threading
 import subprocess
+import os
+import re
+import yaml
+from typing import Dict, Tuple, Optional, List
 
-# Disable interactive display so saves don't pop up
-plt.ioff()
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8" # Determinism
+
 eval_script_path = os.path.dirname(os.path.abspath(__file__))
 
 def parse_arguments():
@@ -32,8 +33,6 @@ def parse_arguments():
                         help="ABSOLUTE path to directory containing model checkpoints and params.")
     parser.add_argument("--eval_checkpoint", type=str, default=None,
                         help="Optionally specify the model save checkpoint number instead of automatically using the last saved one.")
-    parser.add_argument("--video", action="store_true", default=True,
-                        help="Record videos during playback.")
     parser.add_argument("--random_sim_step_length", type=int, default=4000,
                         help="Number of steps to run with random commands and spawn points. Standardized tests like standing and walking forward will always run.")
     parser.add_argument("--disable_fabric", action="store_true", default=False,
@@ -51,8 +50,7 @@ def parse_arguments():
     cli_args.add_clean_rl_args(parser)
     AppLauncher.add_app_launcher_args(parser)
     arguments = parser.parse_args()
-    if arguments.video:
-        arguments.enable_cameras = True
+    arguments.enable_cameras = True # Video
     return arguments
 
 def get_latest_checkpoint(run_directory: str) -> str:
@@ -68,11 +66,6 @@ def get_latest_checkpoint(run_directory: str) -> str:
 
     latest = max(files, key=extract_index)
     return latest
-
-import os
-import re
-import yaml
-from typing import Dict, Tuple, Optional, List
 
 def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
     """
@@ -188,6 +181,7 @@ def main():
         num_envs=args.num_envs,
         use_fabric=not args.disable_fabric
     )
+    # Seeding
     import random
     random.seed(env_cfg.seed)
     np.random.seed(env_cfg.seed)
@@ -222,7 +216,6 @@ def main():
     os.makedirs(trajectories_directory, exist_ok=True)
 
     fixed_command_sim_steps = 600
-
     fixed_command_scenarios = [
         ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("pure_spin", torch.tensor([0.0, 0.0, 0.5], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
@@ -247,13 +240,12 @@ def main():
 
     total_sim_steps = args.random_sim_step_length + len(fixed_command_scenarios) * fixed_command_sim_steps
     env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array")
-    if args.video:
-        video_configuration = {
-            "pop_frames": True, # env.render() is called periodically in the sim loop to store the frames on disk and thus reduce memory usage. pop_frames clears the in-memory buffer after calling render()
-            "reset_clean": False, # Since sim loop resets the env for the hardcoded scenarios, the frames should be preserved on env.reset()
-        }
-        print_dict(video_configuration, nesting=4)
-        env = gym.wrappers.RenderCollection(env, **video_configuration)
+    video_configuration = {
+        "pop_frames": True, # env.render() is called periodically in the sim loop to store the frames on disk and thus reduce memory usage. pop_frames clears the in-memory buffer after calling render()
+        "reset_clean": False, # Since sim loop resets the env for the hardcoded scenarios, the frames should be preserved on env.reset()
+    }
+    print_dict(video_configuration, nesting=4)
+    env = gym.wrappers.RenderCollection(env, **video_configuration)
 
     policy_agent = Agent(env).to(device)
     policy_agent.load_state_dict(model_state)
