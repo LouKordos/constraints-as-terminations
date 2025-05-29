@@ -21,6 +21,7 @@ from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
+import isaaclab.envs.mdp.curriculums as isaac_curriculums
 from cat_envs.tasks.utils.cat.manager_constraint_cfg import (
     ConstraintTermCfg as ConstraintTerm,
 )
@@ -43,6 +44,7 @@ import cat_envs.tasks.utils.mdp.observations as observations
 import cat_envs.tasks.utils.mdp.terminations as terminations
 import cat_envs.tasks.utils.mdp.events as events
 import cat_envs.tasks.utils.mdp.commands as commands
+import cat_envs.tasks.utils.mdp.rewards as rewards
 from functools import partial
 print = partial(print, flush=True) # For cluster runs
 
@@ -433,6 +435,13 @@ class RewardsCfg:
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
 
+    # DO NOT RENAME; USE THIS TERM FOR ALL ENERGY MINIMIZATION RELATED TASKS
+    # BECAUSE IT IS AUTOMATICALLY DISABLED IN THE PLAY ENV
+    minimize_power = RewTerm(
+        func=rewards.joint_power,
+        weight=0.0, # Updated by curriculum
+        params={"scaling_factor": 0.02}
+    )
 
 # Never forget to also add a curriculum term for each added constraint
 # IMPORTANT NOTE: The max_p defined here is ALWAYS overwritten by the curriculum whenever
@@ -635,6 +644,32 @@ class CurriculumCfg:
             "num_steps": 24 * MAX_CURRICULUM_ITERATIONS,
             "init_max_p": 0.25,
         },
+    )
+
+    # As a hack, increase weight at interval, don't want to waste time on linear ramp up function
+    power_1 = CurrTerm(
+        func=isaac_curriculums.modify_reward_weight,
+        params={
+            "term_name": "minimize_power",
+            "num_steps": 4 * MAX_CURRICULUM_ITERATIONS,
+            "weight": 0.02
+        }
+    )
+    power_2 = CurrTerm(
+        func=isaac_curriculums.modify_reward_weight,
+        params={
+            "term_name": "minimize_power",
+            "num_steps": 12 * MAX_CURRICULUM_ITERATIONS,
+            "weight": 0.05
+        }
+    )
+    power_3 = CurrTerm(
+        func=isaac_curriculums.modify_reward_weight,
+        params={
+            "term_name": "minimize_power",
+            "num_steps": 20 * MAX_CURRICULUM_ITERATIONS,
+            "weight": 0.1
+        }
     )
 
     terrain_levels = CurrTerm(func=terrain_levels_with_ray_caster_refresh)
