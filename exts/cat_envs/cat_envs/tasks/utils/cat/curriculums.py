@@ -45,8 +45,8 @@ def modify_constraint_p(env: ManagerBasedRLEnv, env_ids: Sequence[int], term_nam
 
     return init_max_p
 
-def update_reward_weight_linear(env: ManagerBasedRLEnv, env_ids: Sequence[int], term_name: str, num_steps: int, start_at_step: int, start_weight: float, end_weight: float):
-    progress = min(max(0, (env.common_step_counter - start_at_step)) / num_steps, 1.0)
+def update_reward_weight_linear(env: ManagerBasedRLEnv, env_ids: Sequence[int], term_name: str, num_steps_from_start_step: int, start_at_step: int, start_weight: float, end_weight: float):
+    progress = min(max(0, (env.common_step_counter - start_at_step)) / num_steps_from_start_step, 1.0)
     new_weight = start_weight + (end_weight - start_weight) * progress
     
     term_cfg = env.reward_manager.get_term_cfg(term_name)
