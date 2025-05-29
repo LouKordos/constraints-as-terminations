@@ -164,6 +164,7 @@ def main():
     model_state = torch.load(checkpoint_path, weights_only=True)
 
     # Launch Isaac Lab environment
+    args.device = "cpu" # Using CPU Increases iterations/sec in some cases and reduces VRAM usage which allows parallel runs. Replace with "cuda" if you want pure GPU, because on more recent GPUs this might be faster depending on your hardware
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
     from isaaclab.utils.dict import print_dict
@@ -203,7 +204,7 @@ def main():
     frame_height = 1080
     frame_rate = int(round(1.0 / step_dt))
     env_cfg.viewer.resolution = (frame_width, frame_height)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(args.device)
 
     eval_base_dir = os.path.join(args.run_dir, f"eval_checkpoint_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}_seed_{env_cfg.seed}")
     env_name = os.path.basename(os.path.dirname(args.run_dir.rstrip("/")))
