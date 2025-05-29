@@ -44,3 +44,13 @@ def modify_constraint_p(env: ManagerBasedRLEnv, env_ids: Sequence[int], term_nam
     env.constraint_manager.set_term_cfg(term_name, term_cfg)
 
     return init_max_p
+
+def update_reward_weight(env: ManagerBasedRLEnv, env_ids: Sequence[int], term_name: str, num_steps: int, start_at_step: int, start_weight: float, end_weight: float):
+    progress = min(max(0, (env.common_step_counter - start_at_step)) / num_steps, 1.0)
+    new_weight = start_weight + (end_weight - start_weight) * progress
+    
+    term_cfg = env.reward_manager.get_term_cfg(term_name)
+    term_cfg.weight = new_weight
+    env.reward_manager.set_term_cfg(term_name, term_cfg)
+
+    return {"weight": new_weight}
