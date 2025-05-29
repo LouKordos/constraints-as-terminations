@@ -1,8 +1,9 @@
 export OMNI_KIT_ACCEPT_EULA := "Y"
 export CUBLAS_WORKSPACE_CONFIG := ":4096:8"
 
-train:
-    mkdir -p ./logs/clean_rl && python scripts/clean_rl/train.py --task=CaT-Go2-Rough-Terrain-v0 --headless --num_envs=7500 2>&1 | tee ./logs/clean_rl/train-$(date +"%Y-%m-%d-%H:%M:%S").log
+train num_envs="7500":
+    mkdir -p ./logs/clean_rl
+    python scripts/clean_rl/train.py --task=CaT-Go2-Rough-Terrain-v0 --headless --num_envs={{num_envs}} 2>&1 | tee ./logs/clean_rl/train-$(date +"%Y-%m-%d-%H:%M:%S").log
 
 eval run_dir *flags:
     python scripts/eval.py --task=CaT-Go2-Rough-Terrain-Play-v0 --headless --run_dir={{run_dir}} {{flags}}
