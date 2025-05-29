@@ -169,8 +169,9 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
             t_end   = sim_times[b - 1]
             duration = t_end - t_start
             t_mid = 0.5 * (t_start + t_end)
-            ax.text(t_mid, y0 + spacing * 0.5, f"{duration:.3f}s", ha='center', va='center', fontsize=6)
+            ax.text(t_mid, y0 + spacing * 0.5, f"{duration:.3f}s", ha='center', va='center', fontsize=6, rotation=90)
 
+    ax.set_xticks(np.arange(0, sim_times[-1], 1))
     ax.set_yticks([i * spacing for i in range(F)])
     ax.set_yticklabels(foot_labels)
     ax.margins(x=0.005)
