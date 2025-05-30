@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import time
 from functools import partial
+sys.stdout.reconfigure(line_buffering=True)
 print = partial(print, flush=True) # For cluster runs
 import gymnasium as gym
 from isaaclab.app import AppLauncher

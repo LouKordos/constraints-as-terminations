@@ -1,5 +1,6 @@
 export OMNI_KIT_ACCEPT_EULA := "Y"
 export CUBLAS_WORKSPACE_CONFIG := ":4096:8"
+export PYTHONUNBUFFERED := "1"
 
 train num_envs="7500":
     mkdir -p ./logs/clean_rl
