@@ -453,22 +453,22 @@ class ConstraintsCfg:
     # Safety Soft constraints
     joint_torque = ConstraintTerm(
         func=constraints.joint_torque,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={"limit": 20.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
     joint_velocity = ConstraintTerm(
         func=constraints.joint_velocity,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={"limit": 25.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
     joint_acceleration = ConstraintTerm(
         func=constraints.joint_acceleration,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={"limit": 800.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
     action_rate = ConstraintTerm(
         func=constraints.action_rate,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={"limit": 80.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
 
@@ -496,7 +496,7 @@ class ConstraintsCfg:
     # Style constraints
     hip_position = ConstraintTerm(
         func=constraints.relative_joint_position_upper_and_lower_bound_when_moving_forward,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={"limit": 0.3, "names": [".*_hip_joint"], "velocity_deadzone": 0.1},
     )
     base_orientation = ConstraintTerm(
@@ -507,17 +507,17 @@ class ConstraintsCfg:
 
     air_time_lower_bound = ConstraintTerm(
         func=constraints.air_time_lower_bound,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={"limit": 0.1, "names": [".*_foot"], "velocity_deadzone": 0.1},
     )
     air_time_upper_bound = ConstraintTerm(
         func=constraints.air_time_upper_bound,
-        max_p=0.6,
+        max_p=0.6, # Overwritten by curriculum!
         params={"limit": 0.8, "names": [".*_foot"], "velocity_deadzone": 0.1},
     )
     no_move = ConstraintTerm(
         func=constraints.no_move,
-        max_p=0.1,
+        max_p=0.1, # Overwritten by curriculum!
         params={
             "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
             "velocity_deadzone": 0.1,
@@ -526,7 +526,7 @@ class ConstraintsCfg:
     )
     two_foot_contact = ConstraintTerm(
         func=constraints.n_foot_contact,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={
             "names": [".*_foot"],
             "number_of_desired_feet": 2,
