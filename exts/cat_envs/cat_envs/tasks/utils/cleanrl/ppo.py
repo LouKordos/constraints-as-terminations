@@ -104,7 +104,7 @@ class Agent(nn.Module):
         if action is None:
             action = probs.sample()
             # action = action_mean
-        return (action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x),)
+        return (action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x), action_std)
 
 
 def PPO(envs, ppo_cfg, run_path):
@@ -198,6 +198,9 @@ def PPO(envs, ppo_cfg, run_path):
     values = torch.zeros((NUM_STEPS, NUM_ENVS), dtype=torch.float).to(device)
     advantages = torch.zeros_like(rewards, dtype=torch.float).to(device)
 
+    joint_names = envs.unwrapped.scene["robot"].data.joint_names
+    num_joints = len(joint_names)
+
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
@@ -216,6 +219,7 @@ def PPO(envs, ppo_cfg, run_path):
             lrnow = frac * LEARNING_RATE
             optimizer.param_groups[0]["lr"] = lrnow
 
+        action_std_buffer = [] # Buffer over sim steps, then take mean across env and time steps
         # Collecting trajectories for NUM_STEPS before updating the networks
         for step in range(0, NUM_STEPS):
             global_step += NUM_ENVS
@@ -225,7 +229,8 @@ def PPO(envs, ppo_cfg, run_path):
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
-                action, logprob, _, value = agent.get_action_and_value(next_obs)
+                action, logprob, _, value, action_std = agent.get_action_and_value(next_obs)
+                action_std_buffer.append(action_std.detach().cpu().numpy())
                 values[step] = value.flatten()
             actions[step] = action
             logprobs[step] = logprob
@@ -370,7 +375,7 @@ def PPO(envs, ppo_cfg, run_path):
                 end = start + MINIBATCH_SIZE
                 mb_inds = b_inds[start:end]
 
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])
+                _, newlogprob, entropy, newvalue, _ = agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
@@ -420,6 +425,15 @@ def PPO(envs, ppo_cfg, run_path):
         writer.add_scalar("Loss/mean_v_loss", sum_v_loss / num_updates, iteration)
         writer.add_scalar("Loss/mean_surrogate_loss", sum_surrogate_loss / num_updates, iteration)
         writer.add_scalar("Loss/learning_rate", optimizer.param_groups[0]["lr"], iteration)
+
+        stacked_action_std_np = np.stack(action_std_buffer, axis=0).reshape(-1, num_joints)
+        mean_per_joint = stacked_action_std_np.mean(axis=0)
+        std_per_joint  = stacked_action_std_np.std(axis=0)
+        for j, name in enumerate(joint_names):
+            # Sanitize joint name to avoid W&B hierarchy issues (slashes, spaces, etc.)
+            sanitized = name.replace("/", "_").replace(" ", "_")
+            writer.add_scalar(f"action_std/{sanitized}/mean", mean_per_joint[j], iteration)
+            writer.add_scalar(f"action_std/{sanitized}/std", std_per_joint[j], iteration)
 
         if (iteration + 1) % ppo_cfg.save_interval == 0:
             model_path = f"{run_path}/model_{iteration}.pt"
