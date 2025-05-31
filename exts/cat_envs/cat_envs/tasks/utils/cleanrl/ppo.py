@@ -278,9 +278,9 @@ def PPO(envs, ppo_cfg, run_path):
                     exit(0)
 
         # Logging/Analytics, adapted from rslrl
-        for key in ep_infos[0]:
+        for key in ep_infos[0]: # Get keys to iterate over
             infotensor = torch.tensor([], device=device)
-            for ep_info in ep_infos:
+            for ep_info in ep_infos: # Iterate over each time step
                 # handle scalar and zero dimensional tensor infos
                 if key not in ep_info:
                     continue
