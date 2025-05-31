@@ -232,11 +232,6 @@ def _plot_foot_contact_force_per_foot(sim_times, contact_forces_array, foot_labe
     with open(os.path.join(pickle_dir, 'foot_contact_force_each.pickle'), 'wb') as f:
         pickle.dump(fig, f)
 
-import os
-import pickle
-import numpy as np
-import matplotlib.pyplot as plt
-
 def _plot_hist_contact_forces_grid(contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE):
     """
     Plots a 2×2 grid of histograms of contact forces for each foot, showing only forces > 0 N.
@@ -597,7 +592,6 @@ def _plot_gait_diagram(contact_state_array, sim_times, reset_times,
 # Violin-plot helpers  (add just below the histogram helpers)
 # ----------------------------------------------------------------------------------------------------------------------
 
-import numpy as np  # already imported at top; placed again here for clarity – duplicate import is harmless
 
 def _plot_violin_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col,
                             metric_to_unit_mapping, output_dir, pickle_dir):
