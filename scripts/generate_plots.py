@@ -192,6 +192,31 @@ def get_leg_linestyle(joint_name):
     elif joint_name.startswith("RR") or joint_name.startswith("HR"):
         return "dashdot"
 
+# recognised prefixes for the four legs
+_leg_prefixes = [
+    ("FL_",),                     	# 0 = front-left
+    ("FR_",),                     	# 1 = front-right
+    ("RL_", "HL_"),               	# 2 = rear/​hind-left
+    ("RR_", "HR_"),               	# 3 = rear/​hind-right
+]
+
+# -- accepted substrings for each joint "column" --------
+JOINT_TYPE_SYNONYMS = {
+    0: ("hip",  "haa"),      	# 0th column  = hip  / HAA  (ab-ad)
+    1: ("thigh","hfe"),      	# 1st column  = thigh/ HFE  (flex-ext)
+    2: ("calf", "kfe"),      	# 2nd column  = calf / KFE  (knee flex-ext)
+}
+
+def _column_from_name(jname: str) -> int | None:
+    """
+    Return 0,1,2 depending on which set of synonyms the name matches, else None.
+    """
+    low = jname.lower()
+    for col, keys in JOINT_TYPE_SYNONYMS.items():
+        if any(k in low for k in keys):
+            return col
+    raise ValueError("Could not determine joint row/col for plotting based on names")
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Top-level plotting helpers (must be picklable for multiprocessing)
 # ----------------------------------------------------------------------------------------------------------------------
@@ -793,11 +818,29 @@ def generate_plots(data, metrics, output_dir, interactive=False):
     contact_state_array = data['contact_state_array']
     constraint_bounds = data['constraint_bounds'].item()
     joint_names = list(data['joint_names'])
-    leg_row = data['leg_row'].tolist()
-    leg_col = data['leg_col'].tolist()
     air_segments_per_foot = data['air_segments_per_foot'].item()
     combined_energy = data['combined_energy']
     cost_of_transport_time_series = data['cost_of_transport_time_series']
+
+    # build two look-up tables
+    leg_row  	= [None] * len(joint_names) # index 0-3
+    leg_col  	= [None] * len(joint_names) # index 0-2
+    foot_from_joint = [None] * len(joint_names)
+
+    for j, name in enumerate(joint_names):
+        # find which leg
+        for row, prefixes in enumerate(_leg_prefixes):
+            if any(name.startswith(p) for p in prefixes):
+                leg_row[j] = row
+                foot_from_joint[j] = row # same index as contact_state columns
+                break
+        # find column inside that leg
+        leg_col[j] = _column_from_name(name)
+
+    print("joint names: ", joint_names)
+    print("leg_row:", leg_row)
+    print("leg_col:", leg_col)
+    print("foot_from_joint:", foot_from_joint)
 
     # Build metrics dict
     metrics = {
