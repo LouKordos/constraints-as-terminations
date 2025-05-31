@@ -686,7 +686,8 @@ def main():
         'fixed_command_scenarios': fixed_command_scenarios,
         'random_sim_steps': args.random_sim_step_length,
         'total_sim_steps': total_sim_steps,
-        'seed': env_cfg.seed
+        'seed': env_cfg.seed,
+        'used_checkpoint_path': checkpoint_path
     }
     summary_path = os.path.join(eval_base_dir, "metrics_summary.json")
     with open(summary_path, 'w') as summary_file:
