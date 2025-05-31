@@ -5,7 +5,6 @@ from datetime import datetime
 from isaaclab.app import AppLauncher
 import cli_args  # isort: skip
 from functools import partial
-import sys
 sys.stdout.reconfigure(line_buffering=True)
 print = partial(print, flush=True) # For cluster runs
 

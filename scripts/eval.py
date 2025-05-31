@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import time
 from functools import partial
+import sys
 sys.stdout.reconfigure(line_buffering=True)
 print = partial(print, flush=True) # For cluster runs
 import gymnasium as gym
@@ -14,7 +15,6 @@ from isaaclab.app import AppLauncher
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from tqdm import tqdm
-import sys
 import fcntl
 from queue import Queue
 import threading
