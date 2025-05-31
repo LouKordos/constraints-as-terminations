@@ -440,7 +440,7 @@ class RewardsCfg:
     minimize_power = RewTerm(
         func=rewards.joint_power,
         weight=0.0, # Updated by curriculum
-        params={"scaling_factor": 0.02}
+        params={"scaling_factor": 0.02} # May be updated in ppo.py, check carefully!
     )
 
 # Never forget to also add a curriculum term for each added constraint
