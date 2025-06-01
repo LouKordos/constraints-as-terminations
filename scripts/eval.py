@@ -144,6 +144,50 @@ def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[fl
 
     return bounds
 
+def compute_histogram(arr: np.ndarray, bin_edges: np.ndarray) -> np.ndarray:
+    """
+    Given a 1D numpy array `arr` and a shared 1D array of bin_edges of length B+1,
+    returns a normalized histogram vector of length B (summing to 1.0).
+    """
+    counts, _ = np.histogram(arr, bins=bin_edges)
+    total = counts.sum()
+    if total > 0:
+        return counts.astype(np.float64) / float(total)
+    else:
+        # If the array was empty or all zeros, return uniform or zeros.
+        # Here we return zeros, so that TVD with another zero‐histogram is 0.
+        return np.zeros_like(counts, dtype=np.float64)
+
+def total_variation_distance(p: np.ndarray, q: np.ndarray) -> float:
+    """
+    Given two 1D numpy vectors p and q (same length, non-negative, each summing to 1),
+    compute TVD = 0.5 * sum |p_i - q_i|.
+    """
+    return 0.5 * np.sum(np.abs(p - q))
+
+def optimal_bin_edges(samples: np.ndarray, rule: str = "fd", min_bins: int = 20, max_bins: int = 250) -> np.ndarray:
+    """
+    Return a 1-D array of bin edges derived from `samples`
+    using either 'fd' (Freedman–Diaconis) or 'scott'.
+    """
+    n = samples.size
+    data_min, data_max = samples.min(), samples.max()
+    data_range = data_max - data_min
+
+    if rule == "fd":
+        iqr = np.subtract(*np.percentile(samples, [75, 25]))
+        h = 2.0 * iqr / np.cbrt(n) if iqr > 0 else None
+    elif rule == "scott":
+        h = 3.5 * samples.std(ddof=1) / np.cbrt(n)
+    else:
+        raise ValueError("rule must be 'fd' or 'scott'")
+
+    if h is None or h <= 0:
+        h = 3.5 * samples.std(ddof=1) / np.cbrt(n)   # Scott fallback
+
+    num_bins = int(np.clip(np.ceil(data_range / h), min_bins, max_bins))
+    return np.linspace(data_min, data_max, num_bins + 1)
+
 def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
@@ -619,6 +663,45 @@ def main():
             'stddev': float(np.std(joint_column))
         }
 
+    # --- symmetry: total-variation distance per paired joint -------------
+    print("Computing joint-symmetry TVD …")
+    # build a quick look-up: joint_type -> {side}{row} e.g. "calf"->{"FL":0, …}
+    joint_indices = {jn: idx for idx, jn in enumerate(joint_names)}
+
+    dofs = ["hip_joint", "thigh_joint", "calf_joint"]
+    gait_symmetry_tvd_by_joint = {dof: {} for dof in dofs}
+    for dof in dofs:
+        combined_samples = np.concatenate([joint_positions_array[:, joint_indices[f"{sr}_{dof}"]] for sr in ("FL","FR","RL","RR")])
+        bin_edges = optimal_bin_edges(combined_samples, rule="fd")
+        print(f"Selected bin_edges={len(bin_edges)} for dof={dof}")
+
+        # helper – return pmf for one joint
+        def pmf(sr): 
+            idx = joint_indices[f"{sr}_{dof}"]
+            return compute_histogram(joint_positions_array[:, idx], bin_edges)
+
+        gait_symmetry_tvd_by_joint[dof]["front_left_front_right"] = total_variation_distance(pmf("FL"), pmf("FR"))
+        gait_symmetry_tvd_by_joint[dof]["rear_left_rear_right"] = total_variation_distance(pmf("RL"), pmf("RR"))
+        gait_symmetry_tvd_by_joint[dof]["front_left_rear_left"] = total_variation_distance(pmf("FL"), pmf("RL"))
+        gait_symmetry_tvd_by_joint[dof]["front_right_rear_right"] = total_variation_distance(pmf("FR"), pmf("RR"))
+
+    aggregate_joint_symmetry_tvd = {
+        k: float(np.mean([gait_symmetry_tvd_by_joint[d][k] for d in dofs]))
+        for k in ("front_left_front_right", "rear_left_rear_right", "front_left_rear_left", "front_right_rear_right")
+    }
+
+    # --- axis-level aggregates -------------------------------------------
+    axis_symmetry_tvd = {
+        "left_vs_right": float(np.mean([
+            aggregate_joint_symmetry_tvd["front_left_front_right"],
+            aggregate_joint_symmetry_tvd["rear_left_rear_right"],
+        ])),
+        "front_vs_rear": float(np.mean([
+            aggregate_joint_symmetry_tvd["front_left_rear_left"],
+            aggregate_joint_symmetry_tvd["front_right_rear_right"],
+        ])),
+    }
+
     # Save summary metrics
     summary_metrics = {
         'cumulative_unscaled_raw_reward': cumulative_unscaled_raw_reward,
@@ -637,6 +720,9 @@ def main():
         'total_energy_consumption': float(combined_energy[-1]),
         'mean_cost_of_transport': mean_cost_of_transport,
         'constraint_violations_percent': constraint_violations_percent,
+        'gait_symmetry_tvd_by_joint': gait_symmetry_tvd_by_joint,
+        'aggregate_joint_symmetry_tvd': aggregate_joint_symmetry_tvd,
+        'axis_symmetry_tvd': axis_symmetry_tvd,
         'fixed_command_scenarios': fixed_command_scenarios,
         'random_sim_steps': args.random_sim_step_length,
         'total_sim_steps': total_sim_steps,
