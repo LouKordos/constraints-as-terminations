@@ -36,8 +36,6 @@ def parse_arguments():
                         help="Optionally specify the model save checkpoint number instead of automatically using the last saved one.")
     parser.add_argument("--random_sim_step_length", type=int, default=4000,
                         help="Number of steps to run with random commands and spawn points. Standardized tests like standing and walking forward will always run.")
-    parser.add_argument("--disable_fabric", action="store_true", default=False,
-                        help="Disable fabric and use USD I/O operations.")
     parser.add_argument("--num_envs", type=int, default=1,
                         help="Number of environments to simulate.")
     parser.add_argument("--task", type=str, required=True,
@@ -210,6 +208,7 @@ def main():
 
     # Launch Isaac Lab environment
     args.device = "cuda" # Using CPU Increases iterations/sec in some cases and reduces VRAM usage which allows parallel runs. Replace with "cuda" if you want pure GPU, because on more recent GPUs this might be faster depending on your hardware
+    args.disable_fabric = True if args.device == "cpu" else False
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
     from isaaclab.utils.dict import print_dict
