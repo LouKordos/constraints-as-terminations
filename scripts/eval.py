@@ -260,7 +260,7 @@ def main():
     os.makedirs(plots_directory, exist_ok=True)
     os.makedirs(trajectories_directory, exist_ok=True)
 
-    fixed_command_sim_steps = 600
+    fixed_command_sim_steps = 500
     fixed_command_scenarios = [
         ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("pure_spin", torch.tensor([0.0, 0.0, 0.5], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
