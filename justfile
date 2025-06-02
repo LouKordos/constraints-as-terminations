@@ -14,7 +14,8 @@ eval-all logs_root_dir num_parallel_jobs:
     @if command -v parallel >/dev/null 2>&1; then \
         find {{logs_root_dir}} -mindepth 1 -maxdepth 1 -type d -print0 | parallel --keep-order --line-buffer -0 -j {{num_parallel_jobs}} just eval {}; \
     else \
-        >&2 echo "Warning: GNU parallel not found; running sequentially."; find {{logs_root_dir}} -mindepth 1 -maxdepth 1 -type d -print0 | xargs -0 -n1 -I{} just eval {}; \
+        >&2 echo "Warning: GNU parallel not found; running sequentially."; \
+        for dir in "{{logs_root_dir}}"/*/; do just eval "$dir"; done; \
     fi
 
 generate_plots data_file *flags:
