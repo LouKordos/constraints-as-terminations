@@ -24,6 +24,7 @@ import yaml
 from typing import Dict, Tuple, Optional, List
 
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8" # Determinism
+os.environ["OMNICLIENT_HUB_MODE"] = "disabled"
 
 eval_script_path = os.path.dirname(os.path.abspath(__file__))
 
