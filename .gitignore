@@ -34,3 +34,5 @@ outputs/
 runs*
 *.npy
 constraints-as-terminations-logs-and-runs.tar.zst
+job.*.out
+job.*.err
