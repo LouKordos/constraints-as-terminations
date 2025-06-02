@@ -17,7 +17,6 @@ import matplotlib.animation as animation
 from tqdm import tqdm
 import fcntl
 from queue import Queue
-import threading
 import subprocess
 import os
 import re
@@ -343,18 +342,8 @@ def main():
     ffmpeg_cmd = ["ffmpeg", "-y", "-hwaccel", "cuda", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{frame_width}x{frame_height}", "-framerate", str(frame_rate), "-i", "pipe:0", "-c:v", "hevc_nvenc", "-preset", "slow", "-movflags", "+use_metadata_tags", "-metadata", f"env_name={env_name}", video_output_path]
     ffmpeg_process_log_path = os.path.join(eval_base_dir, "ffmpeg_encode.log")
     with open(ffmpeg_process_log_path, "w") as ffmpeg_process_logfile:
+        print(f"Starting ffmpeg process={ffmpeg_cmd}")
         ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdout=ffmpeg_process_logfile, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, bufsize=4*1024*1024)
-    # enlarge kernel pipe so the writer thread gets big, contiguous chunks
-    # fcntl.fcntl(ffmpeg_proc.stdin, fcntl.F_SETPIPE_SZ, 16*1024*1024)    
-    frame_q = Queue(maxsize=frame_storage_interval + 2)
-    def frame_writer(q, pipe):
-        while True:
-            buf = q.get()
-            if buf is None:
-                break
-            pipe.write(buf)
-        pipe.close()
-    threading.Thread(target=frame_writer, args=(frame_q, ffmpeg_process.stdin), daemon=True).start()
 
     for t in tqdm(range(total_sim_steps)):
         # These should only ever run at the end of eval / after random sampling because set_fixed_velocity_command breaks random command sampling!
@@ -394,7 +383,8 @@ def main():
         if t % frame_storage_interval == 0:
             raw_frames = env.render()
             for frame in raw_frames:
-                frame_q.put(frame.tobytes())
+                assert frame.shape[:2] == (frame_height, frame_width), "Returned frame does not match specified dimension."
+                ffmpeg_process.stdin.write(frame.tobytes())
 
         scene_robot_data = env.unwrapped.scene['robot'].data
 
@@ -797,13 +787,10 @@ def main():
             }
             traj_file.write(json.dumps(record, indent=4, default=lambda o: o.tolist()) + "\n")
 
-    start = time.time()
     raw_frames = env.render()
     for frame in raw_frames:
-        frame_q.put(frame.tobytes())
-    end = time.time()
-    
-    frame_q.put(None)
+        ffmpeg_process.stdin.write(frame.tobytes())
+    ffmpeg_process.stdin.close()
     ffmpeg_process.wait()
 
     plot_proc.wait()
