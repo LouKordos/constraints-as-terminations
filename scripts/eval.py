@@ -358,7 +358,7 @@ def main():
             policy_observation = obs["policy"]
 
         with torch.no_grad():
-            action, _, _, _, _ = policy_agent.get_action_and_value(policy_agent.obs_rms(policy_observation, update=False))
+            action, _, _, _, _ = policy_agent.get_action_and_value(policy_agent.obs_rms(policy_observation, update=False), use_deterministic_policy=True)
         step_tuple = env.step(action)
         # print(step_tuple)
         next_observation, reward, terminated, truncated, info = step_tuple
