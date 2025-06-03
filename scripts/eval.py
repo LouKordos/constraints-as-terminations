@@ -260,7 +260,7 @@ def main():
     os.makedirs(plots_directory, exist_ok=True)
     os.makedirs(trajectories_directory, exist_ok=True)
 
-    fixed_command_sim_steps = 5
+    fixed_command_sim_steps = 500
     fixed_command_scenarios = [
         ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("pure_spin", torch.tensor([0.0, 0.0, 0.5], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
@@ -328,8 +328,9 @@ def main():
     commanded_velocity_buffer = []
     contact_state_buffer = []
     height_map_buffer = []
-    foot_positions_world_buffer = []
-    foot_positions_body_buffer = []
+    foot_positions_world_frame_buffer = []
+    foot_positions_body_frame_buffer = []
+    foot_positions_contact_frame_buffer = [] # Height above terrain, also called sole frame
 
     cumulative_unscaled_raw_reward = 0.0
     reset_steps = []
@@ -448,12 +449,20 @@ def main():
         height_map_sequence = height_map_grid(env.unwrapped, SceneEntityCfg(name="ray_caster")).cpu().numpy()
         height_map_buffer.append(height_map_sequence[0])
         
+        # This will not account for terrain height, i.e. if the robot is standing on a 1m obstacle, the world foot height will be 1m.
         foot_positions_world = np.stack([scene_robot_data.body_link_pos_w[0, scene_robot_data.body_names.index(link)].cpu().numpy() for link in foot_links])
-        foot_positions_world_buffer.append(foot_positions_world)
+        foot_positions_world_frame_buffer.append(foot_positions_world)
         
         foot_positions_body = env.unwrapped.scene["foot_frame_transformer"].data.target_pos_source[0].cpu().numpy()
-        print(foot_positions_body)
-        foot_positions_body_buffer.append(foot_positions_body)
+        # print(f"foot_positions_body={foot_positions_body}")
+        foot_positions_body_frame_buffer.append(foot_positions_body)
+
+        # Calculate foot height above ground using raycaster sensor in each foot (sole/contact frame)
+        terrain_offset_feet = np.array([[0, 0, env.unwrapped.scene[f"ray_caster_{link_name}"].data.ray_hits_w[:, 0, 2].cpu().item()] for link_name in foot_links])
+        # print(f"terrain_z_feet={terrain_offset_feet}")
+        foot_positions_contact_frame = foot_positions_world - terrain_offset_feet
+        # print(f"foot_positions_contact_frame={foot_positions_contact_frame}")
+        foot_positions_contact_frame_buffer.append(foot_positions_contact_frame)
 
         cumulative_unscaled_raw_reward += reward.mean().item()
         policy_observation = next_observation['policy']
@@ -743,8 +752,9 @@ def main():
         commanded_velocity_array=commanded_velocity_array,
         contact_state_array=contact_state_array,
         height_map_array=np.array(height_map_buffer),
-        foot_positions_world=np.array(foot_positions_world_buffer),
-        foot_positions_body=np.array(foot_positions_body_buffer),
+        foot_positions_world_frame=np.array(foot_positions_world_frame_buffer),
+        foot_positions_body_frame=np.array(foot_positions_body_frame_buffer),
+        foot_positions_contact_frame=np.array(foot_positions_contact_frame_buffer),
         combined_energy=combined_energy,
         energy_per_joint=energy_per_joint,
         power_array=power_array,
@@ -782,7 +792,7 @@ def main():
                 'commanded_velocity': (commanded_velocity_buffer[idx].cpu().numpy().tolist() if isinstance(commanded_velocity_buffer[idx], torch.Tensor) else (commanded_velocity_buffer[idx].tolist() if isinstance(commanded_velocity_buffer[idx], np.ndarray) else commanded_velocity_buffer[idx])),
                 'contact_state': contact_state_buffer[idx].tolist(),
                 'height_map': height_map_buffer[idx].tolist(),
-                'foot_positions_world': foot_positions_world_buffer[idx].tolist(),
+                'foot_positions_world': foot_positions_world_frame_buffer[idx].tolist(),
             }
             traj_file.write(json.dumps(record, indent=4, default=lambda o: o.tolist()) + "\n")
 

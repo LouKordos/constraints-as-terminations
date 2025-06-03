@@ -35,6 +35,7 @@ from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 from isaaclab.sensors.ray_caster import RayCasterCfg, patterns
+from isaaclab.sensors.frame_transformer import FrameTransformerCfg
 
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 import cat_envs.tasks.utils.cat.constraints as constraints
@@ -763,6 +764,55 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
         #     func=force_hard_terrain,
         #     mode="startup",  # runs once at environment startup
         # )
+
+        # Used to get foot height above terrain ("sole frame")
+        self.scene.ray_caster_FL_foot = RayCasterCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/FL_foot",
+            update_period=self.sim.dt,
+            offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)), # Starting point 1m above base, doesn't really matter
+            mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
+            attach_yaw_only=True,
+            pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
+            debug_vis=True,
+        )
+        self.scene.ray_caster_FR_foot = RayCasterCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/FR_foot",
+            update_period=self.sim.dt,
+            offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)), # Starting point 1m above base, doesn't really matter
+            mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
+            attach_yaw_only=True,
+            pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
+            debug_vis=True,
+        )
+        self.scene.ray_caster_RL_foot = RayCasterCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/RL_foot",
+            update_period=self.sim.dt,
+            offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)), # Starting point 1m above base, doesn't really matter
+            mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
+            attach_yaw_only=True,
+            pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
+            debug_vis=True,
+        )
+        self.scene.ray_caster_RR_foot = RayCasterCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/RR_foot",
+            update_period=self.sim.dt,
+            offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)), # Starting point 1m above base, doesn't really matter
+            mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
+            attach_yaw_only=True,
+            pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
+            debug_vis=True,
+        )
+
+        self.scene.foot_frame_transformer = FrameTransformerCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/base",
+            target_frames=[
+                FrameTransformerCfg.FrameCfg(prim_path="{ENV_REGEX_NS}/Robot/FL_foot"),
+                FrameTransformerCfg.FrameCfg(prim_path="{ENV_REGEX_NS}/Robot/FR_foot"),
+                FrameTransformerCfg.FrameCfg(prim_path="{ENV_REGEX_NS}/Robot/RL_foot"),
+                FrameTransformerCfg.FrameCfg(prim_path="{ENV_REGEX_NS}/Robot/RR_foot"),
+            ],
+            debug_vis=False
+        )
 
         # set velocity command
         self.commands.base_velocity.ranges.lin_vel_x = (-0.3, 1.0)
