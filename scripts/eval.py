@@ -773,29 +773,6 @@ def main():
     with open(plot_process_log_path, "w") as plot_process_logfile:
         plot_proc = subprocess.Popen(plot_cmd, stdout=plot_process_logfile, stderr=subprocess.STDOUT)
 
-    # Write trajectories to JSONL
-    trajectories_path = os.path.join(trajectories_directory, 'trajectory.jsonl')
-    with open(trajectories_path, 'w') as traj_file:
-        for idx in range(total_sim_steps):
-            record = {
-                'timestep': int(idx),
-                'joint_positions': joint_positions_buffer[idx].tolist(),
-                'joint_velocities': joint_velocities_buffer[idx].tolist(),
-                'joint_accelerations': joint_accelerations_buffer[idx].tolist(),
-                'action_rate': action_rate_buffer[idx].tolist(),
-                'contact_forces': contact_forces_buffer[idx].tolist(),
-                'joint_torques': joint_torques_buffer[idx].tolist(),
-                'base_position': base_position_buffer[idx].tolist(),
-                'base_orientation': base_orientation_buffer[idx],
-                'base_linear_velocity': base_linear_velocity_buffer[idx].tolist(),
-                'base_angular_velocity': base_angular_velocity_buffer[idx].tolist(),
-                'commanded_velocity': (commanded_velocity_buffer[idx].cpu().numpy().tolist() if isinstance(commanded_velocity_buffer[idx], torch.Tensor) else (commanded_velocity_buffer[idx].tolist() if isinstance(commanded_velocity_buffer[idx], np.ndarray) else commanded_velocity_buffer[idx])),
-                'contact_state': contact_state_buffer[idx].tolist(),
-                'height_map': height_map_buffer[idx].tolist(),
-                'foot_positions_world': foot_positions_world_frame_buffer[idx].tolist(),
-            }
-            traj_file.write(json.dumps(record, indent=4, default=lambda o: o.tolist()) + "\n")
-
     raw_frames = env.render()
     for frame in raw_frames:
         ffmpeg_process.stdin.write(frame.tobytes())
