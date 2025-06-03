@@ -186,6 +186,22 @@ def optimal_bin_edges(samples: np.ndarray, rule: str = "fd", min_bins: int = 20,
     num_bins = int(np.clip(np.ceil(data_range / h), min_bins, max_bins))
     return np.linspace(data_min, data_max, num_bins + 1)
 
+def get_contact_segments(in_contact: np.ndarray) -> list[tuple[int, int]]:
+    """
+    Return a list of (start_idx, end_idx) indices for every **contact/stance**
+    segment of a single foot.  `in_contact` is a 1-D Boolean array over time.
+    """
+    segments, start = [], None
+    for t, val in enumerate(in_contact):
+        if val and start is None:
+            start = t
+        elif not val and start is not None:
+            segments.append((start, t)) # [start, end)
+            start = None
+    if start is not None: # hanging segment
+        segments.append((start, len(in_contact)))
+    return segments
+
 def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
@@ -488,6 +504,9 @@ def main():
     base_angular_velocity_array = np.vstack(base_angular_velocity_buffer)
     contact_state_array = np.vstack(contact_state_buffer)
     commanded_velocity_array = np.vstack([cv.cpu().numpy() if isinstance(cv, torch.Tensor) else np.asarray(cv) for cv in commanded_velocity_buffer])
+    foot_positions_world_frame_array = np.array(foot_positions_world_frame_buffer)
+    foot_positions_body_frame_array = np.array(foot_positions_body_frame_buffer)
+    foot_positions_contact_frame_array = np.array(foot_positions_contact_frame_buffer)
 
     # --- energy & cost-of-transport ------------------------------------
     # instantaneous joint power: torque (Nm) * angular velocity (rad/s)
@@ -596,15 +615,15 @@ def main():
         per_joint_summary[jn] = {}
         for metric_name, data in metrics.items():
             # data is shape (T, J); select column j → shape (T,)
-            joint_column = data[:, j]
+            foot_column = data[:, j]
             per_joint_summary[jn][metric_name] = {
-                'mean': float(joint_column.mean()),
-                'min': float(joint_column.min()),
-                'max': float(joint_column.max()),
-                'median': float(np.median(joint_column)),
-                '90th_percentile': float(np.percentile(joint_column, 90)),
-                '99th_percentile': float(np.percentile(joint_column, 99)),
-                'stddev': float(np.std(joint_column))
+                'mean': float(foot_column.mean()),
+                'min': float(foot_column.min()),
+                'max': float(foot_column.max()),
+                'median': float(np.median(foot_column)),
+                '90th_percentile': float(np.percentile(foot_column, 90)),
+                '99th_percentile': float(np.percentile(foot_column, 99)),
+                'stddev': float(np.std(foot_column))
             }
 
     # --- build per‐foot air‐time summaries ----------------------------------
@@ -652,15 +671,15 @@ def main():
     # contact_forces_array is shape (T, F)
     contact_force_summary: Dict[str, Dict[str, float]] = {}
     for i, label in enumerate(foot_labels):
-        joint_column = contact_forces_array[:, i]
+        foot_column = contact_forces_array[:, i]
         contact_force_summary[label] = {
-            'mean':             float(joint_column.mean()),
-            'min':              float(joint_column.min()),
-            'max':              float(joint_column.max()),
-            'median':           float(np.median(joint_column)),
-            '90th_percentile':  float(np.percentile(joint_column, 90)),
-            '99th_percentile':  float(np.percentile(joint_column, 99)),
-            'stddev': float(np.std(joint_column))
+            'mean':             float(foot_column.mean()),
+            'min':              float(foot_column.min()),
+            'max':              float(foot_column.max()),
+            'median':           float(np.median(foot_column)),
+            '90th_percentile':  float(np.percentile(foot_column, 90)),
+            '99th_percentile':  float(np.percentile(foot_column, 99)),
+            'stddev': float(np.std(foot_column))
         }
 
     # --- symmetry: total-variation distance per paired joint -------------
@@ -702,6 +721,61 @@ def main():
         ])),
     }
 
+    max_step_height_per_foot: dict[str, list[float]] = {lbl: [] for lbl in foot_labels}
+    step_length_per_foot: dict[str, list[float]] = {lbl: [] for lbl in foot_labels}
+    foot_heights_contact = foot_positions_contact_frame_array[:, :, 2]
+
+    for foot_id, foot_label in enumerate(foot_labels):
+        in_contact = contact_state_array[:, foot_id].astype(bool)
+        stance_segments = get_contact_segments(in_contact)
+
+        # ‣ max height during **swing** (= between stance segments)
+        for (start_0, end_0), (start_1, _) in zip(stance_segments, stance_segments[1:]):
+            # Skip if any reset index r lies in [end_0, start_1]
+            if any(end_0 <= r < start_1 for r in reset_steps):
+                continue
+            # swing is [end0, start1)
+            if start_1 - end_0 > 0:
+                max_height = np.nanmax(foot_heights_contact[end_0:start_1, foot_id])
+                if not np.isnan(max_height):
+                    max_step_height_per_foot[foot_label].append(float(max_height))
+
+        # ‣ step length = ΔXY world-frame between consecutive stance starts
+        for (previous_start, _), (next_start, _) in zip(stance_segments, stance_segments[1:]):
+            if any(previous_start < r <= next_start for r in reset_steps):
+                continue
+            p0 = foot_positions_world_frame_array[previous_start, foot_id, :2]
+            p1 = foot_positions_world_frame_array[next_start, foot_id, :2]
+            distance = float(np.linalg.norm((p1-p0)))
+            if distance < 1.5: # If distance > 1.5m, it was invalidated by a reset so we filter
+                step_length_per_foot[foot_label].append(distance)
+
+    step_length_summary = {}
+    for i, label in enumerate(foot_labels):
+        step_lengths = np.array(step_length_per_foot[label.replace("_", " ")])
+        step_length_summary[label] = {
+            'mean':             float(step_lengths.mean()),
+            'min':              float(step_lengths.min()),
+            'max':              float(step_lengths.max()),
+            'median':           float(np.median(step_lengths)),
+            '90th_percentile':  float(np.percentile(step_lengths, 90)),
+            '99th_percentile':  float(np.percentile(step_lengths, 99)),
+            'stddev': float(np.std(step_lengths))
+        }
+
+    step_height_summary = {}
+    for i, label in enumerate(foot_labels):
+        step_heights = np.array(max_step_height_per_foot[label.replace("_", " ")])
+        step_height_summary[label] = {
+            'mean':             float(step_heights.mean()),
+            'min':              float(step_heights.min()),
+            'max':              float(step_heights.max()),
+            'median':           float(np.median(step_heights)),
+            '90th_percentile':  float(np.percentile(step_heights, 90)),
+            '99th_percentile':  float(np.percentile(step_heights, 99)),
+            'stddev': float(np.std(step_heights))
+        }
+
     # Save summary metrics
     summary_metrics = {
         'cumulative_unscaled_raw_reward': cumulative_unscaled_raw_reward,
@@ -713,6 +787,8 @@ def main():
         'per_joint_summary': per_joint_summary,
         'air_time_seconds_per_foot': air_time_summary,
         'contact_force_summary': contact_force_summary,
+        'step_length_summary': step_length_summary,
+        'step_height_summary': step_height_summary,
         'energy_consumption_per_joint': {
             jn: float(energy_per_joint[-1, j])
             for j, jn in enumerate(joint_names)
@@ -751,10 +827,12 @@ def main():
         base_angular_velocity_array=base_angular_velocity_array,
         commanded_velocity_array=commanded_velocity_array,
         contact_state_array=contact_state_array,
+        max_step_height_per_foot=np.array(max_step_height_per_foot),
+        step_length_per_foot=np.array(step_length_per_foot),
         height_map_array=np.array(height_map_buffer),
-        foot_positions_world_frame=np.array(foot_positions_world_frame_buffer),
-        foot_positions_body_frame=np.array(foot_positions_body_frame_buffer),
-        foot_positions_contact_frame=np.array(foot_positions_contact_frame_buffer),
+        foot_positions_world_frame=foot_positions_world_frame_array,
+        foot_positions_body_frame=foot_positions_body_frame_array,
+        foot_positions_contact_frame=foot_positions_contact_frame_array,
         combined_energy=combined_energy,
         energy_per_joint=energy_per_joint,
         power_array=power_array,

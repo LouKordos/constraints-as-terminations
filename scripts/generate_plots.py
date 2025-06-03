@@ -183,22 +183,6 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
     fig.savefig(output_path, dpi=600)
     return fig
 
-def get_contact_segments(in_contact: np.ndarray) -> list[tuple[int, int]]:
-    """
-    Return a list of (start_idx, end_idx) indices for every **contact/stance**
-    segment of a single foot.  `in_contact` is a 1-D Boolean array over time.
-    """
-    segments, start = [], None
-    for t, val in enumerate(in_contact):
-        if val and start is None:
-            start = t
-        elif not val and start is not None:
-            segments.append((start, t)) # [start, end)
-            start = None
-    if start is not None: # hanging segment
-        segments.append((start, len(in_contact)))
-    return segments
-
 def get_leg_linestyle(joint_name):
     if joint_name.startswith("FL"):
         return "solid"
@@ -975,37 +959,11 @@ def generate_plots(data, metrics, output_dir, interactive=False):
     foot_positions_body_frame    = data['foot_positions_body_frame'] # (T,4,3)
     foot_positions_contact_frame = data['foot_positions_contact_frame'] # (T,4,3)
     foot_positions_world_frame   = data['foot_positions_world_frame'] # (T,4,3)
-
-    foot_heights_body    = foot_positions_body_frame[:, :, 2] # (T,4)
+    foot_heights_body = foot_positions_body_frame[:, :, 2]
     foot_heights_contact = foot_positions_contact_frame[:, :, 2]
-
-    max_step_height_per_foot: dict[str, list[float]] = {lbl: [] for lbl in foot_labels}
-    step_length_per_foot: dict[str, list[float]] = {lbl: [] for lbl in foot_labels}
-
-    for foot_id, foot_label in enumerate(foot_labels):
-        in_contact = contact_state_array[:, foot_id].astype(bool)
-        stance_segments = get_contact_segments(in_contact)
-
-        # ‣ max height during **swing** (= between stance segments)
-        for (start_0, end_0), (start_1, _) in zip(stance_segments, stance_segments[1:]):
-            # Skip if any reset index r lies in [end_0, start_1]
-            if any(end_0 <= r < start_1 for r in reset_step_indices):
-                continue
-            # swing is [end0, start1)
-            if start_1 - end_0 > 0:
-                max_height = np.nanmax(foot_heights_contact[end_0:start_1, foot_id])
-                if not np.isnan(max_height):
-                    max_step_height_per_foot[foot_label].append(float(max_height))
-
-        # ‣ step length = ΔXY world-frame between consecutive stance starts
-        for (previous_start, _), (next_start, _) in zip(stance_segments, stance_segments[1:]):
-            if any(previous_start < r <= next_start for r in reset_step_indices):
-                continue
-            p0 = foot_positions_world_frame[previous_start, foot_id, :2]
-            p1 = foot_positions_world_frame[next_start, foot_id, :2]
-            distance = float(np.linalg.norm((p1-p0)))
-            if distance < 1: # If distance > 1, it was invalidated by a reset so we filter
-                step_length_per_foot[foot_label].append(distance)
+    step_length_per_foot = data["step_length_per_foot"].item() # Extract raw dict from numpy array
+    max_step_height_per_foot = data["max_step_height_per_foot"].item() # Extract raw dict from numpy array
+    
 
     # build two look-up tables
     leg_row  	= [None] * len(joint_names) # index 0-3
