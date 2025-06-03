@@ -371,6 +371,7 @@ def main():
             spawn_point_pos, spawn_point_quat = scenario[2]
             print(f"Resetting env and setting fixed command + spawn point for scenario={scenario}...")
             obs, _ = env.reset()
+            reset_steps.append(t)
             teleport_robot(spawn_point_pos, spawn_point_quat)
             set_fixed_velocity_command(fixed_command)
             policy_observation = obs["policy"]

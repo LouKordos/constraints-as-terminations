@@ -637,7 +637,7 @@ def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_time
 
     # Plot running average
     # window_sizes = [25, 50, 300]
-    window_sizes = [300]
+    window_sizes = [50]
     for window_size in window_sizes:
         window = np.ones(window_size) / window_size
         running_average = np.convolve(cost_of_transport_time_series, window, mode='valid')
