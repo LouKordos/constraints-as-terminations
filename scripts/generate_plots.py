@@ -634,6 +634,17 @@ def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_time
     fig, ax = plt.subplots(figsize=FIGSIZE)
     ax.plot(sim_times, cost_of_transport_time_series, label='cost_of_transport', linewidth=linewidth)
     draw_resets(ax, reset_times)
+
+    # Plot running average
+    # window_sizes = [25, 50, 300]
+    window_sizes = [300]
+    for window_size in window_sizes:
+        window = np.ones(window_size) / window_size
+        running_average = np.convolve(cost_of_transport_time_series, window, mode='valid')
+        # Align the running average times. For 'valid', the i-th averaged point corresponds to sim_times[i + (window_size-1)], i.e. the right edge of the window.
+        average_times = sim_times[(window_size - 1):]
+        ax.plot(average_times, running_average, label=f'{window_size}-sample running avg', linewidth=2.0, linestyle="dashed")
+
     ax.set_xlabel('Time / s')
     ax.set_ylabel('Cost of Transport / -')
     ax.set_title('Instantaneous Cost of Transport', fontsize=16)
