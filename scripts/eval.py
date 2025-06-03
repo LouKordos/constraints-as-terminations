@@ -260,7 +260,7 @@ def main():
     os.makedirs(plots_directory, exist_ok=True)
     os.makedirs(trajectories_directory, exist_ok=True)
 
-    fixed_command_sim_steps = 500
+    fixed_command_sim_steps = 5
     fixed_command_scenarios = [
         ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("pure_spin", torch.tensor([0.0, 0.0, 0.5], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
@@ -328,7 +328,8 @@ def main():
     commanded_velocity_buffer = []
     contact_state_buffer = []
     height_map_buffer = []
-    foot_positions_buffer = []
+    foot_positions_world_buffer = []
+    foot_positions_body_buffer = []
 
     cumulative_unscaled_raw_reward = 0.0
     reset_steps = []
@@ -415,7 +416,7 @@ def main():
         action_rate_buffer.append(action_rate)
         previous_action = action_np
 
-        world_position = scene_robot_data.root_link_pos_w[0].cpu().numpy() # world-frame for env 0
+        base_world_position = scene_robot_data.root_link_pos_w[0].cpu().numpy() # world-frame for env 0
         # origin = env.unwrapped.scene.terrain.env_origins[0].cpu().numpy() # terrain origin for env 0
         # relative_position = world_position + origin # position relative to terrain
         # quat_xyzw = scene_data.root_quat_w[0]
@@ -432,7 +433,7 @@ def main():
         yaw = convert_to_signed_angle(yaw_t.cpu().numpy().item())
         # print(f"UNWRAPPED roll={roll}\tUNWRAPPED pitch={pitch}")
 
-        base_position_buffer.append(world_position)
+        base_position_buffer.append(base_world_position)
         base_orientation_buffer.append([yaw, pitch, roll])
 
         linear_velocity = scene_robot_data.root_lin_vel_w[0].cpu().numpy()
@@ -447,12 +448,12 @@ def main():
         height_map_sequence = height_map_grid(env.unwrapped, SceneEntityCfg(name="ray_caster")).cpu().numpy()
         height_map_buffer.append(height_map_sequence[0])
         
-        foot_positions = np.stack([
-            scene_robot_data.body_link_pos_w[0, scene_robot_data.body_names.index(link)].cpu().numpy()
-            for link in foot_links
-        ])
-        # Important: This does not account for body rotation, use a rotation/transformation matrix for proper body frame transformation
-        foot_positions_buffer.append(foot_positions - world_position)
+        foot_positions_world = np.stack([scene_robot_data.body_link_pos_w[0, scene_robot_data.body_names.index(link)].cpu().numpy() for link in foot_links])
+        foot_positions_world_buffer.append(foot_positions_world)
+        
+        foot_positions_body = env.unwrapped.scene["foot_frame_transformer"].data.target_pos_source[0].cpu().numpy()
+        print(foot_positions_body)
+        foot_positions_body_buffer.append(foot_positions_body)
 
         cumulative_unscaled_raw_reward += reward.mean().item()
         policy_observation = next_observation['policy']
@@ -742,7 +743,8 @@ def main():
         commanded_velocity_array=commanded_velocity_array,
         contact_state_array=contact_state_array,
         height_map_array=np.array(height_map_buffer),
-        foot_positions_array=np.array(foot_positions_buffer),
+        foot_positions_world=np.array(foot_positions_world_buffer),
+        foot_positions_body=np.array(foot_positions_body_buffer),
         combined_energy=combined_energy,
         energy_per_joint=energy_per_joint,
         power_array=power_array,
@@ -757,7 +759,7 @@ def main():
     plot_process_log_path  = os.path.join(eval_base_dir, "generate_plots.log")
     generate_plots_script_path = os.path.join(eval_script_path, "generate_plots.py")
     plot_cmd = ["python", generate_plots_script_path, "--data", np_data_file, "--interactive"]
-    print(f"Running plot_cmd={" ".join(plot_cmd)}")
+    print(f"Running plot_cmd={' '.join(plot_cmd)}")
     with open(plot_process_log_path, "w") as plot_process_logfile:
         plot_proc = subprocess.Popen(plot_cmd, stdout=plot_process_logfile, stderr=subprocess.STDOUT)
 
@@ -780,7 +782,7 @@ def main():
                 'commanded_velocity': (commanded_velocity_buffer[idx].cpu().numpy().tolist() if isinstance(commanded_velocity_buffer[idx], torch.Tensor) else (commanded_velocity_buffer[idx].tolist() if isinstance(commanded_velocity_buffer[idx], np.ndarray) else commanded_velocity_buffer[idx])),
                 'contact_state': contact_state_buffer[idx].tolist(),
                 'height_map': height_map_buffer[idx].tolist(),
-                'foot_positions': foot_positions_buffer[idx].tolist(),
+                'foot_positions_world': foot_positions_world_buffer[idx].tolist(),
             }
             traj_file.write(json.dumps(record, indent=4, default=lambda o: o.tolist()) + "\n")
 
