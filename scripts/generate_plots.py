@@ -221,9 +221,7 @@ def _column_from_name(jname: str) -> int | None:
 # Top-level plotting helpers (must be picklable for multiprocessing)
 # ----------------------------------------------------------------------------------------------------------------------
 
-def _plot_foot_contact_force_per_foot(sim_times, contact_forces_array, foot_labels,
-                                      contact_state_array, reset_times, constraint_bounds,
-                                      output_dir, pickle_dir, linewidth):
+def _plot_foot_contact_force_per_foot(sim_times, contact_forces_array, foot_labels, contact_state_array, reset_times, constraint_bounds, output_dir, pickle_dir, linewidth):
     fig, axes = plt.subplots(2, 2, sharex=True, figsize=(16, 8))
     for i, ax in enumerate(axes.flat):
         ax.plot(sim_times, contact_forces_array[:, i],
@@ -322,10 +320,7 @@ def _plot_hist_contact_forces_overview(contact_forces_array, foot_labels, output
     with open(pickle_path, 'wb') as f:
         pickle.dump(fig, f)
 
-def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, leg_col,
-                       foot_from_joint, contact_state_array, reset_times, constraint_bounds,
-                       metric_to_constraint_term_mapping, metric_to_unit_mapping,
-                       output_dir, pickle_dir, linewidth):
+def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, leg_col, foot_from_joint, contact_state_array, reset_times, constraint_bounds, metric_to_constraint_term_mapping, metric_to_unit_mapping, output_dir, pickle_dir, linewidth):
     fig, axes = plt.subplots(4, 3, sharex=True, figsize=(18, 12))
     for j, jn in enumerate(joint_names):
         row, col = leg_row[j], leg_col[j]
@@ -347,8 +342,7 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
                 if val and start is None: start = t
                 if (not val or t == len(in_c)-1) and start is not None:
                     end = t if not val else t+1
-                    ax.axvspan(sim_times[start], sim_times[end-1],
-                               facecolor='gray', alpha=0.5)
+                    ax.axvspan(sim_times[start], sim_times[end-1], facecolor='gray', alpha=0.5)
                     start = None
         ax.set_title(f"Joint {metric_name.replace('_', ' ')} for {jn}", fontsize=16)
         ax.set_ylabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}")
@@ -364,8 +358,7 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
     # overview
     fig_ov, ax = plt.subplots(figsize=(12, 6))
     for j in range(data_arr.shape[1]):
-        ax.plot(sim_times, data_arr[:, j], label=joint_names[j],
-                linewidth=linewidth, linestyle=get_leg_linestyle(joint_names[j]))
+        ax.plot(sim_times, data_arr[:, j], label=joint_names[j], linewidth=linewidth, linestyle=get_leg_linestyle(joint_names[j]))
     if metric_name == 'position':
         for jn in joint_names:
             draw_limits(ax, jn, constraint_bounds)
@@ -382,8 +375,7 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
     with open(os.path.join(pickle_dir, f'joint_{metric_name}_overview.pickle'), 'wb') as f:
         pickle.dump(fig_ov, f)
 
-def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col,
-                          metric_to_unit_mapping, output_dir, pickle_dir):
+def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, metric_to_unit_mapping, output_dir, pickle_dir):
     fig, axes = plt.subplots(4, 3, figsize=(18, 12), sharex=False, sharey=False)
     fig.suptitle(f"Histogram of Joint {metric_name.replace('_', ' ').title()}", fontsize=18)
     for j, jn in enumerate(joint_names):
@@ -400,8 +392,7 @@ def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col,
     with open(os.path.join(pickle_dir, f"hist_joint_{metric_name}_grid.pickle"), 'wb') as f:
         pickle.dump(fig, f)
 
-def _plot_hist_joint_metric(metric_name, data_arr, joint_names,
-                            metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE):
+def _plot_hist_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE):
     fig, ax = plt.subplots(figsize=FIGSIZE)
     for j, jn in enumerate(joint_names):
         ax.hist(data_arr[:, j], bins='auto', alpha=0.6, label=jn)
@@ -416,8 +407,7 @@ def _plot_hist_joint_metric(metric_name, data_arr, joint_names,
     with open(os.path.join(pickle_dir, f"hist_joint_{metric_name}_overview.pickle"), 'wb') as f:
         pickle.dump(fig, f)
 
-def _plot_hist_air_time_per_foot_grid(air_segments_per_foot, foot_labels,
-                                      output_dir, pickle_dir, FIGSIZE):
+def _plot_hist_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output_dir, pickle_dir, FIGSIZE):
     fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
     fig.suptitle("Histogram of Air-Time Durations per Foot", fontsize=18)
     for i, label in enumerate(foot_labels):
@@ -435,8 +425,7 @@ def _plot_hist_air_time_per_foot_grid(air_segments_per_foot, foot_labels,
     with open(os.path.join(pickle_dir, "hist_air_time_grid.pickle"), 'wb') as f:
         pickle.dump(fig, f)
 
-def _plot_hist_air_time_per_foot_single(label, durations,
-                                        output_dir, pickle_dir, FIGSIZE):
+def _plot_hist_air_time_per_foot_single(label, durations, output_dir, pickle_dir, FIGSIZE):
     fig, ax = plt.subplots(figsize=FIGSIZE)
     if durations:
         ax.hist(durations, bins='auto', alpha=0.7)
@@ -451,8 +440,7 @@ def _plot_hist_air_time_per_foot_single(label, durations,
     with open(os.path.join(pickle_dir, f"hist_air_time_{safe_label}.pickle"), 'wb') as f:
         pickle.dump(fig, f)
 
-def _plot_combined_energy(sim_times, combined_energy, reset_times,
-                          output_dir, pickle_dir, FIGSIZE, linewidth):
+def _plot_combined_energy(sim_times, combined_energy, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig, ax = plt.subplots(figsize=FIGSIZE)
     ax.plot(sim_times, combined_energy, label='total_energy', linewidth=linewidth)
     draw_resets(ax, reset_times)
@@ -467,13 +455,12 @@ def _plot_combined_energy(sim_times, combined_energy, reset_times,
     with open(os.path.join(pickle_dir, 'combined_energy_overview.pickle'), 'wb') as f:
         pickle.dump(fig, f)
 
-def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_times,
-                            output_dir, pickle_dir, FIGSIZE, linewidth):
+def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig, ax = plt.subplots(figsize=FIGSIZE)
     ax.plot(sim_times, cost_of_transport_time_series, label='cost_of_transport', linewidth=linewidth)
     draw_resets(ax, reset_times)
     ax.set_xlabel('Time / s')
-    ax.set_ylabel('Cost of transport / -')
+    ax.set_ylabel('Cost of Transport / -')
     ax.set_title('Instantaneous Cost of Transport', fontsize=16)
     ax.set_ylim(0, 6)
     ax.legend()
@@ -484,11 +471,9 @@ def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_time
     with open(os.path.join(pickle_dir, 'cost_of_transport_over_time.pickle'), 'wb') as f:
         pickle.dump(fig, f)
 
-def _plot_hist_cost_of_transport(cost_of_transport_time_series,
-                                 output_dir, pickle_dir, FIGSIZE):
+def _plot_hist_cost_of_transport(cost_of_transport_time_series, output_dir, pickle_dir, FIGSIZE):
     fig, ax = plt.subplots(figsize=FIGSIZE)
-    ax.hist(cost_of_transport_time_series[~np.isnan(cost_of_transport_time_series)],
-            bins='auto', alpha=0.7)
+    ax.hist(cost_of_transport_time_series[~np.isnan(cost_of_transport_time_series)], bins='auto', alpha=0.7)
     ax.set_xlabel('Cost of Transport / -')
     ax.set_xlim(0, 6)
     ax.set_ylabel('Count')
@@ -500,12 +485,10 @@ def _plot_hist_cost_of_transport(cost_of_transport_time_series,
     with open(os.path.join(pickle_dir, 'hist_cot_overview.pickle'), 'wb') as f:
         pickle.dump(fig, f)
 
-def _plot_combined_base_position(sim_times, base_position_array, reset_times,
-                                 output_dir, pickle_dir, FIGSIZE, linewidth):
+def _plot_combined_base_position(sim_times, base_position_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig_bp, axes_bp = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, axis_label in enumerate(['X', 'Y', 'Z']):
-        axes_bp[i].plot(sim_times, base_position_array[:, i],
-                        label=f'position_{axis_label}', linewidth=linewidth)
+        axes_bp[i].plot(sim_times, base_position_array[:, i], label=f'position_{axis_label}', linewidth=linewidth)
         draw_resets(axes_bp[i], reset_times)
         axes_bp[i].set_title(f'World Position {axis_label}')
         axes_bp[i].set_ylabel('Position / m')
@@ -519,12 +502,10 @@ def _plot_combined_base_position(sim_times, base_position_array, reset_times,
     with open(os.path.join(pickle_dir, 'base_position_subplots_world.pickle'), 'wb') as f:
         pickle.dump(fig_bp, f)
 
-def _plot_combined_orientation(sim_times, base_orientation_array, reset_times,
-                               output_dir, pickle_dir, FIGSIZE, linewidth):
+def _plot_combined_orientation(sim_times, base_orientation_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig_bo, axes_bo = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, orient_label in enumerate(['Yaw', 'Pitch', 'Roll']):
-        axes_bo[i].plot(sim_times, base_orientation_array[:, i],
-                        label=orient_label, linewidth=linewidth)
+        axes_bo[i].plot(sim_times, base_orientation_array[:, i], label=orient_label, linewidth=linewidth)
         draw_resets(axes_bo[i], reset_times)
         axes_bo[i].set_ylabel(f'{orient_label} / rad')
         axes_bo[i].set_title(f'World Orientation {orient_label}')
@@ -538,15 +519,12 @@ def _plot_combined_orientation(sim_times, base_orientation_array, reset_times,
     with open(os.path.join(pickle_dir, 'base_orientation_subplots.pickle'), 'wb') as f:
         pickle.dump(fig_bo, f)
 
-def _plot_combined_base_velocity(sim_times, base_linear_velocity_array, commanded_velocity_array,
-                                 reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
+def _plot_combined_base_velocity(sim_times, base_linear_velocity_array, commanded_velocity_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig_blv, axes_blv = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, vel_label in enumerate(['Velocity X', 'Velocity Y', 'Velocity Z']):
-        axes_blv[i].plot(sim_times, base_linear_velocity_array[:, i],
-                         label=vel_label, linewidth=linewidth)
+        axes_blv[i].plot(sim_times, base_linear_velocity_array[:, i], label=vel_label, linewidth=linewidth)
         if i != 2:
-            axes_blv[i].plot(sim_times, commanded_velocity_array[:, i],
-                             linestyle='--', label=f'cmd_{vel_label}', linewidth=linewidth)
+            axes_blv[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f'cmd_{vel_label}', linewidth=linewidth)
         draw_resets(axes_blv[i], reset_times)
         axes_blv[i].set_ylabel(f'{vel_label} / m * sec^(-1)')
         axes_blv[i].set_title(f'Base Linear {vel_label}')
@@ -560,15 +538,12 @@ def _plot_combined_base_velocity(sim_times, base_linear_velocity_array, commande
     with open(os.path.join(pickle_dir, 'base_linear_velocity_subplots.pickle'), 'wb') as f:
         pickle.dump(fig_blv, f)
 
-def _plot_combined_base_angular_velocities(sim_times, base_angular_velocity_array, commanded_velocity_array,
-                                           reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
+def _plot_combined_base_angular_velocities(sim_times, base_angular_velocity_array, commanded_velocity_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig_bav, axes_bav = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, vel_label in enumerate(['Omega X', 'Omega Y', 'Omega Z']):
-        axes_bav[i].plot(sim_times, base_angular_velocity_array[:, i],
-                         label=vel_label, linewidth=linewidth)
+        axes_bav[i].plot(sim_times, base_angular_velocity_array[:, i], label=vel_label, linewidth=linewidth)
         if i == 2:
-            axes_bav[i].plot(sim_times, commanded_velocity_array[:, i],
-                             linestyle='--', label=f'cmd_{vel_label}', linewidth=linewidth)
+            axes_bav[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f'cmd_{vel_label}', linewidth=linewidth)
         draw_resets(axes_bav[i], reset_times)
         axes_bav[i].set_ylabel(f'{vel_label} / rad * sec^(-1)')
         axes_bav[i].set_title(f'Base {vel_label}')
@@ -582,17 +557,12 @@ def _plot_combined_base_angular_velocities(sim_times, base_angular_velocity_arra
     with open(os.path.join(pickle_dir, 'base_angular_velocity_subplots.pickle'), 'wb') as f:
         pickle.dump(fig_bav, f)
 
-def _plot_total_base_overview(sim_times, base_position_array, base_orientation_array,
-                              base_linear_velocity_array, base_angular_velocity_array,
-                              reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
+def _plot_total_base_overview(sim_times, base_position_array, base_orientation_array, base_linear_velocity_array, base_angular_velocity_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig_overview, overview_axes = plt.subplots(2, 2, figsize=(20, 16))
-    cats = [base_position_array, base_orientation_array,
-            base_linear_velocity_array, base_angular_velocity_array]
-    titles = ['Base World Position', 'Base Orientation',
-              'Base Linear Velocity', 'Base Angular Velocity']
-    labels = [['X', 'Y', 'Z'], ['Yaw', 'Pitch', 'Roll'],
-              ['VX', 'VY', 'VZ'], ['WX', 'WY', 'WZ']]
-    for ax, arr, title, axis_labels in zip(overview_axes.flatten(), cats, titles, labels):
+    arrays = [base_position_array, base_orientation_array, base_linear_velocity_array, base_angular_velocity_array]
+    titles = ['Base World Position', 'Base Orientation', 'Base Linear Velocity', 'Base Angular Velocity']
+    labels = [['X', 'Y', 'Z'], ['Yaw', 'Pitch', 'Roll'], ['VX', 'VY', 'VZ'], ['WX', 'WY', 'WZ']]
+    for ax, arr, title, axis_labels in zip(overview_axes.flatten(), arrays, titles, labels):
         for i, lbl in enumerate(axis_labels):
             ax.plot(sim_times, arr[:, i], label=lbl, linewidth=linewidth)
             draw_resets(ax, reset_times)
@@ -607,99 +577,89 @@ def _plot_total_base_overview(sim_times, base_position_array, base_orientation_a
     with open(os.path.join(pickle_dir, 'base_overview_world.pickle'), 'wb') as f:
         pickle.dump(fig_overview, f)
 
-def _plot_gait_diagram(contact_state_array, sim_times, reset_times,
-                       foot_labels, output_dir, pickle_dir):
-    fig = plot_gait_diagram(contact_state_array, sim_times, reset_times,
-                            foot_labels, os.path.join(output_dir, "aggregates", 'gait_diagram.pdf'),
-                            spacing=1.0)
+def _plot_gait_diagram(contact_state_array, sim_times, reset_times, foot_labels, output_dir, pickle_dir):
+    fig = plot_gait_diagram(contact_state_array, sim_times, reset_times, foot_labels, os.path.join(output_dir, "aggregates", 'gait_diagram.pdf'), spacing=1.0)
     with open(os.path.join(pickle_dir, 'gait_diagram.pickle'), 'wb') as f:
         pickle.dump(fig, f)
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Violin-plot helpers  (add just below the histogram helpers)
+# box-plot helpers
 # ----------------------------------------------------------------------------------------------------------------------
 
-
-def _plot_violin_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col,
-                            metric_to_unit_mapping, output_dir, pickle_dir):
+def _plot_box_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, metric_to_unit_mapping, output_dir, pickle_dir):
     """
-    4×3 grid of violin plots, one per joint, for the given metric.
+    4×3 grid of box plots, one per joint, for the given metric.
     """
     fig, axes = plt.subplots(4, 3, figsize=(18, 12), sharex=False, sharey=False)
-    fig.suptitle(f"Violin Plot of Joint {metric_name.replace('_', ' ').title()}", fontsize=18)
+    fig.suptitle(f"box Plot of Joint {metric_name.replace('_', ' ').title()}", fontsize=18)
 
     for j, jn in enumerate(joint_names):
         row, col = leg_row[j], leg_col[j]
         ax = axes[row, col]
 
-        # single-entry dataset must still be passed as an iterable
-        ax.violinplot(dataset=data_arr[:, j], showmeans=True, showmedians=True, showextrema=True)
+        ax.boxplot(x=data_arr[:, j], showmeans=True, showcaps=True, showbox=True, showfliers=False)
         ax.set_title(jn, fontsize=12)
         ax.set_xlabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}", fontsize=8)
 
     fig.tight_layout()
-    pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"violin_joint_{metric_name}_grid.pdf")
+    pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"box_joint_{metric_name}_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"violin_joint_{metric_name}_grid.pickle"), "wb") as f:
+    with open(os.path.join(pickle_dir, f"box_joint_{metric_name}_grid.pickle"), "wb") as f:
         pickle.dump(fig, f)
 
 
-def _plot_violin_joint_metric(metric_name, data_arr, joint_names,
-                              metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE):
+def _plot_box_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE):
     """
-    Overview violin plot (all joints on one axis) for the given metric.
+    Overview box plot (all joints on one axis) for the given metric.
     """
     fig, ax = plt.subplots(figsize=FIGSIZE)
 
-    parts = ax.violinplot(dataset=[data_arr[:, j] for j in range(data_arr.shape[1])],
-                          positions=np.arange(1, len(joint_names) + 1),
-                          showmeans=True, showmedians=True, showextrema=True)
+    ax.boxplot(x=[data_arr[:, j] for j in range(data_arr.shape[1])], positions=np.arange(1, len(joint_names) + 1), showmeans=True, showcaps=True, showbox=True, showfliers=False)
 
-    ax.set_title(f"Violin Plot of Joint {metric_name.replace('_', ' ')}", fontsize=16)
+    ax.set_title(f"Box Plot of Joint {metric_name.replace('_', ' ')}", fontsize=16)
     ax.set_xlabel("Joint")
     ax.set_ylabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}")
     ax.set_xticks(np.arange(1, len(joint_names) + 1))
     ax.set_xticklabels(joint_names, rotation=45, ha="right")
     fig.tight_layout()
 
-    pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"violin_joint_{metric_name}_overview.pdf")
+    pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"box_joint_{metric_name}_overview.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"violin_joint_{metric_name}_overview.pickle"), "wb") as f:
+    with open(os.path.join(pickle_dir, f"box_joint_{metric_name}_overview.pickle"), "wb") as f:
         pickle.dump(fig, f)
 
 
-def _plot_violin_contact_forces_grid(contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE):
+def _plot_box_contact_forces_grid(contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE):
     """
-    2×2 grid of violin plots of contact-force magnitudes (>0 N) per foot.
+    2×2 grid of box plots of contact-force magnitudes (>0 N) per foot.
     """
     fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
-    fig.suptitle("Violin Plot of Foot Contact Forces", fontsize=18)
+    fig.suptitle("box Plot of Foot Contact Forces", fontsize=18)
 
     for i, label in enumerate(foot_labels):
         ax = axes.flat[i]
         forces = contact_forces_array[:, i]
         positive = forces[forces > 0]
         if positive.size == 0:
-            ax.text(0.5, 0.5, "No forces > 0 N", ha="center", va="center",
-                    transform=ax.transAxes, fontsize=12, color="red")
+            ax.text(0.5, 0.5, "No forces > 0 N", ha="center", va="center", transform=ax.transAxes, fontsize=12, color="red")
         else:
-            ax.violinplot(positive, showmeans=True, showmedians=True, showextrema=True)
+            ax.boxplot(positive, showmeans=True, showcaps=True, showbox=True, showfliers=False)
         ax.set_title(label, fontsize=14)
         ax.set_xlabel("Force / N")
 
     fig.tight_layout(rect=(0, 0, 1, 0.96))
-    pdf = os.path.join(output_dir, "foot_contact_forces", "violin_contact_forces_grid.pdf")
+    pdf = os.path.join(output_dir, "foot_contact_forces", "box_contact_forces_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, "violin_contact_forces_grid.pickle"), "wb") as f:
+    with open(os.path.join(pickle_dir, "box_contact_forces_grid.pickle"), "wb") as f:
         pickle.dump(fig, f)
 
 
-def _plot_violin_contact_forces_overview(contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE):
+def _plot_box_contact_forces_overview(contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE):
     """
-    Overview violin plot of contact-force magnitudes (>0 N) for all feet.
+    Overview box plot of contact-force magnitudes (>0 N) for all feet.
     """
     fig, ax = plt.subplots(figsize=FIGSIZE)
     data, used_labels = [], []
@@ -710,87 +670,82 @@ def _plot_violin_contact_forces_overview(contact_forces_array, foot_labels, outp
             used_labels.append(label)
 
     if data:
-        ax.violinplot(data, positions=np.arange(1, len(data) + 1),
-                      showmeans=True, showmedians=True, showextrema=True)
-    ax.set_title("Violin Plot of Foot Contact Forces", fontsize=16)
+        ax.boxplot(data, positions=np.arange(1, len(data) + 1), showmeans=True, showcaps=True, showbox=True, showfliers=False)
+    ax.set_title("Box Plot of Foot Contact Forces", fontsize=16)
     ax.set_xlabel("Foot")
     ax.set_ylabel("Force / N")
     ax.set_xticks(np.arange(1, len(used_labels) + 1))
     ax.set_xticklabels(used_labels)
     fig.tight_layout()
 
-    pdf = os.path.join(output_dir, "foot_contact_forces", "violin_contact_forces_overview.pdf")
+    pdf = os.path.join(output_dir, "foot_contact_forces", "box_contact_forces_overview.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, "violin_contact_forces_overview.pickle"), "wb") as f:
+    with open(os.path.join(pickle_dir, "box_contact_forces_overview.pickle"), "wb") as f:
         pickle.dump(fig, f)
 
 
-def _plot_violin_air_time_per_foot_grid(air_segments_per_foot, foot_labels,
-                                        output_dir, pickle_dir, FIGSIZE):
+def _plot_box_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output_dir, pickle_dir, FIGSIZE):
     """
-    2×2 grid of violin plots of air-time durations per foot.
+    2×2 grid of box plots of air-time durations per foot.
     """
     fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
-    fig.suptitle("Violin Plot of Air-Time Durations per Foot", fontsize=18)
+    fig.suptitle("box Plot of Air-Time Durations per Foot", fontsize=18)
 
     for i, label in enumerate(foot_labels):
         durations = air_segments_per_foot[label]
         ax = axes.flat[i]
         if durations:
-            ax.violinplot(durations, showmeans=True, showmedians=True, showextrema=True)
+            ax.boxplot(durations, showmeans=True, showcaps=True, showbox=True, showfliers=False)
         ax.set_title(label, fontsize=14)
         ax.set_xlabel("Air Time / s")
 
     fig.tight_layout()
-    pdf = os.path.join(output_dir, "aggregates", "air_time", "violin_air_time_grid.pdf")
+    pdf = os.path.join(output_dir, "aggregates", "air_time", "box_air_time_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, "violin_air_time_grid.pickle"), "wb") as f:
+    with open(os.path.join(pickle_dir, "box_air_time_grid.pickle"), "wb") as f:
         pickle.dump(fig, f)
 
 
-def _plot_violin_air_time_per_foot_single(label, durations,
-                                          output_dir, pickle_dir, FIGSIZE):
+def _plot_box_air_time_per_foot_single(label, durations, output_dir, pickle_dir, FIGSIZE):
     """
-    Single-foot violin plot of air-time durations.
+    Single-foot box plot of air-time durations.
     """
     fig, ax = plt.subplots(figsize=FIGSIZE)
     if durations:
-        ax.violinplot(durations, showmeans=True, showmedians=True, showextrema=True)
+        ax.boxplot(durations, showmeans=True, showcaps=True, showbox=True, showfliers=False)
     else:
-        ax.text(0.5, 0.5, "No air-time segments", ha="center", va="center",
-                transform=ax.transAxes, fontsize=12, color="red")
+        ax.text(0.5, 0.5, "No air-time segments", ha="center", va="center", transform=ax.transAxes, fontsize=12, color="red")
 
-    ax.set_title(f"Violin Plot of Air-Time Durations ({label})", fontsize=16)
+    ax.set_title(f"Box Plot of Air-Time Durations ({label})", fontsize=16)
     ax.set_xlabel("Air Time / s")
     fig.tight_layout()
 
     safe_label = label.replace(" ", "_")
-    pdf = os.path.join(output_dir, "aggregates", "air_time", f"violin_air_time_{safe_label}.pdf")
+    pdf = os.path.join(output_dir, "aggregates", "air_time", f"box_air_time_{safe_label}.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"violin_air_time_{safe_label}.pickle"), "wb") as f:
+    with open(os.path.join(pickle_dir, f"box_air_time_{safe_label}.pickle"), "wb") as f:
         pickle.dump(fig, f)
 
 
-def _plot_violin_cost_of_transport(cost_of_transport_time_series,
-                                   output_dir, pickle_dir, FIGSIZE):
+def _plot_box_cost_of_transport(cost_of_transport_time_series, output_dir, pickle_dir, FIGSIZE):
     """
-    Violin plot of instantaneous cost-of-transport values.
+    box plot of instantaneous cost-of-transport values.
     """
     fig, ax = plt.subplots(figsize=FIGSIZE)
     data = cost_of_transport_time_series[~np.isnan(cost_of_transport_time_series)]
     if data.size > 0:
-        ax.violinplot(data, showmeans=True, showmedians=True, showextrema=True)
-    ax.set_xlabel("COT")
-    ax.set_title("Violin Plot of Cost of Transport", fontsize=16)
+        ax.boxplot(data, showmeans=True, showcaps=True, showbox=True, showfliers=False)
+    ax.set_xlabel("Cost of Transport")
+    ax.set_title("Box Plot of Cost of Transport", fontsize=16)
     fig.tight_layout()
 
-    pdf = os.path.join(output_dir, "aggregates", "cost_of_transport", "violin_cot_overview.pdf")
+    pdf = os.path.join(output_dir, "aggregates", "cost_of_transport", "box_cot_overview.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, "violin_cot_overview.pickle"), "wb") as f:
+    with open(os.path.join(pickle_dir, "box_cot_overview.pickle"), "wb") as f:
         pickle.dump(fig, f)
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -1036,56 +991,56 @@ def generate_plots(data, metrics, output_dir, interactive=False):
             )
         )
 
-        # a) Joint-level violin plots (grid + overview)
+        # a) Joint-level box plots (grid + overview)
         for metric_name, data_arr in metrics.items():
             futures.append(
                 executor.submit(
-                    _plot_violin_joint_grid,
+                    _plot_box_joint_grid,
                     metric_name, data_arr, joint_names, leg_row, leg_col,
                     metric_to_unit_mapping, output_dir, pickle_dir
                 )
             )
             futures.append(
                 executor.submit(
-                    _plot_violin_joint_metric,
+                    _plot_box_joint_metric,
                     metric_name, data_arr, joint_names,
                     metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE
                 )
             )
 
-        # b) Contact-force violin plots
+        # b) Contact-force box plots
         futures.append(
             executor.submit(
-                _plot_violin_contact_forces_grid,
+                _plot_box_contact_forces_grid,
                 contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE
             )
         )
         futures.append(
             executor.submit(
-                _plot_violin_contact_forces_overview,
+                _plot_box_contact_forces_overview,
                 contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE
             )
         )
 
-        # c) Air-time violin plots (grid + per-foot)
+        # c) Air-time box plots (grid + per-foot)
         futures.append(
             executor.submit(
-                _plot_violin_air_time_per_foot_grid,
+                _plot_box_air_time_per_foot_grid,
                 air_segments_per_foot, foot_labels, output_dir, pickle_dir, FIGSIZE
             )
         )
         for label, durations in air_segments_per_foot.items():
             futures.append(
                 executor.submit(
-                    _plot_violin_air_time_per_foot_single,
+                    _plot_box_air_time_per_foot_single,
                     label, durations, output_dir, pickle_dir, FIGSIZE
                 )
             )
 
-        # d) Cost-of-transport violin plot
+        # d) Cost-of-transport box plot
         futures.append(
             executor.submit(
-                _plot_violin_cost_of_transport,
+                _plot_box_cost_of_transport,
                 cost_of_transport_time_series, output_dir, pickle_dir, FIGSIZE
             )
         )

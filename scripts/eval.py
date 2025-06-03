@@ -756,11 +756,8 @@ def main():
     print("Starting plot generation...")
     plot_process_log_path  = os.path.join(eval_base_dir, "generate_plots.log")
     generate_plots_script_path = os.path.join(eval_script_path, "generate_plots.py")
-    plot_cmd = [
-        "python", generate_plots_script_path,
-        "--data", np_data_file,
-        "--interactive"
-    ]
+    plot_cmd = ["python", generate_plots_script_path, "--data", np_data_file, "--interactive"]
+    print(f"Running plot_cmd={" ".join(plot_cmd)}")
     with open(plot_process_log_path, "w") as plot_process_logfile:
         plot_proc = subprocess.Popen(plot_cmd, stdout=plot_process_logfile, stderr=subprocess.STDOUT)
 
