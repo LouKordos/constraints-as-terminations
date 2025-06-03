@@ -512,10 +512,15 @@ def main():
     # --- energy & cost-of-transport ------------------------------------
     # instantaneous joint power: torque (Nm) * angular velocity (rad/s)
     power_array = joint_torques_array * joint_velocities_array  # shape (T, J)
+    instantaneous_speed = np.linalg.norm(base_linear_velocity_array[:, :2], axis=1)
+    for reset_step in reset_steps: # When teleporting, we want to keep speed constant to avoid velocity and cost of transport spikes
+        instantaneous_speed[max(0, reset_step-1):reset_step+1] = instantaneous_speed[max(0, reset_step-1)]
+        power_array[max(0, reset_step-1):reset_step+1, :] = power_array[max(0, reset_step-1), :]
     # cumulative per-joint energy (J) via trapezoidal/integral: ∑ |P| * dt
     energy_per_joint = np.cumsum(np.abs(power_array), axis=0) * step_dt  # shape (T, J)
     # cumulative total energy (J) across all joints
     combined_energy = np.cumsum(np.abs(power_array).sum(axis=1)) * step_dt  # shape (T,)
+    
     # 1) Compute raw displacements
     raw_distance = np.linalg.norm(np.diff(base_position_array, axis=0), axis=1)
     # 2) Build a mask of “real” steps
@@ -533,12 +538,9 @@ def main():
             mask[t0-1] = False
     # 3) Sum only the valid displacements
     true_distance = float(raw_distance[mask].sum())
-    # robot mass (kg): you can pull from your env if available, else hard-code/supply
     total_robot_mass = float(env.unwrapped.scene["robot"].data.default_mass.sum().item())
 
     # instantaneous cost of transport (dimensionless): P_total / (m g v)
-    instantaneous_speed = np.linalg.norm(base_linear_velocity_array[:, :2], axis=1)
-    # avoid division by zero
     cost_of_transport_time_series = combined_energy.copy() # placeholder
     with np.errstate(divide='ignore', invalid='ignore'):
         cost_of_transport_time_series = (np.abs(power_array).sum(axis=1) / (total_robot_mass * 9.81 * instantaneous_speed + 1e-12))
