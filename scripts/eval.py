@@ -766,7 +766,7 @@ def main():
     with open(trajectories_path, 'w') as traj_file:
         for idx in range(total_sim_steps):
             record = {
-                'step': int(idx),
+                'timestep': int(idx),
                 'joint_positions': joint_positions_buffer[idx].tolist(),
                 'joint_velocities': joint_velocities_buffer[idx].tolist(),
                 'joint_accelerations': joint_accelerations_buffer[idx].tolist(),
