@@ -141,7 +141,7 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
     assert sim_times.shape[0] == T, "sim_times length must match contact_states"
 
     fig, ax = plt.subplots(figsize=(180, F * 1.2))
-    ax.set_xlabel('Time / s')
+    ax.set_xlabel('Time (s)')
     ax.set_title('Gait Diagram with Air and Contact Times (white text = contact/stance phase, black text = air/swing phase)', fontsize=14)
 
     for reset_time in reset_times:
@@ -229,8 +229,8 @@ def _animate_body_frame_foot_positions(foot_positions_body_frame: np.ndarray, co
 
     fig, ax = plt.subplots()
     ax.set_aspect('equal')
-    ax.set_xlabel('Body-X / m')
-    ax.set_ylabel('Body-Y / m')
+    ax.set_xlabel('Body-X (m)')
+    ax.set_ylabel('Body-Y (m)')
     ax.set_title('Foot trajectories (body frame, top-down)')
 
     # create one PathCollection per foot
@@ -291,9 +291,9 @@ def _plot_foot_position_time_series(
             first = False
         draw_resets(ax, reset_times)
         ax.set_title(f'Foot {axis_label} ({frame_label.replace("_", " ")}) {foot_labels[i]}', fontsize=14)
-        ax.set_ylabel(f'{axis_label} / m')
+        ax.set_ylabel(f'{axis_label} (m)')
         ax.legend()
-    axes[-1, 0].set_xlabel('Time / s')
+    axes[-1, 0].set_xlabel('Time (s)')
     fig.tight_layout()
 
     subdir = os.path.join(output_dir, subfolder)
@@ -309,8 +309,8 @@ def _plot_foot_position_time_series(
         ax.grid()
         ax.plot(sim_times, positions_array[:, i], label=lbl, linewidth=linewidth)
     draw_resets(ax, reset_times)
-    ax.set_xlabel('Time / s')
-    ax.set_ylabel(f'{axis_label} / m')
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel(f'{axis_label} (m)')
     ax.set_title(f'Foot {axis_label} ({frame_label.replace("_", " ")}) overview', fontsize=14)
     ax.legend(ncol=2, loc='upper right')
     fig_ov.tight_layout()
@@ -418,7 +418,7 @@ def _plot_foot_contact_force_per_foot(sim_times, contact_forces_array, foot_labe
             first = False
 
         ax.set_title(f"Foot contact force magnitude {foot_labels[i]}", fontsize=16)
-        ax.set_ylabel('Force / N')
+        ax.set_ylabel('Force (N)')
         ax.legend()
     fig.tight_layout()
     pdf = os.path.join(output_dir, "foot_contact_forces",'foot_contact_force_each.pdf')
@@ -448,7 +448,7 @@ def _plot_hist_contact_forces_grid(contact_forces_array, foot_labels, output_dir
             ax.hist(positive_forces, bins='auto', alpha=0.7)
         
         ax.set_title(label, fontsize=14)
-        ax.set_xlabel("Force / N")
+        ax.set_xlabel("Force (N)")
         ax.set_ylabel("Count")
     
     fig.tight_layout(rect=(0, 0, 1, 0.96)) # leave space for the suptitle
@@ -479,7 +479,7 @@ def _plot_hist_contact_forces_overview(contact_forces_array, foot_labels, output
             ax.text(0.5, 0.5 - 0.05 * i, f"No >0 data for '{label}'", transform=ax.transAxes, fontsize=8, color='gray', ha='center')
     
     ax.set_title("Histogram of Foot Contact Forces", fontsize=16)
-    ax.set_xlabel("Force / N")
+    ax.set_xlabel("Force (N)")
     ax.set_ylabel("Frequency")
     ax.legend(loc='upper right', fontsize=8)
     
@@ -513,9 +513,9 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
             for stance_start, stance_end in compute_stance_segments(contact_state_array[:, fid].astype(bool)):
                 ax.axvspan(sim_times[stance_start], sim_times[stance_end-1], facecolor='gray', alpha=0.5)
         ax.set_title(f"Joint {metric_name.replace('_', ' ')} for {jn}", fontsize=16)
-        ax.set_ylabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}")
+        ax.set_ylabel(f"{metric_name.capitalize()} ({metric_to_unit_mapping[metric_name]})")
 
-    axes[-1, 0].set_xlabel('Time / s')
+    axes[-1, 0].set_xlabel('Time (s)')
     fig.tight_layout()
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f'joint_{metric_name}_grid.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
@@ -534,9 +534,9 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
     else:
         draw_limits(ax, metric_to_constraint_term_mapping[metric_name], constraint_bounds)
     draw_resets(ax, reset_times)
-    ax.set_xlabel('Time / s')
+    ax.set_xlabel('Time (s)')
     ax.set_title(f"Joint {metric_name.replace('_', ' ')} overview", fontsize=16)
-    ax.set_ylabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}")
+    ax.set_ylabel(f"{metric_name.capitalize()} ({metric_to_unit_mapping[metric_name]})")
     ax.legend(loc='upper right', ncol=2)
     fig_ov.tight_layout()
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f'joint_{metric_name}_overview.pdf')
@@ -553,7 +553,7 @@ def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, 
         ax.grid()
         ax.hist(data_arr[:, j], bins='auto', alpha=0.7)
         ax.set_title(jn, fontsize=12)
-        ax.set_xlabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}")
+        ax.set_xlabel(f"{metric_name.capitalize()} ({metric_to_unit_mapping[metric_name]})")
         ax.set_ylabel("Count")
     fig.tight_layout()
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"hist_joint_{metric_name}_grid.pdf")
@@ -568,7 +568,7 @@ def _plot_hist_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_m
         ax.grid()
         ax.hist(data_arr[:, j], bins='auto', alpha=0.6, label=jn)
     ax.set_title(f"Histogram of joint {metric_name.replace('_',' ')}", fontsize=16)
-    ax.set_xlabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}")
+    ax.set_xlabel(f"{metric_name.capitalize()} ({metric_to_unit_mapping[metric_name]})")
     ax.set_ylabel("Frequency")
     ax.legend(loc='upper right', fontsize=8)
     fig.tight_layout()
@@ -588,7 +588,7 @@ def _plot_hist_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output
         if durations:
             ax.hist(durations, bins='auto', alpha=0.7)
         ax.set_title(label, fontsize=14)
-        ax.set_xlabel("Air Time / s")
+        ax.set_xlabel("Air Time (s)")
         ax.set_ylabel("Count")
     fig.tight_layout()
     pdf = os.path.join(output_dir, "aggregates", "air_time", "hist_air_time_grid.pdf")
@@ -603,7 +603,7 @@ def _plot_hist_air_time_per_foot_single(label, durations, output_dir, pickle_dir
         ax.grid()
         ax.hist(durations, bins='auto', alpha=0.7)
     ax.set_title(f"Histogram of Air-Time Durations ({label})", fontsize=16)
-    ax.set_xlabel("Air Time / s")
+    ax.set_xlabel("Air Time (s)")
     ax.set_ylabel("Frequency")
     fig.tight_layout()
     safe_label = label.replace(' ', '_')
@@ -618,8 +618,8 @@ def _plot_combined_energy(sim_times, combined_energy, reset_times, output_dir, p
     ax.plot(sim_times, combined_energy, label='total_energy', linewidth=linewidth)
     ax.grid()
     draw_resets(ax, reset_times)
-    ax.set_xlabel('Time / s')
-    ax.set_ylabel('Energy / J')
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Energy (J)')
     ax.set_title('Total Cumulative Joint Energy', fontsize=16)
     ax.legend()
     fig.tight_layout()
@@ -644,8 +644,8 @@ def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_time
         average_times = sim_times[(window_size - 1):]
         ax.plot(average_times, running_average, label=f'{window_size}-sample running avg', linewidth=2.0, linestyle="dashed")
 
-    ax.set_xlabel('Time / s')
-    ax.set_ylabel('Cost of Transport / -')
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Cost of Transport (-)')
     ax.set_title('Instantaneous Cost of Transport', fontsize=16)
     ax.set_ylim(0, 6)
     ax.legend()
@@ -660,7 +660,7 @@ def _plot_hist_cost_of_transport(cost_of_transport_time_series, output_dir, pick
     fig, ax = plt.subplots(figsize=FIGSIZE)
     ax.hist(cost_of_transport_time_series[~np.isnan(cost_of_transport_time_series)], bins='auto', alpha=0.7)
     ax.grid()
-    ax.set_xlabel('Cost of Transport / -')
+    ax.set_xlabel('Cost of Transport (-)')
     ax.set_xlim(0, 6)
     ax.set_ylabel('Count')
     ax.set_title('Histogram of Cost of Transport', fontsize=16)
@@ -678,10 +678,10 @@ def _plot_combined_base_position(sim_times, base_position_array, reset_times, ou
         axes_bp[i].grid()
         draw_resets(axes_bp[i], reset_times)
         axes_bp[i].set_title(f'World Position {axis_label}')
-        axes_bp[i].set_ylabel('Position / m')
+        axes_bp[i].set_ylabel('Position (m)')
         axes_bp[i].legend()
         axes_bp[i].grid(True)
-    axes_bp[-1].set_xlabel('Time / s')
+    axes_bp[-1].set_xlabel('Time (s)')
     fig_bp.tight_layout()
     pdf = os.path.join(output_dir, "base_kinematics", 'base_position_subplots_world.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
@@ -695,11 +695,11 @@ def _plot_combined_orientation(sim_times, base_orientation_array, reset_times, o
         axes_bo[i].plot(sim_times, base_orientation_array[:, i], label=orient_label, linewidth=linewidth)
         axes_bo[i].grid()
         draw_resets(axes_bo[i], reset_times)
-        axes_bo[i].set_ylabel(f'{orient_label} / rad')
+        axes_bo[i].set_ylabel(f'{orient_label} (rad)')
         axes_bo[i].set_title(f'World Orientation {orient_label}')
         axes_bo[i].legend()
         axes_bo[i].grid(True)
-    axes_bo[-1].set_xlabel('Time / s')
+    axes_bo[-1].set_xlabel('Time (s)')
     fig_bo.tight_layout()
     pdf = os.path.join(output_dir, "base_kinematics", 'base_orientation_subplots.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
@@ -715,11 +715,11 @@ def _plot_combined_base_velocity(sim_times, base_linear_velocity_array, commande
         if i != 2:
             axes_blv[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f'cmd_{vel_label}', linewidth=linewidth)
         draw_resets(axes_blv[i], reset_times)
-        axes_blv[i].set_ylabel(f'{vel_label} / m * sec^(-1)')
+        axes_blv[i].set_ylabel(f'{vel_label} (m * sec^(-1))')
         axes_blv[i].set_title(f'Base Linear {vel_label}')
         axes_blv[i].legend()
         axes_blv[i].grid(True)
-    axes_blv[-1].set_xlabel('Time / s')
+    axes_blv[-1].set_xlabel('Time (s)')
     fig_blv.tight_layout()
     pdf = os.path.join(output_dir, "base_kinematics", 'base_linear_velocity_subplots.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
@@ -735,11 +735,11 @@ def _plot_combined_base_angular_velocities(sim_times, base_angular_velocity_arra
         if i == 2:
             axes_bav[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f'cmd_{vel_label}', linewidth=linewidth)
         draw_resets(axes_bav[i], reset_times)
-        axes_bav[i].set_ylabel(f'{vel_label} / rad * sec^(-1)')
+        axes_bav[i].set_ylabel(f'{vel_label} (rad * sec^(-1))')
         axes_bav[i].set_title(f'Base {vel_label}')
         axes_bav[i].legend()
         axes_bav[i].grid(True)
-    axes_bav[-1].set_xlabel('Time / s')
+    axes_bav[-1].set_xlabel('Time (s)')
     fig_bav.tight_layout()
     pdf = os.path.join(output_dir, "base_kinematics", 'base_angular_velocity_subplots.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
@@ -758,7 +758,7 @@ def _plot_total_base_overview(sim_times, base_position_array, base_orientation_a
             ax.grid()
             draw_resets(ax, reset_times)
         ax.set_title(title, fontsize=16)
-        ax.set_xlabel('Time / s')
+        ax.set_xlabel('Time (s)')
         ax.legend()
         ax.grid(True)
     fig_overview.tight_layout()
@@ -779,7 +779,7 @@ def _plot_gait_diagram(contact_state_array, sim_times, reset_times, foot_labels,
 
 def _plot_box_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, metric_to_unit_mapping, output_dir, pickle_dir):
     """
-    4×3 grid of box plots, one per joint, for the given metric.
+    4x3 grid of box plots, one per joint, for the given metric.
     """
     fig, axes = plt.subplots(4, 3, figsize=(18, 12), sharex=False, sharey=False)
     fig.suptitle(f"box Plot of Joint {metric_name.replace('_', ' ').title()}", fontsize=18)
@@ -790,7 +790,7 @@ def _plot_box_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, m
         ax.grid()
         ax.boxplot(x=data_arr[:, j], showmeans=True, showcaps=True, showbox=True, showfliers=False)
         ax.set_title(jn, fontsize=12)
-        ax.set_xlabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}", fontsize=8)
+        ax.set_xlabel(f"{metric_name.capitalize()} ({metric_to_unit_mapping[metric_name]})", fontsize=8)
 
     fig.tight_layout()
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"box_joint_{metric_name}_grid.pdf")
@@ -810,7 +810,7 @@ def _plot_box_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_ma
     ax.grid()
     ax.set_title(f"Box Plot of Joint {metric_name.replace('_', ' ')}", fontsize=16)
     ax.set_xlabel("Joint")
-    ax.set_ylabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}")
+    ax.set_ylabel(f"{metric_name.capitalize()} ({metric_to_unit_mapping[metric_name]})")
     ax.set_xticks(np.arange(1, len(joint_names) + 1))
     ax.set_xticklabels(joint_names, rotation=45, ha="right")
     fig.tight_layout()
@@ -839,7 +839,7 @@ def _plot_box_contact_forces_grid(contact_forces_array, foot_labels, output_dir,
         else:
             ax.boxplot(positive, showmeans=True, showcaps=True, showbox=True, showfliers=False)
         ax.set_title(label, fontsize=14)
-        ax.set_xlabel("Force / N")
+        ax.set_xlabel("Force (N)")
 
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     pdf = os.path.join(output_dir, "foot_contact_forces", "box_contact_forces_grid.pdf")
@@ -866,7 +866,7 @@ def _plot_box_contact_forces_overview(contact_forces_array, foot_labels, output_
         ax.boxplot(data, positions=np.arange(1, len(data) + 1), showmeans=True, showcaps=True, showbox=True, showfliers=False)
     ax.set_title("Box Plot of Foot Contact Forces", fontsize=16)
     ax.set_xlabel("Foot")
-    ax.set_ylabel("Force / N")
+    ax.set_ylabel("Force (N)")
     ax.set_xticks(np.arange(1, len(used_labels) + 1))
     ax.set_xticklabels(used_labels)
     fig.tight_layout()
@@ -892,7 +892,7 @@ def _plot_box_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output_
         if durations:
             ax.boxplot(durations, showmeans=True, showcaps=True, showbox=True, showfliers=False)
         ax.set_title(label, fontsize=14)
-        ax.set_xlabel("Air Time / s")
+        ax.set_xlabel("Air Time (s)")
 
     fig.tight_layout()
     pdf = os.path.join(output_dir, "aggregates", "air_time", "box_air_time_grid.pdf")
@@ -914,7 +914,7 @@ def _plot_box_air_time_per_foot_single(label, durations, output_dir, pickle_dir,
         ax.text(0.5, 0.5, "No air-time segments", ha="center", va="center", transform=ax.transAxes, fontsize=12, color="red")
 
     ax.set_title(f"Box Plot of Air-Time Durations ({label})", fontsize=16)
-    ax.set_xlabel("Air Time / s")
+    ax.set_xlabel("Air Time (s)")
     fig.tight_layout()
 
     safe_label = label.replace(" ", "_")
@@ -1282,7 +1282,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                     _plot_hist_metric_grid,
                     metric_dict,
                     f"Histogram of Foot {axis_label} Position (body frame)",
-                    f"{axis_label} / m", foot_labels,
+                    f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
                     FIGSIZE=FIGSIZE
@@ -1293,7 +1293,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                     _plot_hist_metric_overview,
                     metric_dict,
                     f"Histogram of Foot {axis_label} Position (body frame) overview",
-                    f"{axis_label} / m", foot_labels,
+                    f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
                     FIGSIZE=FIGSIZE
@@ -1305,7 +1305,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                     _plot_box_metric_grid,
                     metric_dict,
                     f"Box Plot of Foot {axis_label} Position (body frame)",
-                    f"{axis_label} / m", foot_labels,
+                    f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
                     FIGSIZE=FIGSIZE
@@ -1316,7 +1316,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                     _plot_box_metric_overview,
                     metric_dict,
                     f"Box Plot of Foot {axis_label} Position (body frame) overview",
-                    f"{axis_label} / m", foot_labels,
+                    f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
                     FIGSIZE=FIGSIZE
@@ -1343,7 +1343,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                     _plot_hist_metric_grid,
                     metric_dict,
                     f"Histogram of Foot {axis_label} Position (contact frame)",
-                    f"{axis_label} / m", foot_labels,
+                    f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
                     FIGSIZE=FIGSIZE
@@ -1354,7 +1354,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                     _plot_hist_metric_overview,
                     metric_dict,
                     f"Histogram of Foot {axis_label} Position (contact frame) overview",
-                    f"{axis_label} / m", foot_labels,
+                    f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
                     FIGSIZE=FIGSIZE
@@ -1366,7 +1366,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                     _plot_box_metric_grid,
                     metric_dict,
                     f"Box Plot of Foot {axis_label} Position (contact frame)",
-                    f"{axis_label} / m", foot_labels,
+                    f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
                     FIGSIZE=FIGSIZE
@@ -1377,7 +1377,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                     _plot_box_metric_overview,
                     metric_dict,
                     f"Box Plot of Foot {axis_label} Position (contact frame) overview",
-                    f"{axis_label} / m", foot_labels,
+                    f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
                     FIGSIZE=FIGSIZE
@@ -1390,7 +1390,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                 _plot_hist_metric_grid,
                 step_heights,
                 "Histogram of Step Height (contact frame)",
-                "Height / m", foot_labels,
+                "Height (m)", foot_labels,
                 output_dir, pickle_dir,
                 subfolder="step_height", FIGSIZE=FIGSIZE
             )
@@ -1400,7 +1400,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                 _plot_hist_metric_overview,
                 step_heights,
                 "Histogram of Step Height (overview)",
-                "Height / m", foot_labels,
+                "Height (m)", foot_labels,
                 output_dir, pickle_dir,
                 subfolder="step_height", FIGSIZE=FIGSIZE
             )
@@ -1410,7 +1410,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                 _plot_box_metric_grid,
                 step_heights,
                 "Box Plot of Step Height",
-                "Height / m", foot_labels,
+                "Height (m)", foot_labels,
                 output_dir, pickle_dir,
                 subfolder="step_height", FIGSIZE=FIGSIZE
             )
@@ -1420,7 +1420,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                 _plot_box_metric_overview,
                 step_heights,
                 "Box Plot of Step Height (overview)",
-                "Height / m", foot_labels,
+                "Height (m)", foot_labels,
                 output_dir, pickle_dir,
                 subfolder="step_height", FIGSIZE=FIGSIZE
             )
@@ -1432,7 +1432,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                 _plot_hist_metric_grid,
                 step_lengths,
                 "Histogram of Step Length",
-                "Step Length / m", foot_labels,
+                "Step Length (m)", foot_labels,
                 output_dir, pickle_dir,
                 subfolder="step_length", FIGSIZE=FIGSIZE
             )
@@ -1442,7 +1442,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                 _plot_hist_metric_overview,
                 step_lengths,
                 "Histogram of Step Length (overview)",
-                "Step Length / m", foot_labels,
+                "Step Length (m)", foot_labels,
                 output_dir, pickle_dir,
                 subfolder="step_length", FIGSIZE=FIGSIZE
             )
@@ -1452,7 +1452,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                 _plot_box_metric_grid,
                 step_lengths,
                 "Box Plot of Step Length",
-                "Step Length / m", foot_labels,
+                "Step Length (m)", foot_labels,
                 output_dir, pickle_dir,
                 subfolder="step_length", FIGSIZE=FIGSIZE
             )
@@ -1462,7 +1462,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                 _plot_box_metric_overview,
                 step_lengths,
                 "Box Plot of Step Length (overview)",
-                "Step Length / m", foot_labels,
+                "Step Length (m)", foot_labels,
                 output_dir, pickle_dir,
                 subfolder="step_length", FIGSIZE=FIGSIZE
             )
