@@ -143,6 +143,31 @@ def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[fl
 
     return bounds
 
+def run_generate_plots(start_step: int, end_step: int, subdir: str, plots_directory: str, sim_data_file_path: str) -> int:
+        """
+        Launch generate_plots.py for [start_step, end_step) and block until it finishes. Return the subprocess' return-code.
+        """
+        output_dir = os.path.join(plots_directory, subdir)
+        os.makedirs(output_dir, exist_ok=True)
+        generate_plots_script_path = os.path.join(eval_script_path, "generate_plots.py")
+
+        log_path = os.path.join(plots_directory, f"generate_plots_{subdir}.log")
+        cmd = [
+            "python",
+            generate_plots_script_path,
+            "--data_file", sim_data_file_path,
+            "--output_dir", output_dir,
+            "--start_step", str(start_step),
+            "--end_step", str(end_step),
+            "--interactive",
+        ]
+        print(f"[INFO] Spawning: {' '.join(cmd)}")
+        with open(log_path, "w") as lf:
+            proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT)
+            proc.wait()
+            print(f"[INFO]  generate_plots.py for '{subdir}' exited with code {proc.returncode}  (log → {log_path})")
+            return proc.returncode
+
 def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
@@ -447,6 +472,35 @@ def main():
     power_array = joint_torques_array * joint_velocities_array
     total_robot_mass = float(env.unwrapped.scene["robot"].data.default_mass.sum().item())
 
+    np_data_file = os.path.join(plots_directory, "sim_data.npz")
+    np.savez(
+        np_data_file,
+        sim_times=sim_times,
+        reset_times=np.array(reset_times),
+        reward_array=reward_array,
+        joint_positions_array=joint_positions_array,
+        joint_velocities_array=joint_velocities_array,
+        joint_torques_array=joint_torques_array,
+        joint_accelerations_array=joint_accelerations_array,
+        action_rate_array=action_rate_array,
+        contact_forces_array=contact_forces_array,
+        base_position_array=base_position_array,
+        base_orientation_array=base_orientation_array,
+        base_linear_velocity_array=base_linear_velocity_array,
+        base_angular_velocity_array=base_angular_velocity_array,
+        commanded_velocity_array=commanded_velocity_array,
+        contact_state_array=contact_state_array,
+        height_map_array=np.array(height_map_buffer),
+        foot_positions_world_frame_array=foot_positions_world_frame_array,
+        foot_positions_body_frame_array=foot_positions_body_frame_array,
+        foot_positions_contact_frame_array=foot_positions_contact_frame_array,
+        power_array=power_array,
+        foot_labels=np.array(foot_labels),
+        joint_names=np.array(joint_names),
+        total_robot_mass=total_robot_mass,
+        constraint_bounds=np.array(constraint_bounds, dtype=object),
+    )
+
     arrays_dict = {
         "joint_positions"      : joint_positions_array,
         "joint_velocities"     : joint_velocities_array,
@@ -508,44 +562,7 @@ def main():
     summary_path = os.path.join(eval_base_dir, "metrics_summary.json")
     with open(summary_path, 'w') as summary_file:
         json.dump(summary_metrics, summary_file, indent=4, default=lambda o: o.tolist()) # lambda for torch/numpy tensor conversion or any other nested objects
-    print(json.dumps(summary_metrics, indent=4, default=lambda o: o.tolist()))
-
-    np_data_file = os.path.join(plots_directory, "sim_data.npz")
-    np.savez(
-        np_data_file,
-        sim_times=sim_times,
-        reset_times=np.array(reset_times),
-        reward_array=reward_array,
-        joint_positions_array=joint_positions_array,
-        joint_velocities_array=joint_velocities_array,
-        joint_torques_array=joint_torques_array,
-        joint_accelerations_array=joint_accelerations_array,
-        action_rate_array=action_rate_array,
-        contact_forces_array=contact_forces_array,
-        base_position_array=base_position_array,
-        base_orientation_array=base_orientation_array,
-        base_linear_velocity_array=base_linear_velocity_array,
-        base_angular_velocity_array=base_angular_velocity_array,
-        commanded_velocity_array=commanded_velocity_array,
-        contact_state_array=contact_state_array,
-        height_map_array=np.array(height_map_buffer),
-        foot_positions_world_frame=foot_positions_world_frame_array,
-        foot_positions_body_frame=foot_positions_body_frame_array,
-        foot_positions_contact_frame=foot_positions_contact_frame_array,
-        power_array=power_array,
-        foot_labels=np.array(foot_labels),
-        joint_names=np.array(joint_names),
-        total_robot_mass=total_robot_mass,
-        constraint_bounds=np.array(constraint_bounds, dtype=object),
-    )
-
-    print("Starting plot generation...")
-    plot_process_log_path  = os.path.join(eval_base_dir, "generate_plots.log")
-    generate_plots_script_path = os.path.join(eval_script_path, "generate_plots.py")
-    plot_cmd = ["python", generate_plots_script_path, "--data", np_data_file, "--interactive"]
-    print(f"Running plot_cmd={' '.join(plot_cmd)}")
-    with open(plot_process_log_path, "w") as plot_process_logfile:
-        plot_proc = subprocess.Popen(plot_cmd, stdout=plot_process_logfile, stderr=subprocess.STDOUT)
+    # print(json.dumps(summary_metrics, indent=4, default=lambda o: o.tolist()))
 
     raw_frames = env.render()
     for frame in raw_frames:
@@ -553,10 +570,16 @@ def main():
     ffmpeg_process.stdin.close()
     ffmpeg_process.wait()
 
-    plot_proc.wait()
-    print(f"[INFO] Plot generation exited with return code {plot_proc.returncode}. See generate_plots.log below:")
-    with open(plot_process_log_path, "r") as plot_process_logfile:
-        print(plot_process_logfile.read())
+    for k, (scenario_tag, *_rest) in enumerate(fixed_command_scenarios):
+        start = args.random_sim_step_length + k * fixed_command_sim_steps
+        end = start + fixed_command_sim_steps # End is exclusive
+        subdir = f"scenario_{scenario_tag}"
+        run_generate_plots(start, end, subdir, plots_directory=plots_directory, sim_data_file_path=np_data_file)
+    random_rc = run_generate_plots(start_step=0, end_step=args.random_sim_step_length, subdir="random_simulation_steps", plots_directory=plots_directory, sim_data_file_path=np_data_file)
+    overall_rc = run_generate_plots(start_step=0, end_step=total_sim_steps, subdir="overall", plots_directory=plots_directory, sim_data_file_path=np_data_file)
+
+    if any(rc != 0 for rc in (overall_rc, random_rc)):
+        print("[WARN] At least one generate_plots.py run returned a non-zero exit code.")
 
     env.close()
     simulation_app.close()
