@@ -268,7 +268,7 @@ def _plot_foot_height_time_series(heights_array: np.ndarray, frame_label: str, s
     fig, axes = plt.subplots(2, 2, sharex=True, figsize=FIGSIZE)
     for i, ax in enumerate(axes.flat):
         ax.plot(sim_times, heights_array[:, i], linewidth=linewidth, label=f'height_{foot_labels[i]}')
-
+        ax.grid()
         first = True
         for start_step, end_step in compute_stance_segments(in_contact=contact_state_array[:, i].astype(bool)):
             ax.axvspan(sim_times[start_step], sim_times[end_step-1], color='gray', alpha=.3, label='in contact' if first else None)
@@ -289,6 +289,7 @@ def _plot_foot_height_time_series(heights_array: np.ndarray, frame_label: str, s
     # ------ overview -------
     fig_overview, ax = plt.subplots(figsize=(FIGSIZE[0], FIGSIZE[1]))
     for i, lbl in enumerate(foot_labels):
+        ax.grid()
         ax.plot(sim_times, heights_array[:, i], label=lbl, linewidth=linewidth)
     draw_resets(ax, reset_times)
     ax.set_xlabel('Time / s')
@@ -309,6 +310,7 @@ def _plot_hist_metric_grid(metric_dict: dict[str, list[float]], title: str, xlab
     fig.suptitle(title, fontsize=18)
     for i, lbl in enumerate(foot_labels):
         ax = axes.flat[i]
+        ax.grid()
         data = metric_dict[lbl]
         if data:
             ax.hist(data, bins='auto', alpha=.7)
@@ -331,6 +333,7 @@ def _plot_hist_metric_overview(metric_dict: dict[str, list[float]], title: str, 
     for lbl in foot_labels:
         data = metric_dict[lbl]
         if data:
+            ax.grid()
             ax.hist(data, bins='auto', alpha=.6, label=lbl)
     ax.set_title(title, fontsize=16)
     ax.set_xlabel(xlabel); ax.set_ylabel('Frequency')
@@ -350,6 +353,7 @@ def _plot_box_metric_grid(metric_dict: dict[str, list[float]], title: str, xlabe
     fig.suptitle(title, fontsize=18)
     for i, lbl in enumerate(foot_labels):
         ax = axes.flat[i]
+        ax.grid()
         data = metric_dict[lbl]
         if data:
             ax.boxplot(data, showmeans=True, showcaps=True, showbox=True, showfliers=False)
@@ -371,6 +375,7 @@ def _plot_box_metric_overview(metric_dict: dict[str, list[float]], title: str, x
         if metric_dict[lbl]:
             data.append(metric_dict[lbl]); lbls.append(lbl)
     if data:
+        ax.grid()
         ax.boxplot(data, positions=np.arange(1, len(lbls)+1), showmeans=True, showcaps=True, showbox=True, showfliers=False)
     ax.set_title(title, fontsize=16)
     ax.set_xlabel('Foot'); ax.set_ylabel(xlabel)
@@ -386,6 +391,7 @@ def _plot_foot_contact_force_per_foot(sim_times, contact_forces_array, foot_labe
     fig, axes = plt.subplots(2, 2, sharex=True, figsize=(16, 8))
     for i, ax in enumerate(axes.flat):
         ax.plot(sim_times, contact_forces_array[:, i], label=f'force_mag_{foot_labels[i]}', linewidth=linewidth)
+        ax.grid()
         draw_limits(ax, "foot_contact_force", constraint_bounds)
         draw_resets(ax, reset_times)
 
@@ -414,7 +420,7 @@ def _plot_hist_contact_forces_grid(contact_forces_array, foot_labels, output_dir
     # Loop over each foot label / column
     for i, label in enumerate(foot_labels):
         ax = axes.flat[i]
-        
+        ax.grid()
         forces = contact_forces_array[:, i]
         positive_forces = forces[forces > 0]
         
@@ -449,6 +455,7 @@ def _plot_hist_contact_forces_overview(contact_forces_array, foot_labels, output
         positive_forces = forces[forces > 0]
         
         if positive_forces.size > 0:
+            ax.grid()
             ax.hist(positive_forces, bins='auto', alpha=0.6, label=label)
         else:
             # Warn in the plot that there's no data for this label
@@ -476,6 +483,7 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
         if row is None or col is None:
             raise ValueError("Could not determine joint row/col for plotting")
         ax = axes[row, col]
+        ax.grid()
         ax.plot(sim_times, data_arr[:, j], linewidth=linewidth)
         if metric_name == 'position':
             draw_limits(ax, jn, constraint_bounds)
@@ -501,6 +509,7 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
     # overview
     fig_ov, ax = plt.subplots(figsize=(12, 6))
     for j in range(data_arr.shape[1]):
+        ax.grid()
         ax.plot(sim_times, data_arr[:, j], label=joint_names[j], linewidth=linewidth, linestyle=get_leg_linestyle(joint_names[j]))
     if metric_name == 'position':
         for jn in joint_names:
@@ -524,6 +533,7 @@ def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, 
     for j, jn in enumerate(joint_names):
         row, col = leg_row[j], leg_col[j]
         ax = axes[row, col]
+        ax.grid()
         ax.hist(data_arr[:, j], bins='auto', alpha=0.7)
         ax.set_title(jn, fontsize=12)
         ax.set_xlabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}")
@@ -538,6 +548,7 @@ def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, 
 def _plot_hist_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE):
     fig, ax = plt.subplots(figsize=FIGSIZE)
     for j, jn in enumerate(joint_names):
+        ax.grid()
         ax.hist(data_arr[:, j], bins='auto', alpha=0.6, label=jn)
     ax.set_title(f"Histogram of joint {metric_name.replace('_',' ')}", fontsize=16)
     ax.set_xlabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}")
@@ -556,6 +567,7 @@ def _plot_hist_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output
     for i, label in enumerate(foot_labels):
         durations = air_segments_per_foot[label]
         ax = axes.flat[i]
+        ax.grid()
         if durations:
             ax.hist(durations, bins='auto', alpha=0.7)
         ax.set_title(label, fontsize=14)
@@ -571,6 +583,7 @@ def _plot_hist_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output
 def _plot_hist_air_time_per_foot_single(label, durations, output_dir, pickle_dir, FIGSIZE):
     fig, ax = plt.subplots(figsize=FIGSIZE)
     if durations:
+        ax.grid()
         ax.hist(durations, bins='auto', alpha=0.7)
     ax.set_title(f"Histogram of Air-Time Durations ({label})", fontsize=16)
     ax.set_xlabel("Air Time / s")
@@ -586,6 +599,7 @@ def _plot_hist_air_time_per_foot_single(label, durations, output_dir, pickle_dir
 def _plot_combined_energy(sim_times, combined_energy, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig, ax = plt.subplots(figsize=FIGSIZE)
     ax.plot(sim_times, combined_energy, label='total_energy', linewidth=linewidth)
+    ax.grid()
     draw_resets(ax, reset_times)
     ax.set_xlabel('Time / s')
     ax.set_ylabel('Energy / J')
@@ -602,10 +616,10 @@ def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_time
     fig, ax = plt.subplots(figsize=FIGSIZE)
     ax.plot(sim_times, cost_of_transport_time_series, label='cost_of_transport', linewidth=linewidth)
     draw_resets(ax, reset_times)
-
+    ax.grid()
     # Plot running average
     # window_sizes = [25, 50, 300]
-    window_sizes = [50]
+    window_sizes = [100]
     for window_size in window_sizes:
         window = np.ones(window_size) / window_size
         running_average = np.convolve(cost_of_transport_time_series, window, mode='valid')
@@ -628,6 +642,7 @@ def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_time
 def _plot_hist_cost_of_transport(cost_of_transport_time_series, output_dir, pickle_dir, FIGSIZE):
     fig, ax = plt.subplots(figsize=FIGSIZE)
     ax.hist(cost_of_transport_time_series[~np.isnan(cost_of_transport_time_series)], bins='auto', alpha=0.7)
+    ax.grid()
     ax.set_xlabel('Cost of Transport / -')
     ax.set_xlim(0, 6)
     ax.set_ylabel('Count')
@@ -643,6 +658,7 @@ def _plot_combined_base_position(sim_times, base_position_array, reset_times, ou
     fig_bp, axes_bp = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, axis_label in enumerate(['X', 'Y', 'Z']):
         axes_bp[i].plot(sim_times, base_position_array[:, i], label=f'position_{axis_label}', linewidth=linewidth)
+        axes_bp[i].grid()
         draw_resets(axes_bp[i], reset_times)
         axes_bp[i].set_title(f'World Position {axis_label}')
         axes_bp[i].set_ylabel('Position / m')
@@ -660,6 +676,7 @@ def _plot_combined_orientation(sim_times, base_orientation_array, reset_times, o
     fig_bo, axes_bo = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, orient_label in enumerate(['Yaw', 'Pitch', 'Roll']):
         axes_bo[i].plot(sim_times, base_orientation_array[:, i], label=orient_label, linewidth=linewidth)
+        axes_bo[i].grid()
         draw_resets(axes_bo[i], reset_times)
         axes_bo[i].set_ylabel(f'{orient_label} / rad')
         axes_bo[i].set_title(f'World Orientation {orient_label}')
@@ -677,6 +694,7 @@ def _plot_combined_base_velocity(sim_times, base_linear_velocity_array, commande
     fig_blv, axes_blv = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, vel_label in enumerate(['Velocity X', 'Velocity Y', 'Velocity Z']):
         axes_blv[i].plot(sim_times, base_linear_velocity_array[:, i], label=vel_label, linewidth=linewidth)
+        axes_blv[i].grid()
         if i != 2:
             axes_blv[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f'cmd_{vel_label}', linewidth=linewidth)
         draw_resets(axes_blv[i], reset_times)
@@ -696,6 +714,7 @@ def _plot_combined_base_angular_velocities(sim_times, base_angular_velocity_arra
     fig_bav, axes_bav = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
     for i, vel_label in enumerate(['Omega X', 'Omega Y', 'Omega Z']):
         axes_bav[i].plot(sim_times, base_angular_velocity_array[:, i], label=vel_label, linewidth=linewidth)
+        axes_bav[i].grid()
         if i == 2:
             axes_bav[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f'cmd_{vel_label}', linewidth=linewidth)
         draw_resets(axes_bav[i], reset_times)
@@ -719,6 +738,7 @@ def _plot_total_base_overview(sim_times, base_position_array, base_orientation_a
     for ax, arr, title, axis_labels in zip(overview_axes.flatten(), arrays, titles, labels):
         for i, lbl in enumerate(axis_labels):
             ax.plot(sim_times, arr[:, i], label=lbl, linewidth=linewidth)
+            ax.grid()
             draw_resets(ax, reset_times)
         ax.set_title(title, fontsize=16)
         ax.set_xlabel('Time / s')
@@ -750,7 +770,7 @@ def _plot_box_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, m
     for j, jn in enumerate(joint_names):
         row, col = leg_row[j], leg_col[j]
         ax = axes[row, col]
-
+        ax.grid()
         ax.boxplot(x=data_arr[:, j], showmeans=True, showcaps=True, showbox=True, showfliers=False)
         ax.set_title(jn, fontsize=12)
         ax.set_xlabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}", fontsize=8)
@@ -770,7 +790,7 @@ def _plot_box_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_ma
     fig, ax = plt.subplots(figsize=FIGSIZE)
 
     ax.boxplot(x=[data_arr[:, j] for j in range(data_arr.shape[1])], positions=np.arange(1, len(joint_names) + 1), showmeans=True, showcaps=True, showbox=True, showfliers=False)
-
+    ax.grid()
     ax.set_title(f"Box Plot of Joint {metric_name.replace('_', ' ')}", fontsize=16)
     ax.set_xlabel("Joint")
     ax.set_ylabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}")
@@ -794,6 +814,7 @@ def _plot_box_contact_forces_grid(contact_forces_array, foot_labels, output_dir,
 
     for i, label in enumerate(foot_labels):
         ax = axes.flat[i]
+        ax.grid()
         forces = contact_forces_array[:, i]
         positive = forces[forces > 0]
         if positive.size == 0:
@@ -824,6 +845,7 @@ def _plot_box_contact_forces_overview(contact_forces_array, foot_labels, output_
             used_labels.append(label)
 
     if data:
+        ax.grid()
         ax.boxplot(data, positions=np.arange(1, len(data) + 1), showmeans=True, showcaps=True, showbox=True, showfliers=False)
     ax.set_title("Box Plot of Foot Contact Forces", fontsize=16)
     ax.set_xlabel("Foot")
@@ -849,6 +871,7 @@ def _plot_box_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output_
     for i, label in enumerate(foot_labels):
         durations = air_segments_per_foot[label]
         ax = axes.flat[i]
+        ax.grid()
         if durations:
             ax.boxplot(durations, showmeans=True, showcaps=True, showbox=True, showfliers=False)
         ax.set_title(label, fontsize=14)
@@ -869,6 +892,7 @@ def _plot_box_air_time_per_foot_single(label, durations, output_dir, pickle_dir,
     fig, ax = plt.subplots(figsize=FIGSIZE)
     if durations:
         ax.boxplot(durations, showmeans=True, showcaps=True, showbox=True, showfliers=False)
+        ax.grid()
     else:
         ax.text(0.5, 0.5, "No air-time segments", ha="center", va="center", transform=ax.transAxes, fontsize=12, color="red")
 
@@ -892,6 +916,7 @@ def _plot_box_cost_of_transport(cost_of_transport_time_series, output_dir, pickl
     data = cost_of_transport_time_series[~np.isnan(cost_of_transport_time_series)]
     if data.size > 0:
         ax.boxplot(data, showmeans=True, showcaps=True, showbox=True, showfliers=False)
+        ax.grid()
     ax.set_xlabel("Cost of Transport")
     ax.set_title("Box Plot of Cost of Transport", fontsize=16)
     fig.tight_layout()
