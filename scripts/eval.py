@@ -327,7 +327,7 @@ def main():
 
     for t in tqdm(range(total_sim_steps)):
         # These should only ever run at the end of eval / after random sampling because set_fixed_velocity_command breaks random command sampling!
-        if t >= args.random_sim_step_length and t % fixed_command_sim_steps == 0:
+        if t >= args.random_sim_step_length and (t-args.random_sim_step_length) % fixed_command_sim_steps == 0:
             scenario = fixed_command_scenarios[int(t-args.random_sim_step_length) // fixed_command_sim_steps]
             fixed_command = scenario[1]
             spawn_point_pos, spawn_point_quat = scenario[2]
