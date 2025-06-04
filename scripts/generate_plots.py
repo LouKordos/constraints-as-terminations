@@ -751,6 +751,38 @@ def _plot_combined_energy(sim_times, combined_energy, reset_times, output_dir, p
     with open(os.path.join(pickle_dir, 'combined_energy_overview.pickle'), 'wb') as f:
         pickle.dump(fig, f)
 
+def _plot_cumulative_reward(sim_times, reward_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.plot(sim_times, np.cumsum(reward_array), label='Cumulative reward', linewidth=linewidth)
+    ax.grid()
+    draw_resets(ax, reset_times)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Reward (-)')
+    ax.set_title('Reward at each time step', fontsize=16)
+    ax.legend()
+    fig.tight_layout()
+    pdf = os.path.join(output_dir, "aggregates", 'reward_time_series.pdf')
+    os.makedirs(os.path.dirname(pdf), exist_ok=True)
+    fig.savefig(pdf, dpi=600)
+    with open(os.path.join(pickle_dir, 'reward_time_series.pickle'), 'wb') as f:
+        pickle.dump(fig, f)
+
+def _plot_reward_time_series(sim_times, reward_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.plot(sim_times, reward_array, label='Reward', linewidth=linewidth)
+    ax.grid()
+    draw_resets(ax, reset_times)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Cumulative reward (-)')
+    ax.set_title('Cumulative reward', fontsize=16)
+    ax.legend()
+    fig.tight_layout()
+    pdf = os.path.join(output_dir, "aggregates", 'cumulative_reward.pdf')
+    os.makedirs(os.path.dirname(pdf), exist_ok=True)
+    fig.savefig(pdf, dpi=600)
+    with open(os.path.join(pickle_dir, 'cumulative_reward.pickle'), 'wb') as f:
+        pickle.dump(fig, f)
+
 def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig, ax = plt.subplots(figsize=FIGSIZE)
     ax.plot(sim_times, cost_of_transport_time_series, label='cost_of_transport', linewidth=linewidth)
@@ -1097,6 +1129,7 @@ def generate_plots(data, output_dir, interactive=False):
     joint_names = list(data['joint_names'])
     total_robot_mass = data['total_robot_mass']
     power_array = data["power_array"]
+    reward_array = data["reward_array"]
     joint_positions = data['joint_positions_array']
     joint_velocities = data['joint_velocities_array']
     joint_accelerations = data['joint_accelerations_array']
@@ -1252,6 +1285,22 @@ def generate_plots(data, output_dir, interactive=False):
             executor.submit(
                 _plot_combined_energy,
                 sim_times, combined_energy, reset_times,
+                output_dir, pickle_dir, FIGSIZE, linewidth
+            )
+        )
+
+        futures.append(
+            executor.submit(
+                _plot_reward_time_series,
+                sim_times, reward_array, reset_times,
+                output_dir, pickle_dir, FIGSIZE, linewidth
+            )
+        )
+
+        futures.append(
+            executor.submit(
+                _plot_cumulative_reward,
+                sim_times, reward_array, reset_times,
                 output_dir, pickle_dir, FIGSIZE, linewidth
             )
         )
