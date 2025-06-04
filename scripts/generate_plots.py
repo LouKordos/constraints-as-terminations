@@ -29,14 +29,10 @@ plt.ioff()
 
 def load_data(npz_path, summary_path=None):
     """
-    Load simulation data from a .npz file and optional metrics summary JSON.
+    Load simulation data from a .npz file.
     """
     data = np.load(npz_path, allow_pickle=True)
-    metrics = None
-    if summary_path and os.path.isfile(summary_path):
-        with open(summary_path, 'r') as f:
-            metrics = json.load(f)
-    return data, metrics
+    return data
 
 def draw_limits(ax, term, bounds):
     """
@@ -948,7 +944,7 @@ def _plot_box_cost_of_transport(cost_of_transport_time_series, output_dir, pickl
 # Main plot generation orchestrator
 # ----------------------------------------------------------------------------------------------------------------------
 
-def generate_plots(data, metrics, output_dir, interactive=False):
+def generate_plots(data, output_dir, interactive=False):
     """
     Recreate all plots from loaded data.
     - data: numpy.lib.npyio.NpzFile containing arrays
@@ -986,9 +982,9 @@ def generate_plots(data, metrics, output_dir, interactive=False):
     base_angular_velocities = data['base_angular_velocity_array']
     base_commanded_velocities = data['commanded_velocity_array']
     energy_per_joint, combined_energy, cost_of_transport_time_series = compute_energy_arrays(power_array=power_array, base_lin_vel=base_linear_velocities, reset_steps=reset_timesteps, step_dt=step_dt, robot_mass=total_robot_mass)
-    foot_positions_body_frame    = data['foot_positions_body_frame'] # (T,4,3)
-    foot_positions_contact_frame = data['foot_positions_contact_frame'] # (T,4,3)
-    foot_positions_world_frame   = data['foot_positions_world_frame'] # (T,4,3)
+    foot_positions_body_frame    = data['foot_positions_body_frame_array'] # (T,4,3)
+    foot_positions_contact_frame = data['foot_positions_contact_frame_array'] # (T,4,3)
+    foot_positions_world_frame   = data['foot_positions_world_frame_array'] # (T,4,3)
     foot_heights_body_frame = foot_positions_body_frame[:, :, 2]
     foot_heights_contact_frame = foot_positions_contact_frame[:, :, 2]
     step_heights = compute_swing_heights(contact_state=contact_state_array, foot_heights_contact=foot_heights_contact_frame, reset_steps=reset_timesteps, foot_labels=foot_labels)
@@ -1486,14 +1482,30 @@ def main():
     parser = argparse.ArgumentParser(description="Regenerate plots from saved simulation data.")
     parser.add_argument("--data_file", type=str, required=True,
                         help="Path to the .npz file containing recorded sim data.")
-    parser.add_argument("--summary", type=str, default=None,
-                        help="Path to metrics_summary.json (optional).")
+    parser.add_argument("--output_dir", type=str, required=True,
+                        help="Desired plot output path. Will be created if nonexistant.")
     parser.add_argument("--interactive", action="store_true", default=False,
                         help="Show figures interactively in addition to saving.")
+    parser.add_argument("--start_step", type=int, default=None,
+                    help="(Optional) first step to include (global index, 0-based)")
+    parser.add_argument("--end_step", type=int, default=None,
+                    help="(Optional) last step to include, inclusive")
     args = parser.parse_args()
+    os.makedirs(args.output_dir, exist_ok=True)
 
-    data, metrics = load_data(args.data_file, args.summary)
-    generate_plots(data, metrics, os.path.dirname(args.data_file), interactive=args.interactive)
+    data = load_data(args.data_file)
+    if args.start_step is not None:
+        s = slice(args.start_step, args.end_step + 1)
+        data = {k: (v[s] if (k.endswith("_array") or k == "sim_times") else v) for k, v in data.items()}
+
+        # bring resets in-range and shift them so that t=0 is the first
+        sim_times = data["sim_times"]
+        t0, t1 = float(sim_times[0]), float(sim_times[-1])
+        full_resets = data["reset_times"]
+        in_window = (full_resets >= t0) & (full_resets <= t1)
+        data["reset_times"] = full_resets[in_window] - t0
+        
+    generate_plots(data, args.output_dir, interactive=args.interactive)
 
 if __name__ == "__main__":
     main()
