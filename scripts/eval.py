@@ -21,7 +21,8 @@ import subprocess
 import os
 import re
 import yaml
-from typing import Dict, Tuple, Optional, List
+from typing import Dict, Tuple, Optional, List, Any
+from metrics_utils import compute_summary_metrics
 
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8" # Determinism
 os.environ["OMNICLIENT_HUB_MODE"] = "disabled"
@@ -142,66 +143,6 @@ def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[fl
 
     return bounds
 
-def compute_histogram(arr: np.ndarray, bin_edges: np.ndarray) -> np.ndarray:
-    """
-    Given a 1D numpy array `arr` and a shared 1D array of bin_edges of length B+1,
-    returns a normalized histogram vector of length B (summing to 1.0).
-    """
-    counts, _ = np.histogram(arr, bins=bin_edges)
-    total = counts.sum()
-    if total > 0:
-        return counts.astype(np.float64) / float(total)
-    else:
-        # If the array was empty or all zeros, return uniform or zeros.
-        # Here we return zeros, so that TVD with another zero‐histogram is 0.
-        return np.zeros_like(counts, dtype=np.float64)
-
-def total_variation_distance(p: np.ndarray, q: np.ndarray) -> float:
-    """
-    Given two 1D numpy vectors p and q (same length, non-negative, each summing to 1),
-    compute TVD = 0.5 * sum |p_i - q_i|.
-    """
-    return 0.5 * np.sum(np.abs(p - q))
-
-def optimal_bin_edges(samples: np.ndarray, rule: str = "fd", min_bins: int = 20, max_bins: int = 250) -> np.ndarray:
-    """
-    Return a 1-D array of bin edges derived from `samples`
-    using either 'fd' (Freedman–Diaconis) or 'scott'.
-    """
-    n = samples.size
-    data_min, data_max = samples.min(), samples.max()
-    data_range = data_max - data_min
-
-    if rule == "fd":
-        iqr = np.subtract(*np.percentile(samples, [75, 25]))
-        h = 2.0 * iqr / np.cbrt(n) if iqr > 0 else None
-    elif rule == "scott":
-        h = 3.5 * samples.std(ddof=1) / np.cbrt(n)
-    else:
-        raise ValueError("rule must be 'fd' or 'scott'")
-
-    if h is None or h <= 0:
-        h = 3.5 * samples.std(ddof=1) / np.cbrt(n)   # Scott fallback
-
-    num_bins = int(np.clip(np.ceil(data_range / h), min_bins, max_bins))
-    return np.linspace(data_min, data_max, num_bins + 1)
-
-def get_contact_segments(in_contact: np.ndarray) -> list[tuple[int, int]]:
-    """
-    Return a list of (start_idx, end_idx) indices for every **contact/stance**
-    segment of a single foot.  `in_contact` is a 1-D Boolean array over time.
-    """
-    segments, start = [], None
-    for t, val in enumerate(in_contact):
-        if val and start is None:
-            start = t
-        elif not val and start is not None:
-            segments.append((start, t)) # [start, end)
-            start = None
-    if start is not None: # hanging segment
-        segments.append((start, len(in_contact)))
-    return segments
-
 def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
@@ -236,12 +177,8 @@ def main():
     from isaaclab.envs.mdp.observations import root_quat_w
     from isaaclab.managers import SceneEntityCfg
 
-    env_cfg = parse_env_cfg(
-        args.task,
-        device=args.device,
-        num_envs=args.num_envs,
-        use_fabric=not args.disable_fabric
-    )
+    env_cfg = parse_env_cfg(args.task, device=args.device, num_envs=args.num_envs, use_fabric=not args.disable_fabric)
+
     # Seeding
     import random
     random.seed(env_cfg.seed)
@@ -253,6 +190,7 @@ def main():
     torch.backends.cudnn.benchmark = False
     torch.manual_seed(env_cfg.seed)
     torch.cuda.manual_seed_all(env_cfg.seed)
+
     # Viewer setup
     env_cfg.viewer.origin_type = "asset_root"
     env_cfg.viewer.asset_name = "robot"
@@ -305,7 +243,6 @@ def main():
         "pop_frames": True, # env.render() is called periodically in the sim loop to store the frames on disk and thus reduce memory usage. pop_frames clears the in-memory buffer after calling render()
         "reset_clean": False, # Since sim loop resets the env for the hardcoded scenarios, the frames should be preserved on env.reset()
     }
-    print_dict(video_configuration, nesting=4)
     env = gym.wrappers.RenderCollection(env, **video_configuration)
 
     policy_agent = Agent(env).to(device)
@@ -348,7 +285,7 @@ def main():
     foot_positions_body_frame_buffer = []
     foot_positions_contact_frame_buffer = [] # Height above terrain, also called sole frame
 
-    cumulative_unscaled_raw_reward = 0.0
+    reward_buffer = []
     reset_steps = []
 
     observations, info = env.reset()
@@ -360,7 +297,7 @@ def main():
     ffmpeg_cmd = ["ffmpeg", "-y", "-hwaccel", "cuda", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{frame_width}x{frame_height}", "-framerate", str(frame_rate), "-i", "pipe:0", "-c:v", "hevc_nvenc", "-preset", "slow", "-movflags", "+use_metadata_tags", "-metadata", f"env_name={env_name}", video_output_path]
     ffmpeg_process_log_path = os.path.join(eval_base_dir, "ffmpeg_encode.log")
     with open(ffmpeg_process_log_path, "w") as ffmpeg_process_logfile:
-        print(f"Starting ffmpeg process={ffmpeg_cmd}")
+        print(f"Starting ffmpeg process={' '.join(ffmpeg_cmd)}")
         ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdout=ffmpeg_process_logfile, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, bufsize=4*1024*1024)
 
     for t in tqdm(range(total_sim_steps)):
@@ -381,6 +318,7 @@ def main():
         step_tuple = env.step(action)
         # print(step_tuple)
         next_observation, reward, terminated, truncated, info = step_tuple
+
         # Idea of constraints as terminations is to scale reward by max constraint violation, but since policies
         # being tested here might differ in the constraints they were trained with, it makes sense to remove this scaling
         # while evaluating a policy. This division just reverts the scaling done in cat_env.py and thus should yield the
@@ -394,8 +332,7 @@ def main():
             reward /= (1.0 - terminated)
             # print(f"reward_after_scaling={reward}\tterminated={terminated}")
         
-        # print(f"terminated={terminated}, truncated={truncated}")
-        # Because of CaT, terminated is actually a nonzero probability instead of a boolean, always remember this
+        # Because of CaT, terminated is actually a nonzero probability instead of a boolean, so we have to check for resets this way
         if env.unwrapped.episode_length_buf[0].item() == 0 and t > 0:
             reset_steps.append(t)
 
@@ -441,8 +378,7 @@ def main():
         # quat_wxyz = torch.cat([quat_xyzw[3:], quat_xyzw[:3]]) # reorder to (w,x,y,z)
         quat_wxyz = root_quat_w(env.unwrapped, make_quat_unique=True, asset_cfg=SceneEntityCfg("robot"))
         roll_t, pitch_t, yaw_t = euler_xyz_from_quat(quat_wxyz)
-        # Isaaclab returns 0 to 2pi euler angles, so small negative angles wrap around to ~2pi.
-        # Rescale to [-pi, pi] for better plotting
+        # Isaaclab returns 0 to 2pi euler angles, so small negative angles wrap around to ~2pi. Rescale accordingly
         def convert_to_signed_angle(a): return (a + np.pi) % (2*np.pi) - np.pi
 
         # IMPORTANT: THESE ANGLES ARE NOT UNWRAPPED YET, HAPPENS AFTER THE FULL ROLLOUT
@@ -481,16 +417,16 @@ def main():
         # print(f"foot_positions_contact_frame={foot_positions_contact_frame}")
         foot_positions_contact_frame_buffer.append(foot_positions_contact_frame)
 
-        cumulative_unscaled_raw_reward += reward.mean().item()
+        reward_buffer.append(reward.mean().item())
         policy_observation = next_observation['policy']
 
     print("Sim loop done, converting and saving recorded sim data...")
-
     # Convert buffers to numpy arrays
     time_indices = np.arange(total_sim_steps)
     sim_times = time_indices * step_dt
     reset_times = [i * step_dt for i in reset_steps]
     print("Reset times: ", reset_times)
+    reward_array = np.array(reward_buffer)
     joint_positions_array = np.vstack(joint_positions_buffer)
     joint_velocities_array = np.vstack(joint_velocities_buffer)
     joint_torques_array = np.vstack(joint_torques_buffer)
@@ -508,309 +444,70 @@ def main():
     foot_positions_world_frame_array = np.array(foot_positions_world_frame_buffer)
     foot_positions_body_frame_array = np.array(foot_positions_body_frame_buffer)
     foot_positions_contact_frame_array = np.array(foot_positions_contact_frame_buffer)
-
-    # --- energy & cost-of-transport ------------------------------------
-    # instantaneous joint power: torque (Nm) * angular velocity (rad/s)
-    power_array = joint_torques_array * joint_velocities_array  # shape (T, J)
-    instantaneous_speed = np.linalg.norm(base_linear_velocity_array[:, :2], axis=1)
-    for reset_step in reset_steps: # When teleporting, we want to keep speed constant to avoid velocity and cost of transport spikes
-        instantaneous_speed[max(0, reset_step-1):reset_step+1] = instantaneous_speed[max(0, reset_step-1)]
-        power_array[max(0, reset_step-1):reset_step+1, :] = power_array[max(0, reset_step-1), :]
-    # cumulative per-joint energy (J) via trapezoidal/integral: ∑ |P| * dt
-    energy_per_joint = np.cumsum(np.abs(power_array), axis=0) * step_dt  # shape (T, J)
-    # cumulative total energy (J) across all joints
-    combined_energy = np.cumsum(np.abs(power_array).sum(axis=1)) * step_dt  # shape (T,)
-    
-    # 1) Compute raw displacements
-    raw_distance = np.linalg.norm(np.diff(base_position_array, axis=0), axis=1)
-    # 2) Build a mask of “real” steps
-    mask = np.ones_like(raw_distance, dtype=bool)
-    # Zero-out after environment resets
-    for reset_step in reset_steps:
-        # reset_step is the time-step index at which reset happened
-        # the jump appears at displacement index reset_step-1
-        if reset_step > 0 and reset_step-1 < len(mask):
-            mask[reset_step-1] = False
-    # Zero-out after teleports
-    for k in range(len(fixed_command_scenarios)):
-        t0 = args.random_sim_step_length + k * fixed_command_sim_steps
-        if t0 > 0 and t0-1 < len(mask):
-            mask[t0-1] = False
-    # 3) Sum only the valid displacements
-    true_distance = float(raw_distance[mask].sum())
+    power_array = joint_torques_array * joint_velocities_array
     total_robot_mass = float(env.unwrapped.scene["robot"].data.default_mass.sum().item())
 
-    # instantaneous cost of transport (dimensionless): P_total / (m g v)
-    cost_of_transport_time_series = combined_energy.copy() # placeholder
-    with np.errstate(divide='ignore', invalid='ignore'):
-        cost_of_transport_time_series = (np.abs(power_array).sum(axis=1) / (total_robot_mass * 9.81 * instantaneous_speed + 1e-12))
-
-    # average cost of transport over the whole run
-    mean_cost_of_transport = float(np.nanmean(cost_of_transport_time_series))
-
-    target_lin_vel_x = commanded_velocity_array[:, 0]
-    actual_lin_vel_x = base_linear_velocity_array[:, 0]
-    lin_vel_x_error = target_lin_vel_x - actual_lin_vel_x
-    lin_vel_x_rms = np.sqrt(np.mean(lin_vel_x_error**2))
-
-    target_lin_vel_y = commanded_velocity_array[:, 1]
-    actual_lin_vel_y = base_linear_velocity_array[:, 1]
-    lin_vel_y_error = target_lin_vel_y - actual_lin_vel_y
-    lin_vel_y_rms = np.sqrt(np.mean(lin_vel_y_error**2))
-
-    target_yaw_rate = commanded_velocity_array[:, 2]
-    actual_yaw_rate = base_angular_velocity_array[:, 2]
-    yaw_rate_error = target_yaw_rate - actual_yaw_rate
-    ang_vel_z_rms = np.sqrt(np.mean(yaw_rate_error**2))
-
-    # Compute constraint violations
-    print("Constraint bounds:", constraint_bounds)
-    constraint_violations_percent = {}
-    constraint_violation_data_map = {
-        'joint_velocity': joint_velocities_array,
-        'joint_torque': joint_torques_array,
-        'joint_acceleration': joint_accelerations_array,
-        'action_rate': action_rate_array,
-        'foot_contact_force': contact_forces_array.reshape(total_sim_steps, -1).mean(axis=1),
-        'joint_position': joint_positions_array, # shape (T, J)
-        # air_time: 1 if foot is in the air, 0 if in contact → shape (T, F)
-        'air_time': (1 - contact_state_array).astype(float)
+    arrays_dict = {
+        "joint_positions"      : joint_positions_array,
+        "joint_velocities"     : joint_velocities_array,
+        "joint_torques"        : joint_torques_array,
+        "joint_accelerations"  : joint_accelerations_array,
+        "action_rate"          : action_rate_array,
+        "contact_forces"       : contact_forces_array,
+        "base_position"        : base_position_array,
+        "base_orientation"     : base_orientation_array,
+        "base_linear_velocity" : base_linear_velocity_array,
+        "base_angular_velocity": base_angular_velocity_array,
+        "commanded_velocity"   : commanded_velocity_array,
+        "contact_state"        : contact_state_array,
+        "foot_positions_world_frame" : foot_positions_world_frame_array,
+        "foot_positions_body"  : foot_positions_body_frame_array,
+        "foot_positions_contact_frame": foot_positions_contact_frame_array,
+        "power_array"          : power_array,
+        "reward"               : reward_array,
     }
 
-    metrics = {
-        'position': joint_positions_array,
-        'velocity':	joint_velocities_array,
-        'acceleration': joint_accelerations_array,
-        'torque': joint_torques_array,
-        'action_rate': action_rate_array,
-        'energy': energy_per_joint,
-        'power': power_array,
+    constants_dict = {
+        "step_dt"          : step_dt,
+        "joint_names"      : joint_names,
+        "foot_labels"      : foot_labels,
+        "constraint_bounds": constraint_bounds,
+        "total_robot_mass" : total_robot_mass
     }
 
-    for term, (lb, ub) in constraint_bounds.items():
-        metric = constraint_violation_data_map.get(term)
-        if metric is None:
-            # skip globals not in map
-            print(f"Skipping metric for term={term}")
-            continue
+    # --- masks ---
+    T            = total_sim_steps
+    all_indices  = np.arange(T)
+    random_timestep_mask  = all_indices < args.random_sim_step_length
 
-        # build a violation mask: same shape as metric
-        #  - True wherever metric > ub
-        #  - True wherever metric < lb (only if lb is not None)
-        if metric.ndim == 2:
-            # per‐joint: shape (T, J)
-            above_ub = (ub is not None) * (metric > ub)
-            below_lb = (lb is not None) * (metric < lb)
-            violation_mask = above_ub | below_lb
+    scenario_masks = {}
+    for k, (scenario_tag, *_ ) in enumerate(fixed_command_scenarios):
+        start = args.random_sim_step_length + k * fixed_command_sim_steps
+        end   = start + fixed_command_sim_steps     # exclusive
+        scenario_masks[scenario_tag] = (all_indices >= start) & (all_indices < end)
 
-            # percent over time for each joint
-            violation_percentage = violation_mask.mean(axis=0) * 100
-            constraint_violations_percent[term] = dict(zip(joint_names, violation_percentage.tolist()))
-        else:
-            # 1D time-series
-            above_ub = (ub is not None) and (metric > ub)
-            below_lb = (lb is not None) and (metric < lb)
-            violation_mask = above_ub | below_lb
-            constraint_violations_percent[term] = float(violation_mask.mean() * 100)
-
-    per_joint_summary: Dict[str, Dict[str, Dict[str, float]]] = {}
-    for j, jn in enumerate(joint_names):
-        per_joint_summary[jn] = {}
-        for metric_name, data in metrics.items():
-            # data is shape (T, J); select column j → shape (T,)
-            foot_column = data[:, j]
-            per_joint_summary[jn][metric_name] = {
-                'mean': float(foot_column.mean()),
-                'min': float(foot_column.min()),
-                'max': float(foot_column.max()),
-                'median': float(np.median(foot_column)),
-                '90th_percentile': float(np.percentile(foot_column, 90)),
-                '99th_percentile': float(np.percentile(foot_column, 99)),
-                'stddev': float(np.std(foot_column))
-            }
-
-    # --- build per‐foot air‐time summaries ----------------------------------
-    # contact_state_array: shape (T, F); 1=in contact, 0=in air
-    air_segments_per_foot: Dict[str, List[float]] = {label: [] for label in foot_labels}
-
-    for i, label in enumerate(foot_labels):
-        in_contact = contact_state_array[:, i].astype(bool)
-        start = None
-        segments: List[Tuple[int,int]] = []
-        # find all [start, end) intervals where in_contact==False
-        for t, c in enumerate(in_contact):
-            if not c and start is None:
-                start = t
-            elif c and start is not None:
-                segments.append((start, t))
-                start = None
-        # if still airborne at end
-        if start is not None:
-            segments.append((start, len(in_contact)))
-        # convert to durations in seconds
-        durations = [(end - begin) * step_dt for begin, end in segments]
-        air_segments_per_foot[label] = durations
-
-    # now compute summary stats for each foot
-    air_time_summary: Dict[str, Dict[str, float]] = {}
-    for label, durations in air_segments_per_foot.items():
-        arr = np.array(durations, dtype=np.float64)
-        if arr.size == 0:
-            # no air‐time segments: fill zeros
-            air_time_summary[label] = {k: 0.0 for k in 
-                ('mean','min','max','median','90th_percentile', '99th_percentile', 'stddev')}
-        else:
-            air_time_summary[label] = {
-                'mean':            float(arr.mean()),
-                'min':             float(arr.min()),
-                'max':             float(arr.max()),
-                'median':          float(np.median(arr)),
-                '90th_percentile': float(np.percentile(arr, 90)),
-                '99th_percentile': float(np.percentile(arr, 99)),
-                'stddev': float(np.std(arr))
-            }
-
-    # --- build contact-forces summary ------------------------------------
-    # contact_forces_array is shape (T, F)
-    contact_force_summary: Dict[str, Dict[str, float]] = {}
-    for i, label in enumerate(foot_labels):
-        foot_column = contact_forces_array[:, i]
-        contact_force_summary[label] = {
-            'mean':             float(foot_column.mean()),
-            'min':              float(foot_column.min()),
-            'max':              float(foot_column.max()),
-            'median':           float(np.median(foot_column)),
-            '90th_percentile':  float(np.percentile(foot_column, 90)),
-            '99th_percentile':  float(np.percentile(foot_column, 99)),
-            'stddev': float(np.std(foot_column))
-        }
-
-    # --- symmetry: total-variation distance per paired joint -------------
-    print("Computing joint-symmetry TVD …")
-    # build a quick look-up: joint_type -> {side}{row} e.g. "calf"->{"FL":0, …}
-    joint_indices = {jn: idx for idx, jn in enumerate(joint_names)}
-
-    dofs = ["hip_joint", "thigh_joint", "calf_joint"]
-    gait_symmetry_tvd_by_joint = {dof: {} for dof in dofs}
-    for dof in dofs:
-        combined_samples = np.concatenate([joint_positions_array[:, joint_indices[f"{sr}_{dof}"]] for sr in ("FL","FR","RL","RR")])
-        bin_edges = optimal_bin_edges(combined_samples, rule="fd")
-        print(f"Selected bin_edges={len(bin_edges)} for dof={dof}")
-
-        # helper – return pmf for one joint
-        def pmf(sr): 
-            idx = joint_indices[f"{sr}_{dof}"]
-            return compute_histogram(joint_positions_array[:, idx], bin_edges)
-
-        gait_symmetry_tvd_by_joint[dof]["front_left_front_right"] = total_variation_distance(pmf("FL"), pmf("FR"))
-        gait_symmetry_tvd_by_joint[dof]["rear_left_rear_right"] = total_variation_distance(pmf("RL"), pmf("RR"))
-        gait_symmetry_tvd_by_joint[dof]["front_left_rear_left"] = total_variation_distance(pmf("FL"), pmf("RL"))
-        gait_symmetry_tvd_by_joint[dof]["front_right_rear_right"] = total_variation_distance(pmf("FR"), pmf("RR"))
-
-    aggregate_joint_symmetry_tvd = {
-        k: float(np.mean([gait_symmetry_tvd_by_joint[d][k] for d in dofs]))
-        for k in ("front_left_front_right", "rear_left_rear_right", "front_left_rear_left", "front_right_rear_right")
+    overall_metrics  = compute_summary_metrics(np.ones(T, bool), reset_steps, arrays_dict, constants_dict)
+    random_metrics   = compute_summary_metrics(random_timestep_mask, reset_steps, arrays_dict, constants_dict)
+    scenario_metrics = {
+        tag: compute_summary_metrics(msk, reset_steps, arrays_dict, constants_dict)
+        for tag, msk in scenario_masks.items()
     }
 
-    # --- axis-level aggregates -------------------------------------------
-    axis_symmetry_tvd = {
-        "left_vs_right": float(np.mean([
-            aggregate_joint_symmetry_tvd["front_left_front_right"],
-            aggregate_joint_symmetry_tvd["rear_left_rear_right"],
-        ])),
-        "front_vs_rear": float(np.mean([
-            aggregate_joint_symmetry_tvd["front_left_rear_left"],
-            aggregate_joint_symmetry_tvd["front_right_rear_right"],
-        ])),
-    }
+    summary_metrics = dict(overall_metrics) # start with overall block
+    # metrics per segment / fixed command scenario
+    summary_metrics["random_simulation_steps_metrics"] = random_metrics
+    summary_metrics["fixed_command_scenarios_metrics"] = scenario_metrics
+    summary_metrics.update({
+        "random_sim_steps"        : args.random_sim_step_length,
+        "total_sim_steps"         : total_sim_steps,
+        "seed"                    : env_cfg.seed,
+        "used_checkpoint_path"    : checkpoint_path,
+        "fixed_command_scenarios" : fixed_command_scenarios,
+    })
 
-    max_step_height_per_foot: dict[str, list[float]] = {lbl: [] for lbl in foot_labels}
-    step_length_per_foot: dict[str, list[float]] = {lbl: [] for lbl in foot_labels}
-    foot_heights_contact = foot_positions_contact_frame_array[:, :, 2]
-
-    for foot_id, foot_label in enumerate(foot_labels):
-        in_contact = contact_state_array[:, foot_id].astype(bool)
-        stance_segments = get_contact_segments(in_contact)
-
-        # ‣ max height during **swing** (= between stance segments)
-        for (start_0, end_0), (start_1, _) in zip(stance_segments, stance_segments[1:]):
-            # Skip if any reset index r lies in [end_0, start_1]
-            if any(end_0 <= r < start_1 for r in reset_steps):
-                continue
-            # swing is [end0, start1)
-            if start_1 - end_0 > 0:
-                max_height = np.nanmax(foot_heights_contact[end_0:start_1, foot_id])
-                if not np.isnan(max_height):
-                    max_step_height_per_foot[foot_label].append(float(max_height))
-
-        # ‣ step length = ΔXY world-frame between consecutive stance starts
-        for (previous_start, _), (next_start, _) in zip(stance_segments, stance_segments[1:]):
-            if any(previous_start < r <= next_start for r in reset_steps):
-                continue
-            p0 = foot_positions_world_frame_array[previous_start, foot_id, :2]
-            p1 = foot_positions_world_frame_array[next_start, foot_id, :2]
-            distance = float(np.linalg.norm((p1-p0)))
-            if distance < 1.5: # If distance > 1.5m, it was invalidated by a reset so we filter
-                step_length_per_foot[foot_label].append(distance)
-
-    step_length_summary = {}
-    for i, label in enumerate(foot_labels):
-        step_lengths = np.array(step_length_per_foot[label.replace("_", " ")])
-        step_length_summary[label] = {
-            'mean':             float(step_lengths.mean()),
-            'min':              float(step_lengths.min()),
-            'max':              float(step_lengths.max()),
-            'median':           float(np.median(step_lengths)),
-            '90th_percentile':  float(np.percentile(step_lengths, 90)),
-            '99th_percentile':  float(np.percentile(step_lengths, 99)),
-            'stddev': float(np.std(step_lengths))
-        }
-
-    step_height_summary = {}
-    for i, label in enumerate(foot_labels):
-        step_heights = np.array(max_step_height_per_foot[label.replace("_", " ")])
-        step_height_summary[label] = {
-            'mean':             float(step_heights.mean()),
-            'min':              float(step_heights.min()),
-            'max':              float(step_heights.max()),
-            'median':           float(np.median(step_heights)),
-            '90th_percentile':  float(np.percentile(step_heights, 90)),
-            '99th_percentile':  float(np.percentile(step_heights, 99)),
-            'stddev': float(np.std(step_heights))
-        }
-
-    # Save summary metrics
-    summary_metrics = {
-        'cumulative_unscaled_raw_reward': cumulative_unscaled_raw_reward,
-        'cumulative_reward_divided_by_cost_of_transport': cumulative_unscaled_raw_reward / mean_cost_of_transport,
-        'cumulative_reward_divided_by_cost_of_transport_and_sim_time': cumulative_unscaled_raw_reward / (mean_cost_of_transport * total_sim_steps * step_dt),
-        'base_linear_velocity_x_rms_error': float(lin_vel_x_rms),
-        'base_linear_velocity_y_rms_error': float(lin_vel_y_rms),
-        'base_angular_velocity_z_rms_error': float(ang_vel_z_rms),
-        'per_joint_summary': per_joint_summary,
-        'air_time_seconds_per_foot': air_time_summary,
-        'contact_force_summary': contact_force_summary,
-        'step_length_summary': step_length_summary,
-        'step_height_summary': step_height_summary,
-        'energy_consumption_per_joint': {
-            jn: float(energy_per_joint[-1, j])
-            for j, jn in enumerate(joint_names)
-        },
-        'total_energy_consumption': float(combined_energy[-1]),
-        'mean_cost_of_transport': mean_cost_of_transport,
-        'constraint_violations_percent': constraint_violations_percent,
-        'gait_symmetry_tvd_by_joint': gait_symmetry_tvd_by_joint,
-        'aggregate_joint_symmetry_tvd': aggregate_joint_symmetry_tvd,
-        'axis_symmetry_tvd': axis_symmetry_tvd,
-        'fixed_command_scenarios': fixed_command_scenarios,
-        'random_sim_steps': args.random_sim_step_length,
-        'total_sim_steps': total_sim_steps,
-        'seed': env_cfg.seed,
-        'used_checkpoint_path': checkpoint_path
-    }
     summary_path = os.path.join(eval_base_dir, "metrics_summary.json")
     with open(summary_path, 'w') as summary_file:
-        json.dump(summary_metrics, summary_file, indent=4, default=lambda o: o.tolist()) # lambda for torch tensor conversion or any other nested objects
+        json.dump(summary_metrics, summary_file, indent=4, default=lambda o: o.tolist()) # lambda for torch/numpy tensor conversion or any other nested objects
     print(json.dumps(summary_metrics, indent=4, default=lambda o: o.tolist()))
 
     np_data_file = os.path.join(plots_directory, "sim_data.npz")
@@ -818,6 +515,7 @@ def main():
         np_data_file,
         sim_times=sim_times,
         reset_times=np.array(reset_times),
+        reward_array=reward_array,
         joint_positions_array=joint_positions_array,
         joint_velocities_array=joint_velocities_array,
         joint_torques_array=joint_torques_array,
@@ -830,19 +528,14 @@ def main():
         base_angular_velocity_array=base_angular_velocity_array,
         commanded_velocity_array=commanded_velocity_array,
         contact_state_array=contact_state_array,
-        max_step_height_per_foot=np.array(max_step_height_per_foot),
-        step_length_per_foot=np.array(step_length_per_foot),
         height_map_array=np.array(height_map_buffer),
         foot_positions_world_frame=foot_positions_world_frame_array,
         foot_positions_body_frame=foot_positions_body_frame_array,
         foot_positions_contact_frame=foot_positions_contact_frame_array,
-        combined_energy=combined_energy,
-        energy_per_joint=energy_per_joint,
         power_array=power_array,
-        cost_of_transport_time_series=cost_of_transport_time_series,
         foot_labels=np.array(foot_labels),
         joint_names=np.array(joint_names),
-        air_segments_per_foot=np.array(air_segments_per_foot, dtype=object),
+        total_robot_mass=total_robot_mass,
         constraint_bounds=np.array(constraint_bounds, dtype=object),
     )
 

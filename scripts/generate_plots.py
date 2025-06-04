@@ -8,10 +8,21 @@ import json
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-import concurrent.futures
 from concurrent.futures import ProcessPoolExecutor
 import matplotlib.animation as animation
 import time
+
+from metrics_utils import (
+    compute_energy_arrays,
+    compute_swing_durations,
+    compute_swing_heights,
+    compute_swing_lengths,
+    summarize_metric,
+    optimal_bin_edges,
+    compute_histogram,
+    compute_stance_segments,
+    compute_swing_segments
+)
 
 # Disable interactive display until --interactive is set
 plt.ioff()
@@ -132,22 +143,11 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
     for i, label in enumerate(foot_labels):
         y0 = i * spacing
         in_contact = contact_states[:, i].astype(bool)
-
-        # Contact segments
-        contact_segs = []
-        start = None
-        for t, c in enumerate(in_contact):
-            if c and start is None:
-                start = t
-            elif not c and start is not None:
-                contact_segs.append((start, t))
-                start = None
-        if start is not None:
-            contact_segs.append((start, T))
+        contact_segments = compute_stance_segments(in_contact)
 
         # Plot contact
-        for s, e in contact_segs:
-            ax.fill_between(sim_times[s:e], y0, y0 + spacing * 0.8, step='post', alpha=0.8, label=label + " contact phase" if s == contact_segs[0][0] else None)
+        for s, e in contact_segments:
+            ax.fill_between(sim_times[s:e], y0, y0 + spacing * 0.8, step='post', alpha=0.8, label=label + " contact phase" if s == contact_segments[0][0] else None)
             t_start = sim_times[s]
             t_end   = sim_times[e - 1]
             duration = t_end - t_start
@@ -155,17 +155,10 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
             y_text = y0 + spacing * 0.3
             ax.text(t_mid, y_text, f"{duration:.3f}s", ha='center', va='center', color='white', fontsize=6, rotation=90)
 
-        # Air segments
-        air_segs = []
-        if contact_segs and contact_segs[0][0] > 0:
-            air_segs.append((0, contact_segs[0][0]))
-        for (s0, e0), (s1, e1) in zip(contact_segs, contact_segs[1:]):
-            air_segs.append((e0, s1))
-        if contact_segs and contact_segs[-1][1] < T:
-            air_segs.append((contact_segs[-1][1], T))
+        swing_segments = compute_swing_segments(in_contact)
 
         # Annotate durations
-        for a, b in air_segs:
+        for a, b in swing_segments:
             t_start = sim_times[a]
             t_end   = sim_times[b - 1]
             duration = t_end - t_start
@@ -217,10 +210,6 @@ def _column_from_name(jname: str) -> int | None:
         if any(k in low for k in keys):
             return col
     raise ValueError("Could not determine joint row/col for plotting based on names")
-
-# ----------------------------------------------------------------------------------------------------------------------
-# Top-level plotting helpers (must be picklable for multiprocessing)
-# ----------------------------------------------------------------------------------------------------------------------
 
 def _animate_body_frame_foot_positions(foot_positions_body_frame: np.ndarray, contact_state_array: np.ndarray, foot_labels: list[str], output_path: str, fps: int = 30):
     """
@@ -279,17 +268,12 @@ def _plot_foot_height_time_series(heights_array: np.ndarray, frame_label: str, s
     fig, axes = plt.subplots(2, 2, sharex=True, figsize=FIGSIZE)
     for i, ax in enumerate(axes.flat):
         ax.plot(sim_times, heights_array[:, i], linewidth=linewidth, label=f'height_{foot_labels[i]}')
-        # shade stance
-        in_c = contact_state_array[:, i].astype(bool)
+
         first = True
-        start_time = None
-        for t, contact_state in enumerate(in_c):
-            if contact_state and start_time is None:
-                start_time = t
-            if (not contact_state or t == len(in_c)-1) and start_time is not None:
-                end_time = t if not contact_state else t + 1
-                ax.axvspan(sim_times[start_time], sim_times[end_time-1], color='gray', alpha=.3, label='in contact' if first else None)
-                first, start_time = False, None
+        for start_step, end_step in compute_stance_segments(in_contact=contact_state_array[:, i].astype(bool)):
+            ax.axvspan(sim_times[start_step], sim_times[end_step-1], color='gray', alpha=.3, label='in contact' if first else None)
+            first = False
+
         draw_resets(ax, reset_times)
         ax.set_title(f'Foot height (Z) {frame_label.replace("_", " ")} {foot_labels[i]}', fontsize=14)
         ax.set_ylabel('Height / m')
@@ -405,18 +389,8 @@ def _plot_foot_contact_force_per_foot(sim_times, contact_forces_array, foot_labe
         draw_limits(ax, "foot_contact_force", constraint_bounds)
         draw_resets(ax, reset_times)
 
-        in_contact = contact_state_array[:, i].astype(bool)
-        segments, start_idx = [], None
-        for idx, val in enumerate(in_contact):
-            if val and start_idx is None:
-                start_idx = idx
-            elif not val and start_idx is not None:
-                segments.append((start_idx, idx)); start_idx = None
-        if start_idx is not None:
-            segments.append((start_idx, len(sim_times)))
-
         first = True
-        for s, e in segments:
+        for s, e in compute_stance_segments(in_contact=contact_state_array[:, i].astype(bool)):
             ax.axvspan(sim_times[s], sim_times[e-1], facecolor='gray', alpha=0.3, label='in contact' if first else None)
             first = False
 
@@ -511,14 +485,8 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
 
         fid = foot_from_joint[j]
         if fid is not None:
-            in_c = contact_state_array[:, fid].astype(bool)
-            start = None
-            for t, val in enumerate(in_c):
-                if val and start is None: start = t
-                if (not val or t == len(in_c)-1) and start is not None:
-                    end = t if not val else t+1
-                    ax.axvspan(sim_times[start], sim_times[end-1], facecolor='gray', alpha=0.5)
-                    start = None
+            for stance_start, stance_end in compute_stance_segments(contact_state_array[:, fid].astype(bool)):
+                ax.axvspan(sim_times[stance_start], sim_times[stance_end-1], facecolor='gray', alpha=0.5)
         ax.set_title(f"Joint {metric_name.replace('_', ' ')} for {jn}", fontsize=16)
         ax.set_ylabel(f"{metric_name.capitalize()} / {metric_to_unit_mapping[metric_name]}")
 
@@ -957,24 +925,33 @@ def generate_plots(data, metrics, output_dir, interactive=False):
     sim_times = data['sim_times']
     reset_times = data['reset_times'].tolist()
     step_dt = sim_times[1] - sim_times[0] # Important: step_dt != sim_dt due to decimation
-    reset_step_indices = [int(round(reset_time / step_dt)) for reset_time in reset_times]
+    reset_timesteps = [int(round(reset_time / step_dt)) for reset_time in reset_times]
     contact_forces_array = data['contact_forces_array']
     foot_labels = list(data['foot_labels'])
     contact_state_array = data['contact_state_array']
     constraint_bounds = data['constraint_bounds'].item()
     joint_names = list(data['joint_names'])
-    air_segments_per_foot = data['air_segments_per_foot'].item()
-    combined_energy = data['combined_energy']
-    cost_of_transport_time_series = data['cost_of_transport_time_series']
-
+    total_robot_mass = data['total_robot_mass']
+    power_array = data["power_array"]
+    joint_positions = data['joint_positions_array']
+    joint_velocities = data['joint_velocities_array']
+    joint_accelerations = data['joint_accelerations_array']
+    joint_torques = data['joint_torques_array']
+    joint_action_rates = data['action_rate_array']
+    base_positions = data['base_position_array']
+    base_orientations = data['base_orientation_array']
+    base_linear_velocities = data['base_linear_velocity_array']
+    base_angular_velocities = data['base_angular_velocity_array']
+    base_commanded_velocities = data['commanded_velocity_array']
+    energy_per_joint, combined_energy, cost_of_transport_time_series = compute_energy_arrays(power_array=power_array, base_lin_vel=base_linear_velocities, reset_steps=reset_timesteps, step_dt=step_dt, robot_mass=total_robot_mass)
     foot_positions_body_frame    = data['foot_positions_body_frame'] # (T,4,3)
     foot_positions_contact_frame = data['foot_positions_contact_frame'] # (T,4,3)
     foot_positions_world_frame   = data['foot_positions_world_frame'] # (T,4,3)
-    foot_heights_body = foot_positions_body_frame[:, :, 2]
-    foot_heights_contact = foot_positions_contact_frame[:, :, 2]
-    step_length_per_foot = data["step_length_per_foot"].item() # Extract raw dict from numpy array
-    max_step_height_per_foot = data["max_step_height_per_foot"].item() # Extract raw dict from numpy array
-    
+    foot_heights_body_frame = foot_positions_body_frame[:, :, 2]
+    foot_heights_contact_frame = foot_positions_contact_frame[:, :, 2]
+    step_heights = compute_swing_heights(contact_state=contact_state_array, foot_heights_contact=foot_heights_contact_frame, reset_steps=reset_timesteps, foot_labels=foot_labels)
+    step_lengths = compute_swing_lengths(contact_state=contact_state_array, foot_positions_world=foot_positions_world_frame, reset_steps=reset_timesteps, foot_labels=foot_labels)
+    swing_durations = compute_swing_durations(contact_state=contact_state_array, sim_env_step_dt=step_dt, foot_labels=foot_labels)
 
     # build two look-up tables
     leg_row  	= [None] * len(joint_names) # index 0-3
@@ -998,13 +975,13 @@ def generate_plots(data, metrics, output_dir, interactive=False):
 
     # Build metrics dict
     metrics = {
-        'position': data['joint_positions_array'],
-        'velocity': data['joint_velocities_array'],
-        'acceleration': data['joint_accelerations_array'],
-        'torque': data['joint_torques_array'],
-        'action_rate': data['action_rate_array'],
-        'energy': data['energy_per_joint'],
-        'power': data['power_array'],
+        'position': joint_positions,
+        'velocity': joint_velocities,
+        'acceleration': joint_accelerations,
+        'torque': joint_torques,
+        'action_rate': joint_action_rates,
+        'energy': energy_per_joint,
+        'power': power_array,
     }
 
     metric_to_constraint_term_mapping = {
@@ -1084,7 +1061,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         futures.append(
             executor.submit(
                 _plot_hist_air_time_per_foot_grid,
-                air_segments_per_foot, foot_labels, output_dir, pickle_dir, FIGSIZE
+                swing_durations, foot_labels, output_dir, pickle_dir, FIGSIZE
             )
         )
 
@@ -1133,7 +1110,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         )
 
         # Hist air-time per foot separate
-        for label, durations in air_segments_per_foot.items():
+        for label, durations in swing_durations.items():
             futures.append(
                 executor.submit(
                     _plot_hist_air_time_per_foot_single,
@@ -1145,36 +1122,36 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         futures.append(
             executor.submit(
                 _plot_combined_base_position,
-                sim_times, data['base_position_array'], reset_times,
+                sim_times, base_positions, reset_times,
                 output_dir, pickle_dir, FIGSIZE, linewidth
             )
         )
         futures.append(
             executor.submit(
                 _plot_combined_orientation,
-                sim_times, data['base_orientation_array'], reset_times,
+                sim_times, base_orientations, reset_times,
                 output_dir, pickle_dir, FIGSIZE, linewidth
             )
         )
         futures.append(
             executor.submit(
                 _plot_combined_base_velocity,
-                sim_times, data['base_linear_velocity_array'], data['commanded_velocity_array'],
+                sim_times, base_linear_velocities, base_commanded_velocities,
                 reset_times, output_dir, pickle_dir, FIGSIZE, linewidth
             )
         )
         futures.append(
             executor.submit(
                 _plot_combined_base_angular_velocities,
-                sim_times, data['base_angular_velocity_array'], data['commanded_velocity_array'],
+                sim_times, base_angular_velocities, base_commanded_velocities,
                 reset_times, output_dir, pickle_dir, FIGSIZE, linewidth
             )
         )
         futures.append(
             executor.submit(
                 _plot_total_base_overview,
-                sim_times, data['base_position_array'], data['base_orientation_array'],
-                data['base_linear_velocity_array'], data['base_angular_velocity_array'],
+                sim_times, base_positions, base_orientations,
+                base_linear_velocities, base_angular_velocities,
                 reset_times, output_dir, pickle_dir, FIGSIZE, linewidth
             )
         )
@@ -1223,10 +1200,10 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         futures.append(
             executor.submit(
                 _plot_box_air_time_per_foot_grid,
-                air_segments_per_foot, foot_labels, output_dir, pickle_dir, FIGSIZE
+                swing_durations, foot_labels, output_dir, pickle_dir, FIGSIZE
             )
         )
-        for label, durations in air_segments_per_foot.items():
+        for label, durations in swing_durations.items():
             futures.append(
                 executor.submit(
                     _plot_box_air_time_per_foot_single,
@@ -1246,7 +1223,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         futures.append(
             executor.submit(
                 _plot_foot_height_time_series,
-                foot_heights_body, 'body_frame',
+                foot_heights_body_frame, 'body_frame',
                 sim_times, foot_labels, contact_state_array, reset_times,
                 output_dir, pickle_dir, FIGSIZE, linewidth
             )
@@ -1254,7 +1231,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         futures.append(
             executor.submit(
                 _plot_foot_height_time_series,
-                foot_heights_contact, 'contact_frame',
+                foot_heights_contact_frame, 'contact_frame',
                 sim_times, foot_labels, contact_state_array, reset_times,
                 output_dir, pickle_dir, FIGSIZE, linewidth
             )
@@ -1264,9 +1241,9 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         futures.append(
             executor.submit(
                 _plot_hist_metric_grid,
-                max_step_height_per_foot,
-                "Histogram of Max Step Height (contact frame)",
-                "Max Height / m", foot_labels,
+                step_heights,
+                "Histogram of Step Height (contact frame)",
+                "Height / m", foot_labels,
                 output_dir, pickle_dir,
                 subfolder="step_height", FIGSIZE=FIGSIZE
             )
@@ -1274,9 +1251,9 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         futures.append(
             executor.submit(
                 _plot_hist_metric_overview,
-                max_step_height_per_foot,
-                "Histogram of Max Step Height (overview)",
-                "Max Height / m", foot_labels,
+                step_heights,
+                "Histogram of Step Height (overview)",
+                "Height / m", foot_labels,
                 output_dir, pickle_dir,
                 subfolder="step_height", FIGSIZE=FIGSIZE
             )
@@ -1284,8 +1261,8 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         futures.append(
             executor.submit(
                 _plot_box_metric_grid,
-                max_step_height_per_foot,
-                "Box Plot of Max Step Height",
+                step_heights,
+                "Box Plot of Step Height",
                 "Height / m", foot_labels,
                 output_dir, pickle_dir,
                 subfolder="step_height", FIGSIZE=FIGSIZE
@@ -1294,8 +1271,8 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         futures.append(
             executor.submit(
                 _plot_box_metric_overview,
-                max_step_height_per_foot,
-                "Box Plot of Max Step Height (overview)",
+                step_heights,
+                "Box Plot of Step Height (overview)",
                 "Height / m", foot_labels,
                 output_dir, pickle_dir,
                 subfolder="step_height", FIGSIZE=FIGSIZE
@@ -1306,7 +1283,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         futures.append(
             executor.submit(
                 _plot_hist_metric_grid,
-                step_length_per_foot,
+                step_lengths,
                 "Histogram of Step Length",
                 "Step Length / m", foot_labels,
                 output_dir, pickle_dir,
@@ -1316,7 +1293,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         futures.append(
             executor.submit(
                 _plot_hist_metric_overview,
-                step_length_per_foot,
+                step_lengths,
                 "Histogram of Step Length (overview)",
                 "Step Length / m", foot_labels,
                 output_dir, pickle_dir,
@@ -1326,7 +1303,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         futures.append(
             executor.submit(
                 _plot_box_metric_grid,
-                step_length_per_foot,
+                step_lengths,
                 "Box Plot of Step Length",
                 "Step Length / m", foot_labels,
                 output_dir, pickle_dir,
@@ -1336,7 +1313,7 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         futures.append(
             executor.submit(
                 _plot_box_metric_overview,
-                step_length_per_foot,
+                step_lengths,
                 "Box Plot of Step Length (overview)",
                 "Step Length / m", foot_labels,
                 output_dir, pickle_dir,
