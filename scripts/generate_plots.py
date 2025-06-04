@@ -73,6 +73,13 @@ def draw_resets(ax, reset_times):
     for reset_time in reset_times:
         ax.axvline(x=reset_time, linestyle=":", linewidth=1, color="orange", label='reset' if reset_time == reset_times[0] else None)
 
+def _array_to_metric_dict(arr: np.ndarray, foot_labels: list[str]) -> dict[str, list[float]]:
+    """
+    Converts (T, 4) array to {'FL': [...], 'FR': [...], ...}
+    suitable for _plot_hist_metric_* and _plot_box_metric_* helpers.
+    """
+    return {lbl: arr[:, i].tolist() for i, lbl in enumerate(foot_labels)}
+
 def create_height_map_animation(height_map_sequence: np.ndarray, foot_positions_sequence: np.ndarray, output_path: str, fps: int = 30, sensor=None):
     """
     Create and save an animation of the height map over time,
@@ -259,48 +266,58 @@ def _animate_body_frame_foot_positions(foot_positions_body_frame: np.ndarray, co
     ani.save(output_path, fps=fps)
     plt.close(fig)
 
-def _plot_foot_height_time_series(heights_array: np.ndarray, frame_label: str, sim_times: np.ndarray, foot_labels: list[str], contact_state_array: np.ndarray, reset_times: list[float], output_dir: str, pickle_dir: str, FIGSIZE: tuple[int, int], linewidth: float):
-    """
-    Draw (i) 2x2 grid per-foot and (ii) overview of all feet  for Z-heights in `heights_array` (Tx4).
-    `frame_label` is either 'body_frame' or 'contact_frame'.
-    """
-    # ------ per-foot 2×2 grid ------
+def _plot_foot_position_time_series(
+        positions_array: np.ndarray,
+        axis_label: str,
+        frame_label: str,
+        sim_times: np.ndarray,
+        foot_labels: list[str],
+        contact_state_array: np.ndarray,
+        reset_times: list[float],
+        output_dir: str,
+        pickle_dir: str,
+        FIGSIZE: tuple[int, int],
+        linewidth: float,
+        subfolder: str
+):
+    # ---------- per-foot grid ----------
     fig, axes = plt.subplots(2, 2, sharex=True, figsize=FIGSIZE)
     for i, ax in enumerate(axes.flat):
-        ax.plot(sim_times, heights_array[:, i], linewidth=linewidth, label=f'height_{foot_labels[i]}')
+        ax.plot(sim_times, positions_array[:, i], linewidth=linewidth, label=f'{axis_label.lower()}_{foot_labels[i]}')
         ax.grid()
         first = True
-        for start_step, end_step in compute_stance_segments(in_contact=contact_state_array[:, i].astype(bool)):
-            ax.axvspan(sim_times[start_step], sim_times[end_step-1], color='gray', alpha=.3, label='in contact' if first else None)
+        for start_timestep, end_timestep in compute_stance_segments(contact_state_array[:, i].astype(bool)):
+            ax.axvspan(sim_times[start_timestep], sim_times[end_timestep - 1], color='gray', alpha=.3, label='in contact' if first else None)
             first = False
-
         draw_resets(ax, reset_times)
-        ax.set_title(f'Foot height (Z) {frame_label.replace("_", " ")} {foot_labels[i]}', fontsize=14)
-        ax.set_ylabel('Height / m')
+        ax.set_title(f'Foot {axis_label} ({frame_label.replace("_", " ")}) {foot_labels[i]}', fontsize=14)
+        ax.set_ylabel(f'{axis_label} / m')
         ax.legend()
     axes[-1, 0].set_xlabel('Time / s')
     fig.tight_layout()
-    pdf = os.path.join(output_dir, f"foot_height_{frame_label}", 'foot_height_each.pdf')
-    os.makedirs(os.path.dirname(pdf), exist_ok=True)
+
+    subdir = os.path.join(output_dir, subfolder)
+    os.makedirs(subdir, exist_ok=True)
+    pdf = os.path.join(subdir, f'foot_pos_{axis_label.lower()}_each.pdf')
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f'foot_height_each_{frame_label}.pickle'), 'wb') as f:
+    with open(os.path.join(pickle_dir, f'foot_pos_{axis_label.lower()}_each_{frame_label}.pickle'), 'wb') as f:
         pickle.dump(fig, f)
 
-    # ------ overview -------
-    fig_overview, ax = plt.subplots(figsize=(FIGSIZE[0], FIGSIZE[1]))
+    # ---------- overview ----------
+    fig_ov, ax = plt.subplots(figsize=(FIGSIZE[0], FIGSIZE[1]))
     for i, lbl in enumerate(foot_labels):
         ax.grid()
-        ax.plot(sim_times, heights_array[:, i], label=lbl, linewidth=linewidth)
+        ax.plot(sim_times, positions_array[:, i], label=lbl, linewidth=linewidth)
     draw_resets(ax, reset_times)
     ax.set_xlabel('Time / s')
-    ax.set_ylabel('Height / m')
-    ax.set_title(f'Foot heights (Z) ({frame_label.replace("_", " ")})', fontsize=14)
+    ax.set_ylabel(f'{axis_label} / m')
+    ax.set_title(f'Foot {axis_label} ({frame_label.replace("_", " ")}) overview', fontsize=14)
     ax.legend(ncol=2, loc='upper right')
-    fig_overview.tight_layout()
-    pdf = os.path.join(output_dir, f"foot_height_{frame_label}", 'foot_height_overview.pdf')
-    fig_overview.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f'foot_height_overview_{frame_label}.pickle'), 'wb') as f:
-        pickle.dump(fig_overview, f)
+    fig_ov.tight_layout()
+    pdf = os.path.join(subdir, f'foot_pos_{axis_label.lower()}_overview.pdf')
+    fig_ov.savefig(pdf, dpi=600)
+    with open(os.path.join(pickle_dir, f'foot_pos_{axis_label.lower()}_overview_{frame_label}.pickle'), 'wb') as f:
+        pickle.dump(fig_ov, f)
 
 def _plot_hist_metric_grid(metric_dict: dict[str, list[float]], title: str, xlabel: str, foot_labels: list[str], output_dir: str, pickle_dir: str, subfolder: str, FIGSIZE: tuple[int, int]):
     """
@@ -319,10 +336,10 @@ def _plot_hist_metric_grid(metric_dict: dict[str, list[float]], title: str, xlab
         ax.set_title(lbl, fontsize=14)
         ax.set_xlabel(xlabel); ax.set_ylabel('Count')
     fig.tight_layout(rect=(0, 0, 1, .96))
-    pdf = os.path.join(output_dir, subfolder, f"hist_{subfolder}_grid.pdf")
+    pdf = os.path.join(output_dir, subfolder, f"hist_{os.path.basename(subfolder)}_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"hist_{subfolder}_grid.pickle"), 'wb') as f:
+    with open(os.path.join(pickle_dir, f"hist_{os.path.basename(subfolder)}_grid.pickle"), 'wb') as f:
         pickle.dump(fig, f)
 
 def _plot_hist_metric_overview(metric_dict: dict[str, list[float]], title: str, xlabel: str, foot_labels: list[str], output_dir: str, pickle_dir: str, subfolder: str, FIGSIZE: tuple[int, int]):
@@ -339,10 +356,10 @@ def _plot_hist_metric_overview(metric_dict: dict[str, list[float]], title: str, 
     ax.set_xlabel(xlabel); ax.set_ylabel('Frequency')
     ax.legend(loc='upper right')
     fig.tight_layout()
-    pdf = os.path.join(output_dir, subfolder, f"hist_{subfolder}_overview.pdf")
+    pdf = os.path.join(output_dir, subfolder, f"hist_{os.path.basename(subfolder)}_overview.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"hist_{subfolder}_overview.pickle"), 'wb') as f:
+    with open(os.path.join(pickle_dir, f"hist_{os.path.basename(subfolder)}_overview.pickle"), 'wb') as f:
         pickle.dump(fig, f)
 
 def _plot_box_metric_grid(metric_dict: dict[str, list[float]], title: str, xlabel: str, foot_labels: list[str], output_dir: str, pickle_dir: str, subfolder: str, FIGSIZE: tuple[int, int]):
@@ -359,10 +376,10 @@ def _plot_box_metric_grid(metric_dict: dict[str, list[float]], title: str, xlabe
             ax.boxplot(data, showmeans=True, showcaps=True, showbox=True, showfliers=False)
         ax.set_title(lbl, fontsize=14); ax.set_xlabel(xlabel)
     fig.tight_layout()
-    pdf = os.path.join(output_dir, subfolder, f"box_{subfolder}_grid.pdf")
+    pdf = os.path.join(output_dir, subfolder, f"box_{os.path.basename(subfolder)}_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"box_{subfolder}_grid.pickle"), 'wb') as f:
+    with open(os.path.join(pickle_dir, f"box_{os.path.basename(subfolder)}_grid.pickle"), 'wb') as f:
         pickle.dump(fig, f)
 
 def _plot_box_metric_overview(metric_dict: dict[str, list[float]], title: str, xlabel: str, foot_labels: list[str], output_dir: str, pickle_dir: str, subfolder: str, FIGSIZE: tuple[int, int]):
@@ -381,10 +398,10 @@ def _plot_box_metric_overview(metric_dict: dict[str, list[float]], title: str, x
     ax.set_xlabel('Foot'); ax.set_ylabel(xlabel)
     ax.set_xticks(np.arange(1, len(lbls)+1)); ax.set_xticklabels(lbls)
     fig.tight_layout()
-    pdf = os.path.join(output_dir, subfolder, f"box_{subfolder}_overview.pdf")
+    pdf = os.path.join(output_dir, subfolder, f"box_{os.path.basename(subfolder)}_overview.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"box_{subfolder}_overview.pickle"), 'wb') as f:
+    with open(os.path.join(pickle_dir, f"box_{os.path.basename(subfolder)}_overview.pickle"), 'wb') as f:
         pickle.dump(fig, f)
 
 def _plot_foot_contact_force_per_foot(sim_times, contact_forces_array, foot_labels, contact_state_array, reset_times, constraint_bounds, output_dir, pickle_dir, linewidth):
@@ -1245,22 +1262,127 @@ def generate_plots(data, metrics, output_dir, interactive=False):
         )
 
         # ---------------- Foot-height time series ----------------
-        futures.append(
-            executor.submit(
-                _plot_foot_height_time_series,
-                foot_heights_body_frame, 'body_frame',
-                sim_times, foot_labels, contact_state_array, reset_times,
-                output_dir, pickle_dir, FIGSIZE, linewidth
+        positions_axes = {'X': 0, 'Y': 1, 'Z': 2}
+        for axis_label, axis_idx in positions_axes.items():
+            positions_axis = foot_positions_body_frame[:, :, axis_idx]
+            metric_dict    = _array_to_metric_dict(positions_axis, foot_labels)
+            subdir = os.path.join("foot_positions_body_frame", f"{axis_label}")
+
+            futures.append(
+                executor.submit(
+                    _plot_foot_position_time_series,
+                    positions_axis, axis_label, 'body_frame',
+                    sim_times, foot_labels, contact_state_array, reset_times,
+                    output_dir, pickle_dir, FIGSIZE, linewidth, subdir
+                )
             )
-        )
-        futures.append(
-            executor.submit(
-                _plot_foot_height_time_series,
-                foot_heights_contact_frame, 'contact_frame',
-                sim_times, foot_labels, contact_state_array, reset_times,
-                output_dir, pickle_dir, FIGSIZE, linewidth
+
+            futures.append(
+                executor.submit(
+                    _plot_hist_metric_grid,
+                    metric_dict,
+                    f"Histogram of Foot {axis_label} Position (body frame)",
+                    f"{axis_label} / m", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
             )
-        )
+            futures.append(
+                executor.submit(
+                    _plot_hist_metric_overview,
+                    metric_dict,
+                    f"Histogram of Foot {axis_label} Position (body frame) overview",
+                    f"{axis_label} / m", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+
+            futures.append(
+                executor.submit(
+                    _plot_box_metric_grid,
+                    metric_dict,
+                    f"Box Plot of Foot {axis_label} Position (body frame)",
+                    f"{axis_label} / m", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+            futures.append(
+                executor.submit(
+                    _plot_box_metric_overview,
+                    metric_dict,
+                    f"Box Plot of Foot {axis_label} Position (body frame) overview",
+                    f"{axis_label} / m", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+
+        # Same for contact frame
+        for axis_label, axis_idx in positions_axes.items():
+            positions_axis = foot_positions_contact_frame[:, :, axis_idx]
+            metric_dict    = _array_to_metric_dict(positions_axis, foot_labels)
+            subdir = os.path.join("foot_positions_contact_frame", f"{axis_label}")
+
+            futures.append(
+                executor.submit(
+                    _plot_foot_position_time_series,
+                    positions_axis, axis_label, 'contact_frame',
+                    sim_times, foot_labels, contact_state_array, reset_times,
+                    output_dir, pickle_dir, FIGSIZE, linewidth, subdir
+                )
+            )
+
+            futures.append(
+                executor.submit(
+                    _plot_hist_metric_grid,
+                    metric_dict,
+                    f"Histogram of Foot {axis_label} Position (contact frame)",
+                    f"{axis_label} / m", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+            futures.append(
+                executor.submit(
+                    _plot_hist_metric_overview,
+                    metric_dict,
+                    f"Histogram of Foot {axis_label} Position (contact frame) overview",
+                    f"{axis_label} / m", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+
+            futures.append(
+                executor.submit(
+                    _plot_box_metric_grid,
+                    metric_dict,
+                    f"Box Plot of Foot {axis_label} Position (contact frame)",
+                    f"{axis_label} / m", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+            futures.append(
+                executor.submit(
+                    _plot_box_metric_overview,
+                    metric_dict,
+                    f"Box Plot of Foot {axis_label} Position (contact frame) overview",
+                    f"{axis_label} / m", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
 
         # ---------------- Max step-height ----------------
         futures.append(
@@ -1345,7 +1467,8 @@ def generate_plots(data, metrics, output_dir, interactive=False):
                 subfolder="step_length", FIGSIZE=FIGSIZE
             )
         )
-        _animate_body_frame_foot_positions(foot_positions_body_frame, contact_state_array, foot_labels, os.path.join(output_dir, "aggregates", "foot_positions_body_frame_animation.mp4"), fps=30)
+
+        futures.append(executor.submit(_animate_body_frame_foot_positions, foot_positions_body_frame, contact_state_array, foot_labels, os.path.join(output_dir, "foot_positions_body_frame", "foot_positions_body_frame_animation.mp4"), fps=30))
 
         # Ensure all tasks complete
         for f in futures:
@@ -1358,7 +1481,6 @@ def generate_plots(data, metrics, output_dir, interactive=False):
     if interactive:
         plt.ion()
         plt.show()
-
 
 def main():
     parser = argparse.ArgumentParser(description="Regenerate plots from saved simulation data.")
