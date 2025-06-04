@@ -159,7 +159,7 @@ def run_generate_plots(start_step: int, end_step: int, subdir: str, plots_direct
             "--output_dir", output_dir,
             "--start_step", str(start_step),
             "--end_step", str(end_step),
-            "--interactive",
+            # "--interactive",
         ]
         print(f"[INFO] Spawning: {' '.join(cmd)}")
         with open(log_path, "w") as lf:
