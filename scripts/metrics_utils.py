@@ -120,16 +120,28 @@ def summarize_metric(values: list[float]) -> dict[str, float]:
 
 def compute_swing_durations(contact_state: np.ndarray, sim_env_step_dt: float, foot_labels: list[str]) -> dict[str, list[float]]:
     """
-    Returns raw air-time durations (seconds) for every foot.
+    Returns raw swing durations (seconds) for every foot.
     contact_state : (T, F) 1 = contact, 0 = airborne
     """
-    # Initialise result dictionary
     durations: dict[str, list[float]] = {lbl: [] for lbl in foot_labels}
     for foot_id, label in enumerate(foot_labels):
         in_contact = contact_state[:, foot_id].astype(bool)
         air_segments = compute_swing_segments(in_contact)
         # Convert segment lengths to seconds
         durations[label] = [(end_idx - start_idx) * sim_env_step_dt for start_idx, end_idx in air_segments]
+    return durations
+
+def compute_stance_durations(contact_state: np.ndarray, sim_env_step_dt: float, foot_labels: list[str]) -> dict[str, list[float]]:
+    """
+    Returns raw stance durations (seconds) for every foot.
+    contact_state : (T, F) 1 = contact, 0 = airborne
+    """
+    durations: dict[str, list[float]] = {lbl: [] for lbl in foot_labels}
+    for foot_id, label in enumerate(foot_labels):
+        in_contact = contact_state[:, foot_id].astype(bool)
+        contact_segments = compute_stance_segments(in_contact)
+        # Convert segment lengths to seconds
+        durations[label] = [(max(1, end_idx-1) - start_idx) * sim_env_step_dt for start_idx, end_idx in contact_segments]
     return durations
 
 def compute_swing_heights(contact_state: np.ndarray, foot_heights_contact: np.ndarray, reset_steps: list[int], foot_labels: list[str]) -> dict[str, list[float]]:
@@ -268,18 +280,20 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
         col = contact_force[:, foot_index]
         contact_force_summary[foot_label] = summarize_metric(col.tolist())
 
-    air_time_durations = compute_swing_durations(contact_state, step_dt, foot_labels)
+    swing_durations = compute_swing_durations(contact_state, step_dt, foot_labels)
+    stance_durations = compute_stance_durations(contact_state, step_dt, foot_labels)
     step_height_data = compute_swing_heights(contact_state, foot_positions_contact_frame[:, :, 2], reset_steps, foot_labels)
     step_length_data = compute_swing_lengths(contact_state, foot_positions_world_frame, reset_steps, foot_labels)
 
-    air_time_summary = {lbl: summarize_metric(data) for lbl, data in air_time_durations.items()}
+    swing_duration_summary = {lbl: summarize_metric(data) for lbl, data in swing_durations.items()}
+    stance_duration_summary = {lbl: summarize_metric(data) for lbl, data in stance_durations.items()}
     step_height_summary = {lbl: summarize_metric(data) for lbl, data in step_height_data.items()}
     step_length_summary = {lbl: summarize_metric(data) for lbl, data in step_length_data.items()}
 
     # ---------- symmetry TVD ---------------------------------------------
     joint_mapping = {jn: i for i, jn in enumerate(joint_names)}
-    dofs      = ["hip_joint", "thigh_joint", "calf_joint"]
-    gait_symmetry_summary_per_dof  = {d: {} for d in dofs}
+    dofs = ["hip_joint", "thigh_joint", "calf_joint"]
+    gait_symmetry_summary_per_dof = {d: {} for d in dofs}
 
     for dof in dofs:
         concatenated_joint_positions = np.concatenate([joint_positions[:, joint_mapping[f"{sr}_{dof}"]] for sr in ("FL","FR","RL","RR")])
@@ -310,7 +324,8 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
         "base_linear_velocity_y_rms_error"                    : float(linear_vel_y_rms),
         "base_angular_velocity_z_rms_error"                   : float(yaw_rms),
         "per_joint_summary"                                   : per_joint_summary,
-        "air_time_seconds_per_foot"                           : air_time_summary,
+        "swing_duration_summary"                              : swing_duration_summary,
+        "stance_duration_summary"                             : stance_duration_summary,
         "contact_force_summary"                               : contact_force_summary,
         "step_length_summary"                                 : step_length_summary,
         "step_height_summary"                                 : step_height_summary,
