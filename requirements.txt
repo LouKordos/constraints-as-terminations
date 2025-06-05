@@ -1,0 +1,6 @@
+wandb
+toml
+rich
+memory-profiler
+zarr
+PyQt5
