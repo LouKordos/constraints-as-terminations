@@ -1122,7 +1122,7 @@ def generate_plots(data, output_dir, interactive=False):
     reset_times = data['reset_times'].tolist()
     step_dt = sim_times[1] - sim_times[0] # Important: step_dt != sim_dt due to decimation
     # Subtract sim_times[0] because data might be sliced, so sim_times[0] is the t0. Plots will use absolute time as x axis, but reset_timesteps need to be within slice.
-    reset_timesteps = [int(round(reset_time - sim_times[0] / step_dt)) for reset_time in reset_times]
+    reset_timesteps = [int(round((reset_time - sim_times[0]) / step_dt)) for reset_time in reset_times]
     contact_forces_array = data['contact_forces_array']
     foot_labels = list(data['foot_labels'])
     contact_state_array = data['contact_state_array']
