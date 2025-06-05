@@ -143,30 +143,40 @@ def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[fl
 
     return bounds
 
-def run_generate_plots(start_step: int, end_step: int, subdir: str, plots_directory: str, sim_data_file_path: str) -> int:
-        """
-        Launch generate_plots.py for [start_step, end_step) and block until it finishes. Return the subprocess' return-code.
-        """
-        output_dir = os.path.join(plots_directory, subdir)
-        os.makedirs(output_dir, exist_ok=True)
-        generate_plots_script_path = os.path.join(eval_script_path, "generate_plots.py")
+def run_generate_plots(start_step: int, end_step: int, subdir: str, plots_directory: str, sim_data_file_path: str, memory_limit_gb: Optional[float] = 40) -> int:
+    """
+    Launch generate_plots.py for [start_step, end_step) and block until it finishes. Return the subprocess' return-code.
+    """
+    output_dir = os.path.join(plots_directory, subdir)
+    os.makedirs(output_dir, exist_ok=True)
+    generate_plots_script_path = os.path.join(eval_script_path, "generate_plots.py")
 
-        log_path = os.path.join(plots_directory, f"generate_plots_{subdir}.log")
-        cmd = [
-            "python",
-            generate_plots_script_path,
-            "--data_file", sim_data_file_path,
-            "--output_dir", output_dir,
-            "--start_step", str(start_step),
-            "--end_step", str(end_step),
-            # "--interactive",
-        ]
-        print(f"[INFO] Spawning: {' '.join(cmd)}")
-        with open(log_path, "w") as lf:
-            proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT)
-            proc.wait()
-            print(f"[INFO]  generate_plots.py for '{subdir}' exited with code {proc.returncode}  (log → {log_path})")
-            return proc.returncode
+    log_path = os.path.join(plots_directory, f"generate_plots_{subdir}.log")
+    cmd = [
+        "python",
+        generate_plots_script_path,
+        "--data_file", sim_data_file_path,
+        "--output_dir", output_dir,
+        "--start_step", str(start_step),
+        "--end_step", str(end_step),
+        # "--interactive",
+    ]
+
+    preexec: Optional[callable] = None
+    if memory_limit_gb is not None:
+        limit_bytes = int(memory_limit_gb * (1024 ** 3))
+        def _set_mem_limit():
+            import resource
+            # RLIMIT_AS sets the maximum address space (virtual memory) for the process
+            resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
+        preexec = _set_mem_limit
+
+    print(f"[INFO] Spawning: {' '.join(cmd)}")
+    with open(log_path, "w") as lf:
+        proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, preexec_fn=preexec)
+        proc.wait()
+        print(f"[INFO]  generate_plots.py for '{subdir}' exited with code {proc.returncode}  (log → {log_path})")
+        return proc.returncode
 
 def main():
     args = parse_arguments()
