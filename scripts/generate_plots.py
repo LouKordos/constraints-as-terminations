@@ -258,8 +258,9 @@ def _plot_body_frame_foot_position_heatmap(foot_positions_body_frame: np.ndarray
     os.makedirs(pdf_dir, exist_ok=True)
     pdf_path = os.path.join(pdf_dir, "foot_position_heatmap_body_frame.pdf")
     fig.savefig(pdf_path, dpi=600)
-    with open(os.path.join(pickle_dir, "foot_position_heatmap_body_frame.pickle"), "wb") as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, "foot_position_heatmap_body_frame.pickle"), "wb") as f:
+            pickle.dump(fig, f)
     plt.close(fig)
 
 def _plot_body_frame_foot_position_heatmap_grid(foot_positions_body_frame: np.ndarray, foot_labels: list[str], output_dir: str, pickle_dir: str, bin_count: int = 100, FIGSIZE: tuple[int, int] = (20, 20)):
@@ -297,10 +298,9 @@ def _plot_body_frame_foot_position_heatmap_grid(foot_positions_body_frame: np.nd
     pdf_path = os.path.join(pdf_dir, "foot_position_heatmap_body_frame_grid.pdf")
     fig.savefig(pdf_path, dpi=600)
 
-    with open(
-        os.path.join(pickle_dir, "foot_position_heatmap_body_frame_grid.pickle"), "wb"
-    ) as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, "foot_position_heatmap_body_frame_grid.pickle"), "wb") as f:
+            pickle.dump(fig, f)
 
     plt.close(fig)
 
@@ -335,9 +335,10 @@ def _plot_body_frame_foot_position_heatmap_single(foot_positions_body_frame: np.
     os.makedirs(pdf_dir, exist_ok=True)
     pdf_path = os.path.join(pdf_dir, f"foot_position_heatmap_{safe_lbl.lower()}.pdf")
     fig.savefig(pdf_path, dpi=600)
-
-    with open(os.path.join(pickle_dir, f"foot_position_heatmap_{safe_lbl.lower()}.pickle"), "wb") as f:
-        pickle.dump(fig, f)
+    
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f"foot_position_heatmap_{safe_lbl.lower()}.pickle"), "wb") as f:
+            pickle.dump(fig, f)
 
     plt.close(fig)
 
@@ -424,8 +425,9 @@ def _plot_foot_position_time_series(
     os.makedirs(subdir, exist_ok=True)
     pdf = os.path.join(subdir, f'foot_pos_{axis_label.lower()}_each.pdf')
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f'foot_pos_{axis_label.lower()}_each_{frame_label}.pickle'), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f'foot_pos_{axis_label.lower()}_each_{frame_label}.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
 
     # ---------- overview ----------
     fig_ov, ax = plt.subplots(figsize=(FIGSIZE[0], FIGSIZE[1]))
@@ -440,8 +442,9 @@ def _plot_foot_position_time_series(
     fig_ov.tight_layout()
     pdf = os.path.join(subdir, f'foot_pos_{axis_label.lower()}_overview.pdf')
     fig_ov.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f'foot_pos_{axis_label.lower()}_overview_{frame_label}.pickle'), 'wb') as f:
-        pickle.dump(fig_ov, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f'foot_pos_{axis_label.lower()}_overview_{frame_label}.pickle'), 'wb') as f:
+            pickle.dump(fig_ov, f)
 
 def _plot_hist_metric_grid(metric_dict: dict[str, list[float]], title: str, xlabel: str, foot_labels: list[str], output_dir: str, pickle_dir: str, subfolder: str, FIGSIZE: tuple[int, int]):
     """
@@ -465,8 +468,9 @@ def _plot_hist_metric_grid(metric_dict: dict[str, list[float]], title: str, xlab
     pdf = os.path.join(output_dir, subfolder, f"hist_{os.path.basename(subfolder)}_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"hist_{os.path.basename(subfolder)}_grid.pickle"), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f"hist_{os.path.basename(subfolder)}_grid.pickle"), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_hist_metric_overview(metric_dict: dict[str, list[float]], title: str, xlabel: str, foot_labels: list[str], output_dir: str, pickle_dir: str, subfolder: str, FIGSIZE: tuple[int, int]):
     """
@@ -488,8 +492,9 @@ def _plot_hist_metric_overview(metric_dict: dict[str, list[float]], title: str, 
     pdf = os.path.join(output_dir, subfolder, f"hist_{os.path.basename(subfolder)}_overview.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"hist_{os.path.basename(subfolder)}_overview.pickle"), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f"hist_{os.path.basename(subfolder)}_overview.pickle"), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_box_metric_grid(metric_dict: dict[str, list[float]], title: str, xlabel: str, foot_labels: list[str], output_dir: str, pickle_dir: str, subfolder: str, FIGSIZE: tuple[int, int]):
     """
@@ -508,8 +513,9 @@ def _plot_box_metric_grid(metric_dict: dict[str, list[float]], title: str, xlabe
     pdf = os.path.join(output_dir, subfolder, f"box_{os.path.basename(subfolder)}_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"box_{os.path.basename(subfolder)}_grid.pickle"), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f"box_{os.path.basename(subfolder)}_grid.pickle"), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_box_metric_overview(metric_dict: dict[str, list[float]], title: str, xlabel: str, foot_labels: list[str], output_dir: str, pickle_dir: str, subfolder: str, FIGSIZE: tuple[int, int]):
     """
@@ -530,8 +536,9 @@ def _plot_box_metric_overview(metric_dict: dict[str, list[float]], title: str, x
     pdf = os.path.join(output_dir, subfolder, f"box_{os.path.basename(subfolder)}_overview.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"box_{os.path.basename(subfolder)}_overview.pickle"), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f"box_{os.path.basename(subfolder)}_overview.pickle"), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_foot_contact_force_per_foot(sim_times, contact_forces_array, foot_labels, contact_state_array, reset_times, constraint_bounds, output_dir, pickle_dir, linewidth):
     fig, axes = plt.subplots(2, 2, sharex=True, figsize=(16, 8))
@@ -553,8 +560,9 @@ def _plot_foot_contact_force_per_foot(sim_times, contact_forces_array, foot_labe
     pdf = os.path.join(output_dir, "foot_contact_forces",'foot_contact_force_each.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, 'foot_contact_force_each.pickle'), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'foot_contact_force_each.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_hist_contact_forces_grid(contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE):
     """
@@ -589,8 +597,9 @@ def _plot_hist_contact_forces_grid(contact_forces_array, foot_labels, output_dir
     fig.savefig(pdf_path, dpi=600)
     
     pickle_path = os.path.join(pickle_dir, "hist_contact_forces_grid.pickle")
-    with open(pickle_path, 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(pickle_path, 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_hist_contact_forces_overview(contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE):
     """
@@ -623,8 +632,9 @@ def _plot_hist_contact_forces_overview(contact_forces_array, foot_labels, output
     fig.savefig(pdf_path, dpi=600)
     
     pickle_path = os.path.join(pickle_dir, "hist_contact_forces_overview.pickle")
-    with open(pickle_path, 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(pickle_path, 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, leg_col, foot_from_joint, contact_state_array, reset_times, constraint_bounds, metric_to_constraint_term_mapping, metric_to_unit_mapping, output_dir, pickle_dir, linewidth):
     fig, axes = plt.subplots(4, 3, sharex=True, figsize=(18, 12))
@@ -653,8 +663,9 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f'joint_{metric_name}_grid.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f'joint_{metric_name}_grid.pickle'), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f'joint_{metric_name}_grid.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
 
     # overview
     fig_ov, ax = plt.subplots(figsize=(12, 6))
@@ -674,8 +685,9 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
     fig_ov.tight_layout()
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f'joint_{metric_name}_overview.pdf')
     fig_ov.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f'joint_{metric_name}_overview.pickle'), 'wb') as f:
-        pickle.dump(fig_ov, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f'joint_{metric_name}_overview.pickle'), 'wb') as f:
+            pickle.dump(fig_ov, f)
 
 def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, metric_to_unit_mapping, output_dir, pickle_dir):
     fig, axes = plt.subplots(4, 3, figsize=(18, 12), sharex=False, sharey=False)
@@ -695,8 +707,9 @@ def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, 
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"hist_joint_{metric_name}_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"hist_joint_{metric_name}_grid.pickle"), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f"hist_joint_{metric_name}_grid.pickle"), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_hist_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE):
     fig, ax = plt.subplots(figsize=FIGSIZE)
@@ -713,8 +726,9 @@ def _plot_hist_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_m
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"hist_joint_{metric_name}_overview.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"hist_joint_{metric_name}_overview.pickle"), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f"hist_joint_{metric_name}_overview.pickle"), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_hist_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output_dir, pickle_dir, FIGSIZE):
     fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
@@ -734,8 +748,9 @@ def _plot_hist_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output
     pdf = os.path.join(output_dir, "aggregates", "air_time", "hist_air_time_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, "hist_air_time_grid.pickle"), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, "hist_air_time_grid.pickle"), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_hist_air_time_per_foot_single(label, durations, output_dir, pickle_dir, FIGSIZE):
     fig, ax = plt.subplots(figsize=FIGSIZE)
@@ -752,8 +767,9 @@ def _plot_hist_air_time_per_foot_single(label, durations, output_dir, pickle_dir
     pdf = os.path.join(output_dir, "aggregates", "air_time", f"hist_air_time_{safe_label}.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"hist_air_time_{safe_label}.pickle"), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f"hist_air_time_{safe_label}.pickle"), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_combined_energy(sim_times, combined_energy, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig, ax = plt.subplots(figsize=FIGSIZE)
@@ -768,8 +784,9 @@ def _plot_combined_energy(sim_times, combined_energy, reset_times, output_dir, p
     pdf = os.path.join(output_dir, "aggregates", 'combined_energy_overview.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, 'combined_energy_overview.pickle'), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'combined_energy_overview.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_cumulative_reward(sim_times, reward_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig, ax = plt.subplots(figsize=FIGSIZE)
@@ -784,8 +801,9 @@ def _plot_cumulative_reward(sim_times, reward_array, reset_times, output_dir, pi
     pdf = os.path.join(output_dir, "aggregates", 'reward_time_series.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, 'reward_time_series.pickle'), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'reward_time_series.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_reward_time_series(sim_times, reward_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig, ax = plt.subplots(figsize=FIGSIZE)
@@ -800,8 +818,9 @@ def _plot_reward_time_series(sim_times, reward_array, reset_times, output_dir, p
     pdf = os.path.join(output_dir, "aggregates", 'cumulative_reward.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, 'cumulative_reward.pickle'), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'cumulative_reward.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig, ax = plt.subplots(figsize=FIGSIZE)
@@ -827,8 +846,9 @@ def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_time
     pdf = os.path.join(output_dir, "aggregates", "cost_of_transport", 'cost_of_transport_over_time.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, 'cost_of_transport_over_time.pickle'), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'cost_of_transport_over_time.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_hist_cost_of_transport(cost_of_transport_time_series, output_dir, pickle_dir, FIGSIZE):
     fig, ax = plt.subplots(figsize=FIGSIZE)
@@ -844,8 +864,9 @@ def _plot_hist_cost_of_transport(cost_of_transport_time_series, output_dir, pick
     pdf = os.path.join(output_dir, "aggregates", "cost_of_transport", 'hist_cot_overview.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, 'hist_cot_overview.pickle'), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'hist_cot_overview.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
 
 def _plot_combined_base_position(sim_times, base_position_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig_bp, axes_bp = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
@@ -862,8 +883,9 @@ def _plot_combined_base_position(sim_times, base_position_array, reset_times, ou
     pdf = os.path.join(output_dir, "base_kinematics", 'base_position_subplots_world.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig_bp.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, 'base_position_subplots_world.pickle'), 'wb') as f:
-        pickle.dump(fig_bp, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'base_position_subplots_world.pickle'), 'wb') as f:
+            pickle.dump(fig_bp, f)
 
 def _plot_combined_orientation(sim_times, base_orientation_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig_bo, axes_bo = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
@@ -880,8 +902,9 @@ def _plot_combined_orientation(sim_times, base_orientation_array, reset_times, o
     pdf = os.path.join(output_dir, "base_kinematics", 'base_orientation_subplots.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig_bo.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, 'base_orientation_subplots.pickle'), 'wb') as f:
-        pickle.dump(fig_bo, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'base_orientation_subplots.pickle'), 'wb') as f:
+            pickle.dump(fig_bo, f)
 
 def _plot_combined_base_velocity(sim_times, base_linear_velocity_array, commanded_velocity_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig_blv, axes_blv = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
@@ -900,8 +923,9 @@ def _plot_combined_base_velocity(sim_times, base_linear_velocity_array, commande
     pdf = os.path.join(output_dir, "base_kinematics", 'base_linear_velocity_subplots.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig_blv.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, 'base_linear_velocity_subplots.pickle'), 'wb') as f:
-        pickle.dump(fig_blv, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'base_linear_velocity_subplots.pickle'), 'wb') as f:
+            pickle.dump(fig_blv, f)
 
 def _plot_combined_base_angular_velocities(sim_times, base_angular_velocity_array, commanded_velocity_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig_bav, axes_bav = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
@@ -920,8 +944,9 @@ def _plot_combined_base_angular_velocities(sim_times, base_angular_velocity_arra
     pdf = os.path.join(output_dir, "base_kinematics", 'base_angular_velocity_subplots.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig_bav.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, 'base_angular_velocity_subplots.pickle'), 'wb') as f:
-        pickle.dump(fig_bav, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'base_angular_velocity_subplots.pickle'), 'wb') as f:
+            pickle.dump(fig_bav, f)
 
 def _plot_total_base_overview(sim_times, base_position_array, base_orientation_array, base_linear_velocity_array, base_angular_velocity_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig_overview, overview_axes = plt.subplots(2, 2, figsize=(20, 16))
@@ -941,13 +966,15 @@ def _plot_total_base_overview(sim_times, base_position_array, base_orientation_a
     pdf = os.path.join(output_dir, "base_kinematics", 'base_overview_world.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig_overview.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, 'base_overview_world.pickle'), 'wb') as f:
-        pickle.dump(fig_overview, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'base_overview_world.pickle'), 'wb') as f:
+            pickle.dump(fig_overview, f)
 
 def _plot_gait_diagram(contact_state_array, sim_times, reset_times, foot_labels, output_dir, pickle_dir):
     fig = plot_gait_diagram(contact_state_array, sim_times, reset_times, foot_labels, os.path.join(output_dir, "aggregates", 'gait_diagram.pdf'), spacing=1.0)
-    with open(os.path.join(pickle_dir, 'gait_diagram.pickle'), 'wb') as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'gait_diagram.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # box-plot helpers
@@ -972,8 +999,9 @@ def _plot_box_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, m
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"box_joint_{metric_name}_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"box_joint_{metric_name}_grid.pickle"), "wb") as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f"box_joint_{metric_name}_grid.pickle"), "wb") as f:
+            pickle.dump(fig, f)
 
 
 def _plot_box_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE):
@@ -994,8 +1022,9 @@ def _plot_box_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_ma
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"box_joint_{metric_name}_overview.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"box_joint_{metric_name}_overview.pickle"), "wb") as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f"box_joint_{metric_name}_overview.pickle"), "wb") as f:
+            pickle.dump(fig, f)
 
 
 def _plot_box_contact_forces_grid(contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE):
@@ -1021,8 +1050,9 @@ def _plot_box_contact_forces_grid(contact_forces_array, foot_labels, output_dir,
     pdf = os.path.join(output_dir, "foot_contact_forces", "box_contact_forces_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, "box_contact_forces_grid.pickle"), "wb") as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, "box_contact_forces_grid.pickle"), "wb") as f:
+            pickle.dump(fig, f)
 
 
 def _plot_box_contact_forces_overview(contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE):
@@ -1050,8 +1080,9 @@ def _plot_box_contact_forces_overview(contact_forces_array, foot_labels, output_
     pdf = os.path.join(output_dir, "foot_contact_forces", "box_contact_forces_overview.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, "box_contact_forces_overview.pickle"), "wb") as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, "box_contact_forces_overview.pickle"), "wb") as f:
+            pickle.dump(fig, f)
 
 
 def _plot_box_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output_dir, pickle_dir, FIGSIZE):
@@ -1074,8 +1105,9 @@ def _plot_box_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output_
     pdf = os.path.join(output_dir, "aggregates", "air_time", "box_air_time_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, "box_air_time_grid.pickle"), "wb") as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, "box_air_time_grid.pickle"), "wb") as f:
+            pickle.dump(fig, f)
 
 
 def _plot_box_air_time_per_foot_single(label, durations, output_dir, pickle_dir, FIGSIZE):
@@ -1097,8 +1129,9 @@ def _plot_box_air_time_per_foot_single(label, durations, output_dir, pickle_dir,
     pdf = os.path.join(output_dir, "aggregates", "air_time", f"box_air_time_{safe_label}.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, f"box_air_time_{safe_label}.pickle"), "wb") as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f"box_air_time_{safe_label}.pickle"), "wb") as f:
+            pickle.dump(fig, f)
 
 
 def _plot_box_cost_of_transport(cost_of_transport_time_series, output_dir, pickle_dir, FIGSIZE):
@@ -1117,8 +1150,9 @@ def _plot_box_cost_of_transport(cost_of_transport_time_series, output_dir, pickl
     pdf = os.path.join(output_dir, "aggregates", "cost_of_transport", "box_cot_overview.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
-    with open(os.path.join(pickle_dir, "box_cot_overview.pickle"), "wb") as f:
-        pickle.dump(fig, f)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, "box_cot_overview.pickle"), "wb") as f:
+            pickle.dump(fig, f)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Main plot generation orchestrator
@@ -1131,8 +1165,10 @@ def generate_plots(data, output_dir, interactive=False):
     - metrics: dict loaded from metrics_summary.json
     """
     os.makedirs(output_dir, exist_ok=True)
-    pickle_dir = os.path.join(output_dir, "plot_figures_serialized")
-    os.makedirs(pickle_dir, exist_ok=True)
+    # pickle_dir = os.path.join(output_dir, "plot_figures_serialized")
+    pickle_dir = "" # Takes up too much space and can be regenerated with this script anyway (sim_data.npz is saved)
+    if pickle_dir != "":
+        os.makedirs(pickle_dir, exist_ok=True)
 
     start_time = time.time()
 
