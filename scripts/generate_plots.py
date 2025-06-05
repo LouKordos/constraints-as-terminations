@@ -385,6 +385,7 @@ def _animate_body_frame_foot_positions(foot_positions_body_frame: np.ndarray, co
             sc.set_edgecolor(colours[i]) # always draw edges
         return scatters
 
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     ani = animation.FuncAnimation(fig, _animate, init_func=_init, frames=T, interval=1000 / fps, blit=True)
     ani.save(output_path, fps=fps)
     plt.close(fig)
