@@ -21,7 +21,8 @@ from metrics_utils import (
     optimal_bin_edges,
     compute_histogram,
     compute_stance_segments,
-    compute_swing_segments
+    compute_swing_segments,
+    compute_trimmed_histogram_data
 )
 
 # Disable interactive display until --interactive is set
@@ -452,7 +453,9 @@ def _plot_hist_metric_grid(metric_dict: dict[str, list[float]], title: str, xlab
         ax.grid()
         data = metric_dict[lbl]
         if data:
-            ax.hist(data, bins='auto', alpha=.7)
+            counts, edges = compute_trimmed_histogram_data(np.array(data))
+            # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
+            ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0)
         else:
             ax.text(.5, .5, 'no data', ha='center', va='center', transform=ax.transAxes, color='red')
         ax.set_title(lbl, fontsize=14)
@@ -473,7 +476,9 @@ def _plot_hist_metric_overview(metric_dict: dict[str, list[float]], title: str, 
         data = metric_dict[lbl]
         if data:
             ax.grid()
-            ax.hist(data, bins='auto', alpha=.6, label=lbl)
+            counts, edges = compute_trimmed_histogram_data(np.array(data))
+            # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
+            ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0, label=lbl)
     ax.set_title(title, fontsize=16)
     ax.set_xlabel(xlabel)
     ax.set_ylabel('Frequency')
@@ -568,7 +573,9 @@ def _plot_hist_contact_forces_grid(contact_forces_array, foot_labels, output_dir
             # Warn if no positive forces were found
             ax.text(0.5, 0.5, "No forces > 0 N", ha="center", va="center", transform=ax.transAxes, fontsize=12, color="red")
         else:
-            ax.hist(positive_forces, bins='auto', alpha=0.7)
+            counts, edges = compute_trimmed_histogram_data(positive_forces)
+            # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
+            ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0)
         
         ax.set_title(label, fontsize=14)
         ax.set_xlabel("Force (N)")
@@ -596,7 +603,9 @@ def _plot_hist_contact_forces_overview(contact_forces_array, foot_labels, output
         
         if positive_forces.size > 0:
             ax.grid()
-            ax.hist(positive_forces, bins='auto', alpha=0.6, label=label)
+            counts, edges = compute_trimmed_histogram_data(positive_forces)
+            # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
+            ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0, label=label)
         else:
             # Warn in the plot that there's no data for this label
             ax.text(0.5, 0.5 - 0.05 * i, f"No >0 data for '{label}'", transform=ax.transAxes, fontsize=8, color='gray', ha='center')
@@ -674,7 +683,10 @@ def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, 
         row, col = leg_row[j], leg_col[j]
         ax = axes[row, col]
         ax.grid()
-        ax.hist(data_arr[:, j], bins='auto', alpha=0.7)
+
+        counts, edges = compute_trimmed_histogram_data(data_arr[:, j])
+        # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
+        ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0)
         ax.set_title(jn, fontsize=12)
         ax.set_xlabel(f"{metric_name.capitalize()} ({metric_to_unit_mapping[metric_name]})")
         ax.set_ylabel("Count")
@@ -689,7 +701,9 @@ def _plot_hist_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_m
     fig, ax = plt.subplots(figsize=FIGSIZE)
     for j, jn in enumerate(joint_names):
         ax.grid()
-        ax.hist(data_arr[:, j], bins='auto', alpha=0.6, label=jn)
+        counts, edges = compute_trimmed_histogram_data(data_arr[:, j])
+        # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
+        ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0, label=jn)
     ax.set_title(f"Histogram of joint {metric_name.replace('_',' ')}", fontsize=16)
     ax.set_xlabel(f"{metric_name.capitalize()} ({metric_to_unit_mapping[metric_name]})")
     ax.set_ylabel("Frequency")
@@ -709,7 +723,9 @@ def _plot_hist_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output
         ax = axes.flat[i]
         ax.grid()
         if durations:
-            ax.hist(durations, bins='auto', alpha=0.7)
+            counts, edges = compute_trimmed_histogram_data(np.array(durations))
+            # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
+            ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0)
         ax.set_title(label, fontsize=14)
         ax.set_xlabel("Air Time (s)")
         ax.set_ylabel("Count")
@@ -724,7 +740,9 @@ def _plot_hist_air_time_per_foot_single(label, durations, output_dir, pickle_dir
     fig, ax = plt.subplots(figsize=FIGSIZE)
     if durations:
         ax.grid()
-        ax.hist(durations, bins='auto', alpha=0.7)
+        counts, edges = compute_trimmed_histogram_data(np.array(durations))
+        # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
+        ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0)
     ax.set_title(f"Histogram of Air-Time Durations ({label})", fontsize=16)
     ax.set_xlabel("Air Time (s)")
     ax.set_ylabel("Frequency")
@@ -813,7 +831,9 @@ def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_time
 
 def _plot_hist_cost_of_transport(cost_of_transport_time_series, output_dir, pickle_dir, FIGSIZE):
     fig, ax = plt.subplots(figsize=FIGSIZE)
-    ax.hist(cost_of_transport_time_series[~np.isnan(cost_of_transport_time_series)], bins='auto', alpha=0.7)
+    counts, edges = compute_trimmed_histogram_data(cost_of_transport_time_series[~np.isnan(cost_of_transport_time_series)])
+    # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
+    ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0)
     ax.grid()
     ax.set_xlabel('Cost of Transport (-)')
     ax.set_xlim(0, 6)
@@ -1255,7 +1275,7 @@ def generate_plots(data, output_dir, interactive=False):
                 contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE
             )
         )
-
+    
         # 2x2 Hist air-time per foot
         futures.append(
             executor.submit(

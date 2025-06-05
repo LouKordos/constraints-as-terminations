@@ -4,6 +4,7 @@ import numpy as np
 
 __all__ = [
     "compute_histogram",
+    "compute_trimmed_histogram_data",
     "total_variation_distance",
     "optimal_bin_edges",
     "compute_stance_segments",
@@ -28,6 +29,12 @@ def compute_histogram(arr: np.ndarray, bin_edges: np.ndarray) -> np.ndarray:
         # If the array was empty or all zeros, return uniform or zeros.
         # Here we return zeros, so that TVD with another zero‐histogram is 0.
         return np.zeros_like(counts, dtype=np.float64)
+    
+def compute_trimmed_histogram_data(data: np.ndarray, bins='auto', lower_percentile=0.5, upper_percentile=99.5):
+    lower, upper = np.percentile(data, [lower_percentile, upper_percentile])
+    data_trimmed = data[(data >= lower) & (data <= upper)]
+    return np.histogram(data_trimmed, bins=bins)
+
 
 def total_variation_distance(p: np.ndarray, q: np.ndarray) -> float:
     """
