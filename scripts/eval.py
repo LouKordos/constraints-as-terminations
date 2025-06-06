@@ -245,9 +245,7 @@ def main():
 
     # Create output directories
     plots_directory = os.path.join(eval_base_dir, "plots")
-    trajectories_directory = os.path.join(eval_base_dir, "trajectories")
     os.makedirs(plots_directory, exist_ok=True)
-    os.makedirs(trajectories_directory, exist_ok=True)
 
     fixed_command_sim_steps = 500 # If you want to increase this you also need to increase episode length otherwise env will reset mid-way
     fixed_command_scenarios = [ # Scenario positions depend on seed!
