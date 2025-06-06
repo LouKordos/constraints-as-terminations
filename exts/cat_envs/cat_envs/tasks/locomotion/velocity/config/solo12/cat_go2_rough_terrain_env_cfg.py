@@ -760,10 +760,10 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
         # Pick the hardest terrain when testing the model.
         # Technically, this is incorrect as it wlil only run after 
         # the first reset but it's good to see a baseline of it walking on flat terrain first
-        # self.events.force_hard_terrain = EventTerm(
-        #     func=force_hard_terrain,
-        #     mode="startup",  # runs once at environment startup
-        # )
+        self.events.force_hard_terrain = EventTerm(
+            func=force_hard_terrain,
+            mode="startup",  # runs once at environment startup
+        )
 
         # Used to get foot height above terrain ("sole frame")
         self.scene.ray_caster_FL_foot = RayCasterCfg(
@@ -823,7 +823,7 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
         self.scene.terrain.max_init_terrain_level = 0
         # reduce the number of terrains to save memory and set lower difficulty range
         if self.scene.terrain.terrain_generator is not None:
-            self.scene.terrain.terrain_generator.difficulty_range = (0.0, 0.2)
+            self.scene.terrain.terrain_generator.difficulty_range = (0.0, 0.6)
             self.scene.terrain.terrain_generator.num_rows = 5
             self.scene.terrain.terrain_generator.num_cols = 5
             self.scene.terrain.terrain_generator.curriculum = False
