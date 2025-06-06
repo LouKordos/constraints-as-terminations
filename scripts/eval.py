@@ -250,7 +250,8 @@ def main():
     os.makedirs(trajectories_directory, exist_ok=True)
 
     fixed_command_sim_steps = 500 # If you want to increase this you also need to increase episode length otherwise env will reset mid-way
-    fixed_command_scenarios = [
+    fixed_command_scenarios = [ # Scenario positions depend on seed!
+        ("fast_walk_stairs_up", torch.tensor([1, 0.0, 0.0], device=device), (torch.tensor([-8, 16, -0.1], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("pure_spin", torch.tensor([0.0, 0.0, 0.5], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("slow_walk_x_flat_terrain", torch.tensor([0.1, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
@@ -259,11 +260,13 @@ def main():
         ("medium_walk_y_flat_terrain", torch.tensor([0.0, 0.5, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_x_flat_terrain", torch.tensor([1.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_y_flat_terrain", torch.tensor([0.0, 1.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("very_fast_walk_x_flat_terrain", torch.tensor([2.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("slow_walk_x_uneven_terrain", torch.tensor([0.1, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("slow_walk_y_uneven_terrain", torch.tensor([0.0, 0.1, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("medium_walk_x_uneven_terrain", torch.tensor([0.5, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("medium_walk_y_uneven_terrain", torch.tensor([0.0, 0.5, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_x_uneven_terrain", torch.tensor([1.0, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("very_fast_walk_x_uneven_terrain", torch.tensor([2.0, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         # ("fast_walk_y_uneven_terrain", torch.tensor([0.0, 1.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("medium_walk_diagonal_uneven_terrain", torch.tensor([0.5, 0.5, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_diagonal_uneven_terrain", torch.tensor([1.0, 1.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
@@ -452,7 +455,8 @@ def main():
         foot_positions_body_frame_buffer.append(foot_positions_body)
 
         # Calculate foot height above ground using raycaster sensor in each foot (sole/contact frame)
-        terrain_offset_feet = np.array([[0, 0, env.unwrapped.scene[f"ray_caster_{link_name}"].data.ray_hits_w[:, 0, 2].cpu().item()] for link_name in foot_links])
+        foot_com_toe_tip_offset = 0.0023 # This makes swing height more intuitive, without the offset, standing still reports a ~0.0234m swing height
+        terrain_offset_feet = np.array([[0, 0, env.unwrapped.scene[f"ray_caster_{link_name}"].data.ray_hits_w[:, 0, 2].cpu().item() - foot_com_toe_tip_offset] for link_name in foot_links])
         # print(f"terrain_z_feet={terrain_offset_feet}")
         foot_positions_contact_frame = foot_positions_world - terrain_offset_feet
         # print(f"foot_positions_contact_frame={foot_positions_contact_frame}")

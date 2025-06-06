@@ -151,7 +151,7 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
 
         # Plot contact
         for s, e in contact_segments:
-            ax.fill_between(sim_times[s:e], y0, y0 + spacing * 0.8, step='post', alpha=0.8, label=label + " contact phase" if s == contact_segments[0][0] else None)
+            ax.fill_between(sim_times[s:e], y0, y0 + spacing * 0.8, step='post', alpha=0.8, label=label + " stance" if s == contact_segments[0][0] else None)
             t_start = sim_times[s]
             t_end   = sim_times[e - 1]
             duration = t_end - t_start
@@ -252,14 +252,14 @@ def _plot_body_frame_foot_position_heatmap(foot_positions_body_frame: np.ndarray
     fig.colorbar(im, ax=ax, label=cbar_label)
     ax.set_xlabel("Body-X (m)")
     ax.set_ylabel("Body-Y (m)")
-    ax.set_title("Foot-position occupancy heat-map (body frame, top-down)")
+    ax.set_title("Foot-position occupancy heat-map (body frame, CoM, top-down)")
 
-    pdf_dir = os.path.join(output_dir, "foot_positions_body_frame", "heatmap")
+    pdf_dir = os.path.join(output_dir, "foot_positions_body_frame_com", "heatmap")
     os.makedirs(pdf_dir, exist_ok=True)
-    pdf_path = os.path.join(pdf_dir, "foot_position_heatmap_body_frame.pdf")
+    pdf_path = os.path.join(pdf_dir, "foot_position_heatmap_body_frame_com.pdf")
     fig.savefig(pdf_path, dpi=600)
     if pickle_dir != "":
-        with open(os.path.join(pickle_dir, "foot_position_heatmap_body_frame.pickle"), "wb") as f:
+        with open(os.path.join(pickle_dir, "foot_position_heatmap_body_frame_com.pickle"), "wb") as f:
             pickle.dump(fig, f)
     plt.close(fig)
 
@@ -293,13 +293,13 @@ def _plot_body_frame_foot_position_heatmap_grid(foot_positions_body_frame: np.nd
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
 
-    pdf_dir = os.path.join(output_dir, "foot_positions_body_frame", "heatmap")
+    pdf_dir = os.path.join(output_dir, "foot_positions_body_frame_com", "heatmap")
     os.makedirs(pdf_dir, exist_ok=True)
-    pdf_path = os.path.join(pdf_dir, "foot_position_heatmap_body_frame_grid.pdf")
+    pdf_path = os.path.join(pdf_dir, "foot_position_heatmap_body_frame_com_grid.pdf")
     fig.savefig(pdf_path, dpi=600)
 
     if pickle_dir != "":
-        with open(os.path.join(pickle_dir, "foot_position_heatmap_body_frame_grid.pickle"), "wb") as f:
+        with open(os.path.join(pickle_dir, "foot_position_heatmap_body_frame_com_grid.pickle"), "wb") as f:
             pickle.dump(fig, f)
 
     plt.close(fig)
@@ -331,13 +331,13 @@ def _plot_body_frame_foot_position_heatmap_single(foot_positions_body_frame: np.
     ax.set_title(f"Foot-position heat-map (body frame) – {foot_label}")
 
     safe_lbl = foot_label.replace(" ", "_")
-    pdf_dir = os.path.join(output_dir, "foot_positions_body_frame", "heatmap", safe_lbl.lower())
+    pdf_dir = os.path.join(output_dir, "foot_positions_body_frame_com", "heatmap", safe_lbl.lower())
     os.makedirs(pdf_dir, exist_ok=True)
-    pdf_path = os.path.join(pdf_dir, f"foot_position_heatmap_{safe_lbl.lower()}.pdf")
+    pdf_path = os.path.join(pdf_dir, f"foot_position_heatmap_{safe_lbl.lower()}_com.pdf")
     fig.savefig(pdf_path, dpi=600)
     
     if pickle_dir != "":
-        with open(os.path.join(pickle_dir, f"foot_position_heatmap_{safe_lbl.lower()}.pickle"), "wb") as f:
+        with open(os.path.join(pickle_dir, f"foot_position_heatmap_{safe_lbl.lower()}_com.pickle"), "wb") as f:
             pickle.dump(fig, f)
 
     plt.close(fig)
@@ -355,7 +355,7 @@ def _animate_body_frame_foot_positions(foot_positions_body_frame: np.ndarray, co
     ax.set_aspect('equal')
     ax.set_xlabel('Body-X (m)')
     ax.set_ylabel('Body-Y (m)')
-    ax.set_title('Foot trajectories (body frame, top-down)')
+    ax.set_title('Foot trajectories (body frame, CoM, top-down)')
 
     # create one PathCollection per foot
     scatters = [ax.scatter([], [], s=60, c=c, edgecolor=c, label=lbl) for c, lbl in zip(colours, foot_labels)]
@@ -415,7 +415,7 @@ def _plot_foot_position_time_series(
             ax.axvspan(sim_times[start_timestep], sim_times[end_timestep - 1], color='gray', alpha=.3, label='in contact' if first else None)
             first = False
         draw_resets(ax, reset_times)
-        ax.set_title(f'Foot {axis_label} ({frame_label.replace("_", " ")}) {foot_labels[i]}', fontsize=14)
+        ax.set_title(f'Foot {axis_label} ({frame_label.replace("_", " ")}) {foot_labels[i]} {"(CoM)" if frame_label == "body_frame" else "(toe tip)"}', fontsize=14)
         ax.set_ylabel(f'{axis_label} (m)')
         ax.legend()
     axes[-1, 0].set_xlabel('Time (s)')
@@ -437,7 +437,7 @@ def _plot_foot_position_time_series(
     draw_resets(ax, reset_times)
     ax.set_xlabel('Time (s)')
     ax.set_ylabel(f'{axis_label} (m)')
-    ax.set_title(f'Foot {axis_label} ({frame_label.replace("_", " ")}) overview', fontsize=14)
+    ax.set_title(f'Foot {axis_label} ({frame_label.replace("_", " ")}) {foot_labels[i]} {"(CoM)" if frame_label == "body_frame" else "(toe tip)"} overview', fontsize=14)
     ax.legend(ncol=2, loc='upper right')
     fig_ov.tight_layout()
     pdf = os.path.join(subdir, f'foot_pos_{axis_label.lower()}_overview.pdf')
@@ -1513,7 +1513,7 @@ def generate_plots(data, output_dir, interactive=False):
                 executor.submit(
                     _plot_hist_metric_grid,
                     metric_dict,
-                    f"Histogram of Foot {axis_label} Position (body frame)",
+                    f"Histogram of Foot {axis_label} Position (body frame, CoM)",
                     f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
@@ -1524,7 +1524,7 @@ def generate_plots(data, output_dir, interactive=False):
                 executor.submit(
                     _plot_hist_metric_overview,
                     metric_dict,
-                    f"Histogram of Foot {axis_label} Position (body frame) overview",
+                    f"Histogram of Foot {axis_label} Position (body frame, CoM) overview",
                     f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
@@ -1536,7 +1536,7 @@ def generate_plots(data, output_dir, interactive=False):
                 executor.submit(
                     _plot_box_metric_grid,
                     metric_dict,
-                    f"Box Plot of Foot {axis_label} Position (body frame)",
+                    f"Box Plot of Foot {axis_label} Position (body frame, CoM)",
                     f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
@@ -1547,7 +1547,7 @@ def generate_plots(data, output_dir, interactive=False):
                 executor.submit(
                     _plot_box_metric_overview,
                     metric_dict,
-                    f"Box Plot of Foot {axis_label} Position (body frame) overview",
+                    f"Box Plot of Foot {axis_label} Position (body frame, CoM) overview",
                     f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
@@ -1574,7 +1574,7 @@ def generate_plots(data, output_dir, interactive=False):
                 executor.submit(
                     _plot_hist_metric_grid,
                     metric_dict,
-                    f"Histogram of Foot {axis_label} Position (contact frame)",
+                    f"Histogram of Foot {axis_label} Position (contact frame, toe tip)",
                     f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
@@ -1585,7 +1585,7 @@ def generate_plots(data, output_dir, interactive=False):
                 executor.submit(
                     _plot_hist_metric_overview,
                     metric_dict,
-                    f"Histogram of Foot {axis_label} Position (contact frame) overview",
+                    f"Histogram of Foot {axis_label} Position (contact frame, toe tip) overview",
                     f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
@@ -1597,7 +1597,7 @@ def generate_plots(data, output_dir, interactive=False):
                 executor.submit(
                     _plot_box_metric_grid,
                     metric_dict,
-                    f"Box Plot of Foot {axis_label} Position (contact frame)",
+                    f"Box Plot of Foot {axis_label} Position (contact frame, toe tip)",
                     f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
@@ -1608,7 +1608,7 @@ def generate_plots(data, output_dir, interactive=False):
                 executor.submit(
                     _plot_box_metric_overview,
                     metric_dict,
-                    f"Box Plot of Foot {axis_label} Position (contact frame) overview",
+                    f"Box Plot of Foot {axis_label} Position (contact frame, toe tip) overview",
                     f"{axis_label} (m)", foot_labels,
                     output_dir, pickle_dir,
                     subfolder=subdir,
