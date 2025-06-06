@@ -137,7 +137,7 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
     T, F = contact_states.shape
     assert sim_times.shape[0] == T, "sim_times length must match contact_states"
 
-    fig, ax = plt.subplots(figsize=(180, F * 1.2))
+    fig, ax = plt.subplots(figsize=(180 if sim_times[0] == 0.0 else 24, F * 1.2))
     ax.set_xlabel('Time (s)')
     ax.set_title('Gait Diagram with Air and Contact Times (white text = contact/stance phase, black text = air/swing phase)', fontsize=14)
 
