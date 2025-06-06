@@ -377,6 +377,7 @@ def main():
         # Because of CaT, terminated is actually a nonzero probability instead of a boolean, so we have to check for resets this way
         if env.unwrapped.episode_length_buf[0].item() == 0 and t > 0:
             reset_steps.append(t)
+            # continue # Skip reset iteration because it's just wrong
 
         if t % frame_storage_interval == 0:
             raw_frames = env.render()
@@ -453,8 +454,8 @@ def main():
         foot_positions_body_frame_buffer.append(foot_positions_body)
 
         # Calculate foot height above ground using raycaster sensor in each foot (sole/contact frame)
-        foot_com_toe_tip_offset = 0.0023 # This makes swing height more intuitive, without the offset, standing still reports a ~0.0234m swing height
-        terrain_offset_feet = np.array([[0, 0, env.unwrapped.scene[f"ray_caster_{link_name}"].data.ray_hits_w[:, 0, 2].cpu().item() - foot_com_toe_tip_offset] for link_name in foot_links])
+        foot_com_toe_tip_offset = 0.023 # This makes swing height more intuitive, without the offset, standing still reports a ~0.0234m swing height
+        terrain_offset_feet = np.array([[0, 0, env.unwrapped.scene[f"ray_caster_{link_name}"].data.ray_hits_w[:, 0, 2].cpu().item() + foot_com_toe_tip_offset] for link_name in foot_links])
         # print(f"terrain_z_feet={terrain_offset_feet}")
         foot_positions_contact_frame = foot_positions_world - terrain_offset_feet
         # print(f"foot_positions_contact_frame={foot_positions_contact_frame}")
