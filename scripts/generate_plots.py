@@ -788,9 +788,9 @@ def _plot_combined_energy(sim_times, combined_energy, reset_times, output_dir, p
         with open(os.path.join(pickle_dir, 'combined_energy_overview.pickle'), 'wb') as f:
             pickle.dump(fig, f)
 
-def _plot_cumulative_reward(sim_times, reward_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
+def _plot_reward_time_series(sim_times, reward_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig, ax = plt.subplots(figsize=FIGSIZE)
-    ax.plot(sim_times, np.cumsum(reward_array), label='Cumulative reward', linewidth=linewidth)
+    ax.plot(sim_times, reward_array, label='Reward', linewidth=linewidth)
     ax.grid()
     draw_resets(ax, reset_times)
     ax.set_xlabel('Time (s)')
@@ -805,9 +805,9 @@ def _plot_cumulative_reward(sim_times, reward_array, reset_times, output_dir, pi
         with open(os.path.join(pickle_dir, 'reward_time_series.pickle'), 'wb') as f:
             pickle.dump(fig, f)
 
-def _plot_reward_time_series(sim_times, reward_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
+def _plot_cumulative_reward(sim_times, reward_array, reset_times, output_dir, pickle_dir, FIGSIZE, linewidth):
     fig, ax = plt.subplots(figsize=FIGSIZE)
-    ax.plot(sim_times, reward_array, label='Reward', linewidth=linewidth)
+    ax.plot(sim_times, np.cumsum(reward_array), label='Cumulative Reward', linewidth=linewidth)
     ax.grid()
     draw_resets(ax, reset_times)
     ax.set_xlabel('Time (s)')
