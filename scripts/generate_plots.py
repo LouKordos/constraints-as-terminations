@@ -254,12 +254,12 @@ def _plot_body_frame_foot_position_heatmap(foot_positions_body_frame: np.ndarray
     ax.set_ylabel("Body-Y (m)")
     ax.set_title("Foot-position occupancy heat-map (body frame, CoM, top-down)")
 
-    pdf_dir = os.path.join(output_dir, "foot_positions_body_frame_com", "heatmap")
+    pdf_dir = os.path.join(output_dir, "foot_com_positions_body_frame", "heatmap")
     os.makedirs(pdf_dir, exist_ok=True)
-    pdf_path = os.path.join(pdf_dir, "foot_position_heatmap_body_frame_com.pdf")
+    pdf_path = os.path.join(pdf_dir, "foot_com_position_heatmap_body_frame.pdf")
     fig.savefig(pdf_path, dpi=600)
     if pickle_dir != "":
-        with open(os.path.join(pickle_dir, "foot_position_heatmap_body_frame_com.pickle"), "wb") as f:
+        with open(os.path.join(pickle_dir, "foot_com_position_heatmap_body_frame.pickle"), "wb") as f:
             pickle.dump(fig, f)
     plt.close(fig)
 
@@ -293,22 +293,18 @@ def _plot_body_frame_foot_position_heatmap_grid(foot_positions_body_frame: np.nd
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
 
-    pdf_dir = os.path.join(output_dir, "foot_positions_body_frame_com", "heatmap")
+    pdf_dir = os.path.join(output_dir, "foot_com_positions_body_frame", "heatmap")
     os.makedirs(pdf_dir, exist_ok=True)
-    pdf_path = os.path.join(pdf_dir, "foot_position_heatmap_body_frame_com_grid.pdf")
+    pdf_path = os.path.join(pdf_dir, "foot_com_position_heatmap_body_frame_grid.pdf")
     fig.savefig(pdf_path, dpi=600)
 
     if pickle_dir != "":
-        with open(os.path.join(pickle_dir, "foot_position_heatmap_body_frame_com_grid.pickle"), "wb") as f:
+        with open(os.path.join(pickle_dir, "foot_com_position_heatmap_body_frame_grid.pickle"), "wb") as f:
             pickle.dump(fig, f)
 
     plt.close(fig)
 
 def _plot_body_frame_foot_position_heatmap_single(foot_positions_body_frame: np.ndarray, foot_idx: int, foot_label: str, output_dir: str, pickle_dir: str, bin_count: int = 100, FIGSIZE: tuple[int, int] = (20, 20)):
-    """
-    Single-foot heat-map stored as
-    .../foot_positions_body_frame/heatmap/<label>/foot_position_heatmap_<label>.pdf
-    """
     xy = foot_positions_body_frame[:, foot_idx, :2]
     x, y = xy[:, 0], xy[:, 1]
 
@@ -331,13 +327,13 @@ def _plot_body_frame_foot_position_heatmap_single(foot_positions_body_frame: np.
     ax.set_title(f"Foot-position heat-map (body frame) – {foot_label}")
 
     safe_lbl = foot_label.replace(" ", "_")
-    pdf_dir = os.path.join(output_dir, "foot_positions_body_frame_com", "heatmap", safe_lbl.lower())
+    pdf_dir = os.path.join(output_dir, "foot_com_positions_body_frame", "heatmap", safe_lbl.lower())
     os.makedirs(pdf_dir, exist_ok=True)
     pdf_path = os.path.join(pdf_dir, f"foot_position_heatmap_{safe_lbl.lower()}_com.pdf")
     fig.savefig(pdf_path, dpi=600)
     
     if pickle_dir != "":
-        with open(os.path.join(pickle_dir, f"foot_position_heatmap_{safe_lbl.lower()}_com.pickle"), "wb") as f:
+        with open(os.path.join(pickle_dir, f"foot_com_position_heatmap_{safe_lbl.lower()}.pickle"), "wb") as f:
             pickle.dump(fig, f)
 
     plt.close(fig)
@@ -1273,7 +1269,7 @@ def generate_plots(data, output_dir, interactive=False):
 
     futures = []
     with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
-        futures.append(executor.submit(_animate_body_frame_foot_positions, foot_positions_body_frame, contact_state_array, foot_labels, os.path.join(output_dir, "foot_positions_body_frame", "foot_positions_body_frame_animation.mp4"), fps=20))
+        futures.append(executor.submit(_animate_body_frame_foot_positions, foot_positions_body_frame, contact_state_array, foot_labels, os.path.join(output_dir, "foot_positions_body_frame_com", "foot_positions_body_frame_animation.mp4"), fps=20))
         
         # 1) Foot contact-force per-foot grid
         futures.append(
@@ -1498,7 +1494,7 @@ def generate_plots(data, output_dir, interactive=False):
         for axis_label, axis_idx in positions_axes.items():
             positions_axis = foot_positions_body_frame[:, :, axis_idx]
             metric_dict    = _array_to_metric_dict(positions_axis, foot_labels)
-            subdir = os.path.join("foot_positions_body_frame", f"{axis_label}")
+            subdir = os.path.join("foot_com_positions_body_frame", f"{axis_label}")
 
             futures.append(
                 executor.submit(
