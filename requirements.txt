@@ -4,3 +4,12 @@ rich
 memory-profiler
 zarr
 PyQt5
+tensorboard
+pandas
+numpy
+scipy
+scikit-learn
+statsmodels
+matplotlib
+seaborn
+tqdm
