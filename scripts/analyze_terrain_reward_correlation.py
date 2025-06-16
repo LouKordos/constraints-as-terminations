@@ -520,8 +520,8 @@ def perform_all_analyses(df: pd.DataFrame, output_dir: pathlib.Path) -> None:
     better_plot_scatter_time_colored(df, output_dir)
     df_detr = better_add_detrended_columns(df)
     better_plot_scatter_detrended(df_detr, output_dir)
-    better_plot_variance_vs_reward_detrended(df_detr, output_dir)
-    better_plot_within_window_variance(df, output_dir)
+    var_detr_df = better_plot_variance_vs_reward_detrended(df_detr, output_dir)
+    within_window_df = better_plot_within_window_variance(df, output_dir)
 
     # 2 ─ Correlations
     corr_results = correlations(df)
@@ -544,8 +544,8 @@ def perform_all_analyses(df: pd.DataFrame, output_dir: pathlib.Path) -> None:
     diff_corr = better_first_difference_correlation(df)
     mix_model = better_run_mixed_effects(df)
 
-    # 7 ─ Save numeric summary
-    md = textwrap.dedent(f"""
+    # ─── build the main markdown with all your existing metrics ──────────
+    base_md = textwrap.dedent(f"""
     # Analysis Summary
 
     **Rows analysed:** {len(df):,}  
@@ -557,34 +557,77 @@ def perform_all_analyses(df: pd.DataFrame, output_dir: pathlib.Path) -> None:
     | Pearson | {corr_results['pearson_r']:.4f} | {corr_results['pearson_p']:.2e} |
     | Spearman| {corr_results['spearman_r']:.4f} | {corr_results['spearman_p']:.2e} |
     | Partial Pearson (iter-controlled) | {r_partial:.4f} | {p_partial:.2e} |
-    | Partial Spearmean (iter-controlled) | {rho_partial:.4f} | {p_spear:.2e} |
+    | Partial Spearman (iter-controlled) | {rho_partial:.4f} | {p_spear:.2e} |
 
-    Linear Regression (Difficulty ~ β₀ + β₁·Reward)
+    Linear Regression (Difficulty ~ β₀ + β₁·Reward)  
     β₀ = {lin_results.params['const']:.4f} (± {lin_results.bse['const']:.4f})  
     β₁ = {lin_results.params['velocity_reward']:.4f} (± {lin_results.bse['velocity_reward']:.4f})  
     R² = {lin_results.rsquared:.4f}
 
-    ## Polynomial Regression
+    ## Polynomial Regression  
     Optimal degree = **{best_deg}** (cross-validated R² = {best_cv_r2:.4f})
 
-    ## Autocorrelation Diagnostics
+    ## Autocorrelation Diagnostics  
     Lag-1 residual autocorrelation = {lag1:.4f}  
     Durbin-Watson statistic = {dw_stat:.4f}
 
-    ## Mutual Information
+    ## Mutual Information  
     MI(difficulty; reward) = {mi:.4f} nats
 
-    ### First-difference correlation
+    ### First-difference correlation  
     Pearson Δr = {diff_corr['diff_pearson_r']:.4f} (p={diff_corr['diff_pearson_p']:.2e})  
     Spearman Δρ = {diff_corr['diff_spearman_r']:.4f} (p={diff_corr['diff_spearman_p']:.2e})
 
-    ### Mixed-effects
+    ### Mixed-effects  
     {mix_model.summary().as_text()}
-
     """).strip()
+
+    # ─── Over-Time table ─────────────────────────────────────────────────────
+    ot_lines = [
+        "## Correlation Over Time Data",
+        "| Iteration Bin Centre | Pearson r | Count |",
+        "|---|---|---|",
+    ]
+    for _, row in corr_over_time_df.iterrows():
+        ot_lines.append(f"| {row['bin_mid']:.2f} | {row['pearson_r']:.4f} | {int(row['count'])} |")
+    ot_md = "\n".join(ot_lines)
+
+    # ─── Over-Reward table ───────────────────────────────────────────────────
+    or_lines = [
+        "## Local Correlation by Reward Data",
+        "| Reward Bin Centre | Pearson r | Count |",
+        "|---|---|---|",
+    ]
+    for _, row in local_corr_by_reward_df.iterrows():
+        or_lines.append(f"| {row['bin_mid']:.2f} | {row['pearson_r']:.4f} | {int(row['count'])} |")
+    or_md = "\n".join(or_lines)
+
+    # ─── Detrended Variance table ───────────────────────────────────────────
+    vd_lines = [
+        "## Detrended Reward vs Difficulty Variance",
+        "| Reward bin centre | Difficulty variance |",
+        "|---|---|",
+    ]
+    for _, row in var_detr_df.iterrows():
+        vd_lines.append(f"| {row['bin_mid']:.2f} | {row['difficulty_variance']:.4f} |")
+    vd_md = "\n".join(vd_lines)
+
+    # ─── Within-Window Variance table ───────────────────────────────────────
+    ww_lines = [
+        "## Variance conditioned on Time and Reward",
+        "| Iteration bin centre | Reward quantile centre | Difficulty variance |",
+        "|---|---|---|",
+    ]
+    for reward_interval, series in within_window_df.iterrows():
+        for iter_interval, val in series.items():
+            ww_lines.append(f"| {iter_interval.mid:.2f} | {reward_interval.mid:.2f} | {val:.4f} |")
+    ww_md = "\n".join(ww_lines)
+
+    # ─── combine all sections ────────────────────────────────────────────────
+    md = "\n\n".join([base_md, ot_md, or_md, vd_md, ww_md]).strip()
+
     print(md)
     (output_dir / "summary.md").write_text(md, encoding="utf-8")
-
 
 def parse_cli() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Analyse relation between terrain difficulty and reward.")
