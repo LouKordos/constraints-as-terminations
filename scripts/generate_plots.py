@@ -1269,7 +1269,7 @@ def generate_plots(data, output_dir, interactive=False):
 
     futures = []
     with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
-        futures.append(executor.submit(_animate_body_frame_foot_positions, foot_positions_body_frame, contact_state_array, foot_labels, os.path.join(output_dir, "foot_positions_body_frame_com", "foot_positions_body_frame_animation.mp4"), fps=20))
+        futures.append(executor.submit(_animate_body_frame_foot_positions, foot_positions_body_frame, contact_state_array, foot_labels, os.path.join(output_dir, "foot_com_positions_body_frame", "foot_com_positions_body_frame_animation.mp4"), fps=20))
         
         # 1) Foot contact-force per-foot grid
         futures.append(
