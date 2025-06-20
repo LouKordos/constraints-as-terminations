@@ -116,6 +116,8 @@ def summarize_metric(values: list[float]) -> dict[str, float]:
         "90th_percentile":  float(np.percentile(arr, 90)),
         "99th_percentile":  float(np.percentile(arr, 99)),
         "stddev":           float(arr.std()),
+        "sum_signed_divided_by_num_steps":       float(np.sum(arr)) / float(len(values)),
+        "sum_abs_divided_by_num_steps":          float(np.sum(np.abs(arr))) / float(len(values))
     }
 
 def compute_swing_durations(contact_state: np.ndarray, sim_env_step_dt: float, foot_labels: list[str]) -> dict[str, list[float]]:
