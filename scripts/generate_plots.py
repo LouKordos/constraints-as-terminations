@@ -1662,7 +1662,7 @@ def _plot_box_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, m
             pickle.dump(fig, f)
 
 
-def _plot_box_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE):
+def _plot_box_joint_metric_overview(metric_name, data_arr, joint_names, metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE):
     """
     Overview box plot (all joints on one axis) for the given metric.
     """
@@ -2804,28 +2804,28 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
 
         # a) Joint-level box plots (grid + overview)
         for metric_name, data_arr in metrics.items():
+            # futures.append(
+            #     executor.submit(
+            #         _plot_box_joint_grid,
+            #         metric_name, data_arr, joint_names, leg_row, leg_col,
+            #         metric_to_unit_mapping, output_dir, pickle_dir
+            #     )
+            # )
             futures.append(
                 executor.submit(
-                    _plot_box_joint_grid,
-                    metric_name, data_arr, joint_names, leg_row, leg_col,
-                    metric_to_unit_mapping, output_dir, pickle_dir
-                )
-            )
-            futures.append(
-                executor.submit(
-                    _plot_box_joint_metric,
+                    _plot_box_joint_metric_overview,
                     metric_name, data_arr, joint_names,
                     metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE
                 )
             )
 
         # b) Contact-force box plots
-        futures.append(
-            executor.submit(
-                _plot_box_contact_forces_grid,
-                contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE
-            )
-        )
+        # futures.append(
+        #     executor.submit(
+        #         _plot_box_contact_forces_grid,
+        #         contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE
+        #     )
+        # )
         futures.append(
             executor.submit(
                 _plot_box_contact_forces_overview,
@@ -2834,12 +2834,12 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         )
 
         # c) Air-time box plots (grid + per-foot)
-        futures.append(
-            executor.submit(
-                _plot_box_air_time_per_foot_grid,
-                swing_durations, foot_labels, output_dir, pickle_dir, FIGSIZE
-            )
-        )
+        # futures.append(
+        #     executor.submit(
+        #         _plot_box_air_time_per_foot_grid,
+        #         swing_durations, foot_labels, output_dir, pickle_dir, FIGSIZE
+        #     )
+        # )
         for label, durations in swing_durations.items():
             futures.append(
                 executor.submit(
@@ -2895,17 +2895,17 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 )
             )
 
-            futures.append(
-                executor.submit(
-                    _plot_box_metric_grid,
-                    metric_dict,
-                    f"Box Plot of Foot {axis_label} Position (body frame, CoM)",
-                    f"{axis_label} (m)", foot_labels,
-                    output_dir, pickle_dir,
-                    subfolder=subdir,
-                    FIGSIZE=FIGSIZE
-                )
-            )
+            # futures.append(
+            #     executor.submit(
+            #         _plot_box_metric_grid,
+            #         metric_dict,
+            #         f"Box Plot of Foot {axis_label} Position (body frame, CoM)",
+            #         f"{axis_label} (m)", foot_labels,
+            #         output_dir, pickle_dir,
+            #         subfolder=subdir,
+            #         FIGSIZE=FIGSIZE
+            #     )
+            # )
             futures.append(
                 executor.submit(
                     _plot_box_metric_overview,
@@ -2956,17 +2956,17 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 )
             )
 
-            futures.append(
-                executor.submit(
-                    _plot_box_metric_grid,
-                    metric_dict,
-                    f"Box Plot of Foot {axis_label} Position (contact frame, toe tip)",
-                    f"{axis_label} (m)", foot_labels,
-                    output_dir, pickle_dir,
-                    subfolder=subdir,
-                    FIGSIZE=FIGSIZE
-                )
-            )
+            # futures.append(
+            #     executor.submit(
+            #         _plot_box_metric_grid,
+            #         metric_dict,
+            #         f"Box Plot of Foot {axis_label} Position (contact frame, toe tip)",
+            #         f"{axis_label} (m)", foot_labels,
+            #         output_dir, pickle_dir,
+            #         subfolder=subdir,
+            #         FIGSIZE=FIGSIZE
+            #     )
+            # )
             futures.append(
                 executor.submit(
                     _plot_box_metric_overview,
@@ -3000,16 +3000,16 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 subfolder="step_height", FIGSIZE=FIGSIZE
             )
         )
-        futures.append(
-            executor.submit(
-                _plot_box_metric_grid,
-                step_heights,
-                "Box Plot of Step Height",
-                r"Height ($\text{m}$)", foot_labels,
-                output_dir, pickle_dir,
-                subfolder="step_height", FIGSIZE=FIGSIZE
-            )
-        )
+        # futures.append(
+        #     executor.submit(
+        #         _plot_box_metric_grid,
+        #         step_heights,
+        #         "Box Plot of Step Height",
+        #         r"Height ($\text{m}$)", foot_labels,
+        #         output_dir, pickle_dir,
+        #         subfolder="step_height", FIGSIZE=FIGSIZE
+        #     )
+        # )
         futures.append(
             executor.submit(
                 _plot_box_metric_overview,
@@ -3042,16 +3042,16 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 subfolder="step_length", FIGSIZE=FIGSIZE
             )
         )
-        futures.append(
-            executor.submit(
-                _plot_box_metric_grid,
-                step_lengths,
-                "Box Plot of Step Length",
-                r"Step Length ($\text{m}$)", foot_labels,
-                output_dir, pickle_dir,
-                subfolder="step_length", FIGSIZE=FIGSIZE
-            )
-        )
+        # futures.append(
+        #     executor.submit(
+        #         _plot_box_metric_grid,
+        #         step_lengths,
+        #         "Box Plot of Step Length",
+        #         r"Step Length ($\text{m}$)", foot_labels,
+        #         output_dir, pickle_dir,
+        #         subfolder="step_length", FIGSIZE=FIGSIZE
+        #     )
+        # )
         futures.append(
             executor.submit(
                 _plot_box_metric_overview,
@@ -3112,17 +3112,17 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 )
             )
 
-            futures.append(
-                executor.submit(
-                    _plot_box_metric_grid,
-                    metric_dict,
-                    f"Box Plot of Foot {axis_label} Velocity (world frame)",
-                    f"Velocity {axis_label} (m/s)", foot_labels,
-                    output_dir, pickle_dir,
-                    subfolder=subdir,
-                    FIGSIZE=FIGSIZE
-                )
-            )
+            # futures.append(
+            #     executor.submit(
+            #         _plot_box_metric_grid,
+            #         metric_dict,
+            #         f"Box Plot of Foot {axis_label} Velocity (world frame)",
+            #         f"Velocity {axis_label} (m/s)", foot_labels,
+            #         output_dir, pickle_dir,
+            #         subfolder=subdir,
+            #         FIGSIZE=FIGSIZE
+            #     )
+            # )
             futures.append(
                 executor.submit(
                     _plot_box_metric_overview,
@@ -3182,17 +3182,17 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 )
             )
 
-            futures.append(
-                executor.submit(
-                    _plot_box_metric_grid,
-                    metric_dict,
-                    f"Box Plot of Foot {axis_label} Velocity (body frame)",
-                    f"Velocity {axis_label} (m/s)", foot_labels,
-                    output_dir, pickle_dir,
-                    subfolder=subdir,
-                    FIGSIZE=FIGSIZE
-                )
-            )
+            # futures.append(
+            #     executor.submit(
+            #         _,
+            #         metric_dict,
+            #         f"Box Plot of Foot {axis_label} Velocity (body frame)",
+            #         f"Velocity {axis_label} (m/s)", foot_labels,
+            #         output_dir, pickle_dir,
+            #         subfolder=subdir,
+            #         FIGSIZE=FIGSIZE
+            #     )
+            # )
             futures.append(
                 executor.submit(
                     _plot_box_metric_overview,
@@ -3228,7 +3228,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         metric_dict_world_mag = _array_to_metric_dict(foot_velocities_world_magnitude, foot_labels)
         futures.append(executor.submit(_plot_hist_metric_grid, metric_dict_world_mag, "Histogram of Foot Velocity Magnitude (world frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE))
         futures.append(executor.submit(_plot_hist_metric_overview, metric_dict_world_mag, "Histogram of Foot Velocity Magnitude (world frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE))
-        futures.append(executor.submit(_plot_box_metric_grid, metric_dict_world_mag, "Box Plot of Foot Velocity Magnitude (world frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE))
+        # futures.append(executor.submit(_plot_box_metric_grid, metric_dict_world_mag, "Box Plot of Foot Velocity Magnitude (world frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE))
         futures.append(executor.submit(_plot_box_metric_overview, metric_dict_world_mag, "Box Plot of Foot Velocity Magnitude (world frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE))
 
         # Body frame magnitude
@@ -3253,7 +3253,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         metric_dict_body_mag = _array_to_metric_dict(foot_velocities_body_magnitude, foot_labels)
         futures.append(executor.submit(_plot_hist_metric_grid, metric_dict_body_mag, "Histogram of Foot Velocity Magnitude (body frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE))
         futures.append(executor.submit(_plot_hist_metric_overview, metric_dict_body_mag, "Histogram of Foot Velocity Magnitude (body frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE))
-        futures.append(executor.submit(_plot_box_metric_grid, metric_dict_body_mag, "Box Plot of Foot Velocity Magnitude (body frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE))
+        # futures.append(executor.submit(_plot_box_metric_grid, metric_dict_body_mag, "Box Plot of Foot Velocity Magnitude (body frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE))
         futures.append(executor.submit(_plot_box_metric_overview, metric_dict_body_mag, "Box Plot of Foot Velocity Magnitude (body frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE))
 
 
@@ -3415,22 +3415,22 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             line_pickle_dir = os.path.join(pickle_dir, "joint_phase_plots", "line", data_key, f"{x_type}_vs_{y_type}") if pickle_dir else ""
 
             # --- Submit Hexbin Plot Jobs ---
-            futures.append(executor.submit(
-                _plot_joint_phase_overview,
-                data_x, data_y, foot_labels, xlabel, ylabel, f"{title_prefix} (All Feet, Hexbin)",
-                hexbin_output_dir, hexbin_pickle_dir, FIGSIZE=(20, 20), gridsize=20
-            ))
-            futures.append(executor.submit(
-                _plot_joint_phase_grid,
-                data_x, data_y, foot_labels, xlabel, ylabel, f"{title_prefix} (Hexbin)",
-                hexbin_output_dir, hexbin_pickle_dir, FIGSIZE=(24, 24), gridsize=20
-            ))
-            for i, label in enumerate(foot_labels):
-                futures.append(executor.submit(
-                    _plot_joint_phase_single,
-                    data_x[:, i], data_y[:, i], label, xlabel, ylabel, title_prefix,
-                    hexbin_output_dir, hexbin_pickle_dir, FIGSIZE=(20, 20), gridsize=20
-                ))
+            # futures.append(executor.submit(
+            #     _plot_joint_phase_overview,
+            #     data_x, data_y, foot_labels, xlabel, ylabel, f"{title_prefix} (All Feet, Hexbin)",
+            #     hexbin_output_dir, hexbin_pickle_dir, FIGSIZE=(20, 20), gridsize=20
+            # ))
+            # futures.append(executor.submit(
+            #     _plot_joint_phase_grid,
+            #     data_x, data_y, foot_labels, xlabel, ylabel, f"{title_prefix} (Hexbin)",
+            #     hexbin_output_dir, hexbin_pickle_dir, FIGSIZE=(24, 24), gridsize=20
+            # ))
+            # for i, label in enumerate(foot_labels):
+            #     futures.append(executor.submit(
+            #         _plot_joint_phase_single,
+            #         data_x[:, i], data_y[:, i], label, xlabel, ylabel, title_prefix,
+            #         hexbin_output_dir, hexbin_pickle_dir, FIGSIZE=(20, 20), gridsize=20
+            #     ))
 
             # --- Submit Line Plot Jobs ---
             futures.append(executor.submit(
@@ -3462,25 +3462,25 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         av_hexbin_output_dir = os.path.join(av_plot_output_dir, "hexbin")
         av_hexbin_pickle_dir = os.path.join(av_plot_pickle_dir, "hexbin") if av_plot_pickle_dir else ""
         
-        futures.append(executor.submit(
-            _plot_joint_phase_hexbin_grid_4x3,
-            joint_positions, joint_velocities, joint_names, leg_row, leg_col,
-            av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity (Hexbin)",
-            av_hexbin_output_dir, av_hexbin_pickle_dir, gridsize=30
-        ))
-        futures.append(executor.submit(
-            _plot_joint_phase_overview,
-            joint_positions, joint_velocities, joint_names,
-            av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity (All Joints, Hexbin)",
-            av_hexbin_output_dir, av_hexbin_pickle_dir, FIGSIZE=(20, 20), gridsize=30
-        ))
-        for j, jn in enumerate(joint_names):
-            futures.append(executor.submit(
-                _plot_joint_phase_single,
-                joint_positions[:, j], joint_velocities[:, j], jn,
-                av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity",
-                av_hexbin_output_dir, av_hexbin_pickle_dir, FIGSIZE=(20, 20), gridsize=30
-            ))
+        # futures.append(executor.submit(
+        #     _plot_joint_phase_hexbin_grid_4x3,
+        #     joint_positions, joint_velocities, joint_names, leg_row, leg_col,
+        #     av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity (Hexbin)",
+        #     av_hexbin_output_dir, av_hexbin_pickle_dir, gridsize=30
+        # ))
+        # futures.append(executor.submit(
+        #     _plot_joint_phase_overview,
+        #     joint_positions, joint_velocities, joint_names,
+        #     av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity (All Joints, Hexbin)",
+        #     av_hexbin_output_dir, av_hexbin_pickle_dir, FIGSIZE=(20, 20), gridsize=30
+        # ))
+        # for j, jn in enumerate(joint_names):
+        #     futures.append(executor.submit(
+        #         _plot_joint_phase_single,
+        #         joint_positions[:, j], joint_velocities[:, j], jn,
+        #         av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity",
+        #         av_hexbin_output_dir, av_hexbin_pickle_dir, FIGSIZE=(20, 20), gridsize=30
+        #     ))
 
         # --- Submit Line Plot Jobs ---
         av_line_output_dir = os.path.join(av_plot_output_dir, "line")
@@ -3548,7 +3548,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             # Box plots
             box_title = f"Box Plot of Stance Foot {comp_label} Velocity (World Frame)"
             box_ylabel = f"Velocity {comp_label} (m/s)" # For overview, xlabel is "Foot"
-            futures.append(executor.submit(_plot_box_metric_grid, stance_only_data_dict, box_title, hist_xlabel, foot_labels, output_dir, pickle_dir, component_specific_plot_dir, FIGSIZE))
+            # futures.append(executor.submit(_plot_box_metric_grid, stance_only_data_dict, box_title, hist_xlabel, foot_labels, output_dir, pickle_dir, component_specific_plot_dir, FIGSIZE))
             futures.append(executor.submit(_plot_box_metric_overview, stance_only_data_dict, f"{box_title} Overview", box_ylabel, foot_labels, output_dir, pickle_dir, component_specific_plot_dir, FIGSIZE))
 
         # Velocity Magnitude
@@ -3577,7 +3577,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         # Box plots for Magnitude
         box_mag_title = f"Box Plot of Stance Foot {comp_label_mag} Velocity (World Frame)"
         box_mag_ylabel = f"Velocity {comp_label_mag} (m/s)"
-        futures.append(executor.submit(_plot_box_metric_grid, stance_only_mag_data_dict, box_mag_title, hist_mag_xlabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE))
+        # futures.append(executor.submit(_plot_box_metric_grid, stance_only_mag_data_dict, box_mag_title, hist_mag_xlabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE))
         futures.append(executor.submit(_plot_box_metric_overview, stance_only_mag_data_dict, f"{box_mag_title} Overview", box_mag_ylabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE))
 
 
