@@ -33,10 +33,7 @@ plt.rcParams.update({
     'legend.fontsize': 12,
     'figure.titlesize': 18,
     'figure.constrained_layout.use': True,
-    # 'figure.constrained_layout.h_pad': 0.01, 
-    # 'figure.constrained_layout.w_pad': 0.01,
-    # 'figure.constrained_layout.hspace': 0.005,
-    # 'figure.constrained_layout.wspace': 0.005,
+
 })
 
 from metrics_utils import (
@@ -1082,7 +1079,7 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
             for stance_start, stance_end in compute_stance_segments(contact_state_array[:, fid].astype(bool)):
                 ax.axvspan(sim_times[stance_start], sim_times[stance_end-1], facecolor='gray', alpha=0.5)
         ax.set_title(f"Joint {metric_name.replace('_', ' ')} for {jn}", fontsize=20)
-        ax.set_ylabel(rf"$\text{{{metric_name.capitalize().replace('_', ' ')}}} ({metric_to_unit_mapping[metric_name]})$")
+        ax.set_ylabel(f"Joint {metric_name.replace('_', ' ').capitalize()} ({metric_to_unit_mapping[metric_name]})")
 
     axes[-1, 0].set_xlabel(r'Time ($\text{s}$)')
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f'joint_{metric_name}_grid.pdf')
@@ -1104,7 +1101,7 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
         draw_resets(ax, reset_times)
         ax.set_xlabel(r'Time ($\text{s}$)')
         ax.set_title(f"Joint {metric_name.replace('_', ' ')} overview", fontsize=20)
-        ax.set_ylabel(rf"$\text{{{metric_name.capitalize().replace('_', ' ')}}} ({metric_to_unit_mapping[metric_name]})$")
+        ax.set_ylabel(f"Joint {metric_name.replace('_', ' ').capitalize()} ({metric_to_unit_mapping[metric_name]})")
         ax.legend(loc='upper right', ncol=2)
         pdf = os.path.join(output_dir, "joint_metrics", metric_name, f'joint_{metric_name}_overview.pdf')
         fig_ov.savefig(pdf, dpi=600)
@@ -1123,7 +1120,7 @@ def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, 
         # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
         ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0)
         ax.set_title(jn, fontsize=16)
-        ax.set_xlabel(rf"$\text{{{metric_name.capitalize().replace('_', ' ')}}} ({metric_to_unit_mapping[metric_name]})$")
+        ax.set_xlabel(f"{metric_name.capitalize().replace('_', ' ')} ({metric_to_unit_mapping[metric_name]})")
         ax.set_ylabel("Count")
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"hist_joint_{metric_name}_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
@@ -1139,7 +1136,7 @@ def _plot_hist_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_m
         # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
         ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0, label=jn)
     ax.set_title(f"Histogram of joint {metric_name.replace('_',' ')}", fontsize=20)
-    ax.set_xlabel(rf"$\text{{{metric_name.capitalize().replace('_', ' ')}}} ({metric_to_unit_mapping[metric_name]})$")
+    ax.set_xlabel(f"Joint {metric_name.replace('_',' ').capitalize()} ({metric_to_unit_mapping[metric_name]})")
     ax.set_ylabel("Frequency")
     ax.legend(loc='upper right', fontsize=12)
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"hist_joint_{metric_name}_overview.pdf")
@@ -1382,7 +1379,7 @@ def _plot_box_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, m
         ax = axes[row, col]
         ax.boxplot(x=data_arr[:, j], showmeans=True, showcaps=True, showbox=True, showfliers=False)
         ax.set_title(jn, fontsize=16)
-        ax.set_xlabel(rf"$\text{{{metric_name.capitalize().replace('_', ' ')}}} ({metric_to_unit_mapping[metric_name]})$", fontsize=12)
+        ax.set_xlabel(f"{metric_name.capitalize().replace('_', ' ')} ({metric_to_unit_mapping[metric_name]})", fontsize=12)
 
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"box_joint_{metric_name}_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
@@ -1401,7 +1398,7 @@ def _plot_box_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_ma
     ax.boxplot(x=[data_arr[:, j] for j in range(data_arr.shape[1])], positions=np.arange(1, len(joint_names) + 1), showmeans=True, showcaps=True, showbox=True, showfliers=False)
     ax.set_title(f"Box Plot of Joint {metric_name.replace('_', ' ')}", fontsize=20)
     ax.set_xlabel("Joint")
-    ax.set_ylabel(rf"$\text{{{metric_name.capitalize().replace('_', ' ')}}} ({metric_to_unit_mapping[metric_name]})$")
+    ax.set_ylabel(f"{metric_name.capitalize().replace('_', ' ')} ({metric_to_unit_mapping[metric_name]})")
     ax.set_xticks(np.arange(1, len(joint_names) + 1))
     ax.set_xticklabels(joint_names, rotation=45, ha="right")
 
@@ -1909,10 +1906,111 @@ def _plot_joint_phase_line_single(
             pickle.dump(fig, f)
     plt.close(fig)
 
+
+def _plot_joint_phase_hexbin_grid_4x3(
+    data_x: np.ndarray,
+    data_y: np.ndarray,
+    joint_names: list[str],
+    leg_row: list[int],
+    leg_col: list[int],
+    xlabel: str,
+    ylabel: str,
+    title: str,
+    output_dir: str,
+    pickle_dir: str,
+    FIGSIZE: tuple[int, int] = (24, 32),
+    gridsize: int = 100
+):
+    """Generates a 4x3 grid of hexbin plots for joint phase data."""
+    fig, axes = plt.subplots(4, 3, figsize=FIGSIZE)
+    fig.suptitle(title, fontsize=30)
+
+    for j, jn in enumerate(joint_names):
+        row, col = leg_row[j], leg_col[j]
+        ax = axes[row, col]
+        
+        x = data_x[:, j]
+        y = data_y[:, j]
+
+        ax.set_title(jn, fontsize=26)
+        if len(x) == 0:
+            ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+            continue
+
+        hb = ax.hexbin(x, y, gridsize=gridsize, cmap='viridis', mincnt=1)
+        counts = hb.get_array()
+        
+        cbar_label = "Occupancy (samples)"
+        if counts.size > 0 and counts.max() > 10 and (counts.max() / (counts.min() + 1e-9) > 20):
+            hb.set_norm(colors.LogNorm(vmin=max(1, counts.min()), vmax=counts.max()))
+            cbar_label = r"$\log_{10}(\text{Occupancy})$"
+
+        ax.set_xlabel(xlabel, fontsize=22)
+        ax.set_ylabel(ylabel, fontsize=22)
+        ax.tick_params(axis='both', which='major', labelsize=20)
+        ax.grid(True)
+
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        cb = fig.colorbar(hb, cax=cax)
+        cb.set_label(cbar_label, size=22)
+        cb.ax.tick_params(labelsize=20)
+
+    os.makedirs(output_dir, exist_ok=True)
+    pdf_path = os.path.join(output_dir, "grid_hexbin.pdf")
+    fig.savefig(pdf_path, dpi=600, bbox_inches='tight')
+
+    if pickle_dir:
+        os.makedirs(pickle_dir, exist_ok=True)
+        with open(os.path.join(pickle_dir, "grid_hexbin.pickle"), "wb") as f:
+            pickle.dump(fig, f)
+    plt.close(fig)
+
+def _plot_joint_phase_line_grid_4x3(
+    data_x: np.ndarray,
+    data_y: np.ndarray,
+    joint_names: list[str],
+    leg_row: list[int],
+    leg_col: list[int],
+    xlabel: str,
+    ylabel: str,
+    title: str,
+    output_dir: str,
+    pickle_dir: str,
+    FIGSIZE: tuple[int, int] = (24, 32)
+):
+    """Generates a 4x3 grid of line plots for joint phase data."""
+    fig, axes = plt.subplots(4, 3, figsize=FIGSIZE)
+    fig.suptitle(title, fontsize=30)
+
+    for j, jn in enumerate(joint_names):
+        row, col = leg_row[j], leg_col[j]
+        ax = axes[row, col]
+        
+        x = data_x[:, j]
+        y = data_y[:, j]
+
+        ax.set_title(jn, fontsize=26)
+        ax.plot(x, y, alpha=0.7)
+        ax.set_xlabel(xlabel, fontsize=22)
+        ax.set_ylabel(ylabel, fontsize=22)
+        ax.tick_params(axis='both', which='major', labelsize=20)
+        ax.grid(True)
+
+    os.makedirs(output_dir, exist_ok=True)
+    pdf_path = os.path.join(output_dir, "grid_line.pdf")
+    fig.savefig(pdf_path, dpi=600, bbox_inches='tight')
+
+    if pickle_dir:
+        os.makedirs(pickle_dir, exist_ok=True)
+        with open(os.path.join(pickle_dir, "grid_line.pickle"), "wb") as f:
+            pickle.dump(fig, f)
+    plt.close(fig)
+
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Main plot generation orchestrator
 # ----------------------------------------------------------------------------------------------------------------------
-
 def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshold: float = 0.1):
     """
     Recreate all plots from loaded data.
@@ -2006,15 +2104,15 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
     }
 
     metric_to_unit_mapping = {
-        'position': r'\text{rad}',
-        'velocity':	r'\text{rad} \cdot \text{s}^{-1}',
-        'acceleration': r'\text{rad} \cdot \text{s}^{-2}',
-        'torque': r'\text{N} \cdot \text{m}',
-        'action_rate': r'\text{rad} \cdot \text{s}^{-1}',
-        'energy': r'\text{J}',
-        'combined_energy': r'\text{J}',
-        'cost_of_transport': '-',
-        'power': r'\text{W}'
+        'position': r'$\text{rad}$',
+        'velocity':	r'$\text{rad} \cdot \text{s}^{-1}$',
+        'acceleration': r'$\text{rad} \cdot \text{s}^{-2}$',
+        'torque': r'$\text{N} \cdot \text{m}$',
+        'action_rate': r'$\text{rad} \cdot \text{s}^{-1}$',
+        'energy': r'$\text{J}$',
+        'combined_energy': r'$\text{J}$',
+        'cost_of_transport': r'$-$',
+        'power': r'$\text{W}$'
     }
 
     # Helper for mapping joints to feet
@@ -2050,8 +2148,8 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         "velocity": joint_velocities,
     }
     unit_labels_for_phase_plots = {
-        "position": "rad",
-        "velocity": r"rad $\cdot$ s$^{-1}$",
+        "position": r"$\text{rad}$",
+        "velocity": r"$\text{rad} \cdot \text{s}^{-1}$",
     }
     # --- End Prepare for Joint Phase Plots ---
 
@@ -2675,20 +2773,76 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                     line_output_dir, line_pickle_dir, FIGSIZE=(20, 20)
                 ))
 
+
+        # --- Angle vs. Angular Velocity Phase Plots ---
+        av_plot_output_dir = os.path.join(output_dir, "joint_phase_plots", "angle_vs_velocity")
+        av_plot_pickle_dir = os.path.join(pickle_dir, "joint_phase_plots", "angle_vs_velocity") if pickle_dir else ""
+
+        av_xlabel = f"Joint Angle ({metric_to_unit_mapping['position']})"
+        av_ylabel = f"Joint Angular Velocity ({metric_to_unit_mapping['velocity']})"
+        
+        # --- Submit Hexbin Plot Jobs ---
+        av_hexbin_output_dir = os.path.join(av_plot_output_dir, "hexbin")
+        av_hexbin_pickle_dir = os.path.join(av_plot_pickle_dir, "hexbin") if av_plot_pickle_dir else ""
+        
+        futures.append(executor.submit(
+            _plot_joint_phase_hexbin_grid_4x3,
+            joint_positions, joint_velocities, joint_names, leg_row, leg_col,
+            av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity (Hexbin)",
+            av_hexbin_output_dir, av_hexbin_pickle_dir, gridsize=30
+        ))
+        futures.append(executor.submit(
+            _plot_joint_phase_overview,
+            joint_positions, joint_velocities, joint_names,
+            av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity (All Joints, Hexbin)",
+            av_hexbin_output_dir, av_hexbin_pickle_dir, FIGSIZE=(20, 20), gridsize=30
+        ))
+        for j, jn in enumerate(joint_names):
+            futures.append(executor.submit(
+                _plot_joint_phase_single,
+                joint_positions[:, j], joint_velocities[:, j], jn,
+                av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity",
+                av_hexbin_output_dir, av_hexbin_pickle_dir, FIGSIZE=(20, 20), gridsize=30
+            ))
+
+        # --- Submit Line Plot Jobs ---
+        av_line_output_dir = os.path.join(av_plot_output_dir, "line")
+        av_line_pickle_dir = os.path.join(av_plot_pickle_dir, "line") if av_plot_pickle_dir else ""
+        
+        futures.append(executor.submit(
+            _plot_joint_phase_line_grid_4x3,
+            joint_positions, joint_velocities, joint_names, leg_row, leg_col,
+            av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity (Line)",
+            av_line_output_dir, av_line_pickle_dir
+        ))
+        futures.append(executor.submit(
+            _plot_joint_phase_line_overview,
+            joint_positions, joint_velocities, joint_names,
+            av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity (All Joints, Line)",
+            av_line_output_dir, av_line_pickle_dir
+        ))
+        for j, jn in enumerate(joint_names):
+            futures.append(executor.submit(
+                _plot_joint_phase_line_single,
+                joint_positions[:, j], joint_velocities[:, j], jn,
+                av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity",
+                av_line_output_dir, av_line_pickle_dir
+            ))
+        
+        # This one is not wrapped in a future since it manages its own process pool internally
+        _animate_body_frame_pipe_to_ffmpeg(
+            foot_positions_body_frame,
+            contact_state_array,
+            foot_labels,
+            os.path.join(output_dir, "foot_com_positions_body_frame", "foot_com_positions_body_frame_animation.mp4"),
+            fps=50,
+            dpi=300
+        )
+
         # Ensure all tasks complete
         for f in futures:
             f.result()
 
-    # This one is not wrapped in a future since it manages its own process pool internally
-    _animate_body_frame_pipe_to_ffmpeg(
-        foot_positions_body_frame,
-        contact_state_array,
-        foot_labels,
-        os.path.join(output_dir, "foot_com_positions_body_frame", "foot_com_positions_body_frame_animation.mp4"),
-        fps=50,
-        dpi=300
-    )
-    
     end_time = time.time()
     print(f"Plot generation took {(end_time-start_time):.4f} seconds.")
 
