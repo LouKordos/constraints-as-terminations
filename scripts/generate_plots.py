@@ -15,6 +15,16 @@ import time
 
 plt.style.use(['science','ieee'])
 
+plt.rcParams.update({
+    'font.size': 12,
+    'axes.labelsize': 14,
+    'axes.titlesize': 16,
+    'xtick.labelsize': 12,
+    'ytick.labelsize': 12,
+    'legend.fontsize': 12,
+    'figure.titlesize': 18
+})
+
 from metrics_utils import (
     compute_energy_arrays,
     compute_swing_durations,
@@ -142,7 +152,7 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
 
     fig, ax = plt.subplots(figsize=(180 if sim_times[0] == 0.0 else 24, F * 1.2))
     ax.set_xlabel('Time (s)')
-    ax.set_title('Gait Diagram with Air and Contact Times (white text = contact/stance phase, black text = air/swing phase)', fontsize=14)
+    ax.set_title('Gait Diagram with Air and Contact Times (white text = contact/stance phase, black text = air/swing phase)', fontsize=18)
 
     for reset_time in reset_times:
             ax.axvline(x=reset_time, linestyle=":", linewidth=1, color="orange", label='reset' if reset_time == reset_times[0] else None)
@@ -160,7 +170,7 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
             duration = t_end - t_start
             t_mid = 0.5 * (t_start + t_end)
             y_text = y0 + spacing * 0.3
-            ax.text(t_mid, y_text, f"{duration:.3f}s", ha='center', va='center', color='white', fontsize=6, rotation=90)
+            ax.text(t_mid, y_text, f"{duration:.3f}s", ha='center', va='center', color='white', fontsize=8, rotation=90)
 
         swing_segments = compute_swing_segments(in_contact)
 
@@ -170,7 +180,7 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
             t_end   = sim_times[b - 1]
             duration = t_end - t_start
             t_mid = 0.5 * (t_start + t_end)
-            ax.text(t_mid, y0 + spacing * 0.5, f"{duration:.3f}s", ha='center', va='center', fontsize=6, rotation=90)
+            ax.text(t_mid, y0 + spacing * 0.5, f"{duration:.3f}s", ha='center', va='center', fontsize=8, rotation=90)
 
     ax.set_xticks(np.arange(0, sim_times[-1], 1))
     ax.set_yticks([i * spacing for i in range(F)])
@@ -269,7 +279,7 @@ def _plot_body_frame_foot_position_heatmap_grid(foot_positions_body_frame: np.nd
     2x2 grid of occupancy heat-maps - one per foot - in body frame.
     """
     fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
-    fig.suptitle("Foot-position heat-maps (body frame, per foot)", fontsize=18)
+    fig.suptitle("Foot-position heat-maps (body frame, per foot)", fontsize=22)
 
     for i, (ax, lbl) in enumerate(zip(axes.flat, foot_labels)):
         xy = foot_positions_body_frame[:, i, :2] # (T, 2)
@@ -408,7 +418,7 @@ def _plot_foot_position_time_series(
             ax.axvspan(sim_times[start_timestep], sim_times[end_timestep - 1], color='gray', alpha=.3, label='in contact' if first else None)
             first = False
         draw_resets(ax, reset_times)
-        ax.set_title(f'Foot {axis_label} ({frame_label.replace("_", " ")}) {foot_labels[i]} {"(CoM)" if frame_label == "body_frame" else "(toe tip)"}', fontsize=14)
+        ax.set_title(f'Foot {axis_label} ({frame_label.replace("_", " ")}) {foot_labels[i]} {"(CoM)" if frame_label == "body_frame" else "(toe tip)"}', fontsize=18)
         ax.set_ylabel(f'{axis_label} (m)')
         ax.legend()
     axes[-1, 0].set_xlabel('Time (s)')
@@ -428,7 +438,7 @@ def _plot_foot_position_time_series(
     draw_resets(ax, reset_times)
     ax.set_xlabel('Time (s)')
     ax.set_ylabel(f'{axis_label} (m)')
-    ax.set_title(f'Foot {axis_label} ({frame_label.replace("_", " ")}) {foot_labels[i]} {"(CoM)" if frame_label == "body_frame" else "(toe tip)"} overview', fontsize=14)
+    ax.set_title(f'Foot {axis_label} ({frame_label.replace("_", " ")}) {foot_labels[i]} {"(CoM)" if frame_label == "body_frame" else "(toe tip)"} overview', fontsize=18)
     ax.legend(ncol=2, loc='upper right')
     pdf = os.path.join(subdir, f'foot_pos_{axis_label.lower()}_overview.pdf')
     fig_ov.savefig(pdf, dpi=600)
@@ -441,7 +451,7 @@ def _plot_hist_metric_grid(metric_dict: dict[str, list[float]], title: str, xlab
     Generic 2x2 grid histogram for per-foot metrics in `metric_dict`.
     """
     fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
-    fig.suptitle(title, fontsize=18)
+    fig.suptitle(title, fontsize=22)
     for i, lbl in enumerate(foot_labels):
         ax = axes.flat[i]
         data = metric_dict[lbl]
@@ -451,7 +461,7 @@ def _plot_hist_metric_grid(metric_dict: dict[str, list[float]], title: str, xlab
             ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0)
         else:
             ax.text(.5, .5, 'no data', ha='center', va='center', transform=ax.transAxes, color='red')
-        ax.set_title(lbl, fontsize=14)
+        ax.set_title(lbl, fontsize=18)
         ax.set_xlabel(xlabel); ax.set_ylabel('Count')
     pdf = os.path.join(output_dir, subfolder, f"hist_{os.path.basename(subfolder)}_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
@@ -471,7 +481,7 @@ def _plot_hist_metric_overview(metric_dict: dict[str, list[float]], title: str, 
             counts, edges = compute_trimmed_histogram_data(np.array(data))
             # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
             ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0, label=lbl)
-    ax.set_title(title, fontsize=16)
+    ax.set_title(title, fontsize=20)
     ax.set_xlabel(xlabel)
     ax.set_ylabel('Frequency')
     ax.legend(loc='upper right')
@@ -487,13 +497,13 @@ def _plot_box_metric_grid(metric_dict: dict[str, list[float]], title: str, xlabe
     Generic 2x2 grid box-plots.
     """
     fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
-    fig.suptitle(title, fontsize=18)
+    fig.suptitle(title, fontsize=22)
     for i, lbl in enumerate(foot_labels):
         ax = axes.flat[i]
         data = metric_dict[lbl]
         if data:
             ax.boxplot(data, showmeans=True, showcaps=True, showbox=True, showfliers=False)
-        ax.set_title(lbl, fontsize=14); ax.set_xlabel(xlabel)
+        ax.set_title(lbl, fontsize=18); ax.set_xlabel(xlabel)
     pdf = os.path.join(output_dir, subfolder, f"box_{os.path.basename(subfolder)}_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
@@ -512,7 +522,7 @@ def _plot_box_metric_overview(metric_dict: dict[str, list[float]], title: str, x
             data.append(metric_dict[lbl]); lbls.append(lbl)
     if data:
         ax.boxplot(data, positions=np.arange(1, len(lbls)+1), showmeans=True, showcaps=True, showbox=True, showfliers=False)
-    ax.set_title(title, fontsize=16)
+    ax.set_title(title, fontsize=20)
     ax.set_xlabel('Foot'); ax.set_ylabel(xlabel)
     ax.set_xticks(np.arange(1, len(lbls)+1)); ax.set_xticklabels(lbls)
     pdf = os.path.join(output_dir, subfolder, f"box_{os.path.basename(subfolder)}_overview.pdf")
@@ -534,7 +544,7 @@ def _plot_foot_contact_force_per_foot(sim_times, contact_forces_array, foot_labe
             ax.axvspan(sim_times[s], sim_times[e-1], facecolor='gray', alpha=0.3, label='in contact' if first else None)
             first = False
 
-        ax.set_title(f"Foot contact force magnitude {foot_labels[i]}", fontsize=16)
+        ax.set_title(f"Foot contact force magnitude {foot_labels[i]}", fontsize=20)
         ax.set_ylabel('Force (N)')
         ax.legend()
     pdf = os.path.join(output_dir, "foot_contact_forces",'foot_contact_force_each.pdf')
@@ -549,7 +559,7 @@ def _plot_hist_contact_forces_grid(contact_forces_array, foot_labels, output_dir
     Plots a 2×2 grid of histograms of contact forces for each foot, showing only forces > 0 N.
     """
     fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
-    fig.suptitle("Histogram of Foot Contact Forces", fontsize=18)
+    fig.suptitle("Histogram of Foot Contact Forces", fontsize=22)
     
     # Loop over each foot label / column
     for i, label in enumerate(foot_labels):
@@ -559,13 +569,13 @@ def _plot_hist_contact_forces_grid(contact_forces_array, foot_labels, output_dir
         
         if positive_forces.size == 0:
             # Warn if no positive forces were found
-            ax.text(0.5, 0.5, "No forces > 0 N", ha="center", va="center", transform=ax.transAxes, fontsize=12, color="red")
+            ax.text(0.5, 0.5, "No forces > 0 N", ha="center", va="center", transform=ax.transAxes, fontsize=16, color="red")
         else:
             counts, edges = compute_trimmed_histogram_data(positive_forces)
             # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
             ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0)
         
-        ax.set_title(label, fontsize=14)
+        ax.set_title(label, fontsize=18)
         ax.set_xlabel("Force (N)")
         ax.set_ylabel("Count")
     
@@ -594,12 +604,12 @@ def _plot_hist_contact_forces_overview(contact_forces_array, foot_labels, output
             ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0, label=label)
         else:
             # Warn in the plot that there's no data for this label
-            ax.text(0.5, 0.5 - 0.05 * i, f"No >0 data for '{label}'", transform=ax.transAxes, fontsize=8, color='gray', ha='center')
+            ax.text(0.5, 0.5 - 0.05 * i, f"No >0 data for '{label}'", transform=ax.transAxes, fontsize=12, color='gray', ha='center')
     
-    ax.set_title("Histogram of Foot Contact Forces", fontsize=16)
+    ax.set_title("Histogram of Foot Contact Forces", fontsize=20)
     ax.set_xlabel("Force (N)")
     ax.set_ylabel("Frequency")
-    ax.legend(loc='upper right', fontsize=8)
+    ax.legend(loc='upper right', fontsize=12)
     
     pdf_path = os.path.join(output_dir, "foot_contact_forces", "hist_contact_forces_overview.pdf")
     os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
@@ -628,7 +638,7 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
         if fid is not None:
             for stance_start, stance_end in compute_stance_segments(contact_state_array[:, fid].astype(bool)):
                 ax.axvspan(sim_times[stance_start], sim_times[stance_end-1], facecolor='gray', alpha=0.5)
-        ax.set_title(f"Joint {metric_name.replace('_', ' ')} for {jn}", fontsize=16)
+        ax.set_title(f"Joint {metric_name.replace('_', ' ')} for {jn}", fontsize=20)
         ax.set_ylabel(rf"$\text{{{metric_name.capitalize().replace('_', ' ')}}} ({metric_to_unit_mapping[metric_name]})$")
 
     axes[-1, 0].set_xlabel('Time (s)')
@@ -650,7 +660,7 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
         draw_limits(ax, metric_to_constraint_term_mapping[metric_name], constraint_bounds)
     draw_resets(ax, reset_times)
     ax.set_xlabel('Time (s)')
-    ax.set_title(f"Joint {metric_name.replace('_', ' ')} overview", fontsize=16)
+    ax.set_title(f"Joint {metric_name.replace('_', ' ')} overview", fontsize=20)
     ax.set_ylabel(rf"$\text{{{metric_name.capitalize().replace('_', ' ')}}} ({metric_to_unit_mapping[metric_name]})$")
     ax.legend(loc='upper right', ncol=2)
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f'joint_{metric_name}_overview.pdf')
@@ -661,7 +671,7 @@ def _plot_joint_metric(metric_name, data_arr, sim_times, joint_names, leg_row, l
 
 def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, metric_to_unit_mapping, output_dir, pickle_dir):
     fig, axes = plt.subplots(4, 3, figsize=(18, 12), sharex=False, sharey=False)
-    fig.suptitle(f"Histogram of Joint {metric_name.replace('_', ' ').title()}", fontsize=18)
+    fig.suptitle(f"Histogram of Joint {metric_name.replace('_', ' ').title()}", fontsize=22)
     for j, jn in enumerate(joint_names):
         row, col = leg_row[j], leg_col[j]
         ax = axes[row, col]
@@ -669,7 +679,7 @@ def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, 
         counts, edges = compute_trimmed_histogram_data(data_arr[:, j])
         # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
         ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0)
-        ax.set_title(jn, fontsize=12)
+        ax.set_title(jn, fontsize=16)
         ax.set_xlabel(rf"$\text{{{metric_name.capitalize().replace('_', ' ')}}} ({metric_to_unit_mapping[metric_name]})$")
         ax.set_ylabel("Count")
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"hist_joint_{metric_name}_grid.pdf")
@@ -685,10 +695,10 @@ def _plot_hist_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_m
         counts, edges = compute_trimmed_histogram_data(data_arr[:, j])
         # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
         ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0, label=jn)
-    ax.set_title(f"Histogram of joint {metric_name.replace('_',' ')}", fontsize=16)
+    ax.set_title(f"Histogram of joint {metric_name.replace('_',' ')}", fontsize=20)
     ax.set_xlabel(rf"$\text{{{metric_name.capitalize().replace('_', ' ')}}} ({metric_to_unit_mapping[metric_name]})$")
     ax.set_ylabel("Frequency")
-    ax.legend(loc='upper right', fontsize=8)
+    ax.legend(loc='upper right', fontsize=12)
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"hist_joint_{metric_name}_overview.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
@@ -698,7 +708,7 @@ def _plot_hist_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_m
 
 def _plot_hist_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output_dir, pickle_dir, FIGSIZE):
     fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
-    fig.suptitle("Histogram of Air-Time Durations per Foot", fontsize=18)
+    fig.suptitle("Histogram of Air-Time Durations per Foot", fontsize=22)
     for i, label in enumerate(foot_labels):
         durations = air_segments_per_foot[label]
         ax = axes.flat[i]
@@ -706,7 +716,7 @@ def _plot_hist_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output
             counts, edges = compute_trimmed_histogram_data(np.array(durations))
             # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
             ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0)
-        ax.set_title(label, fontsize=14)
+        ax.set_title(label, fontsize=18)
         ax.set_xlabel("Air Time (s)")
         ax.set_ylabel("Count")
     pdf = os.path.join(output_dir, "aggregates", "air_time", "hist_air_time_grid.pdf")
@@ -722,7 +732,7 @@ def _plot_hist_air_time_per_foot_single(label, durations, output_dir, pickle_dir
         counts, edges = compute_trimmed_histogram_data(np.array(durations))
         # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
         ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0)
-    ax.set_title(f"Histogram of Air-Time Durations ({label})", fontsize=16)
+    ax.set_title(f"Histogram of Air-Time Durations ({label})", fontsize=20)
     ax.set_xlabel("Air Time (s)")
     ax.set_ylabel("Frequency")
     safe_label = label.replace(' ', '_')
@@ -739,7 +749,7 @@ def _plot_combined_energy(sim_times, combined_energy, reset_times, output_dir, p
     draw_resets(ax, reset_times)
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Energy (J)')
-    ax.set_title('Total Cumulative Joint Energy', fontsize=16)
+    ax.set_title('Total Cumulative Joint Energy', fontsize=20)
     ax.legend()
     pdf = os.path.join(output_dir, "aggregates", 'combined_energy_overview.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
@@ -754,7 +764,7 @@ def _plot_reward_time_series(sim_times, reward_array, reset_times, output_dir, p
     draw_resets(ax, reset_times)
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Reward (-)')
-    ax.set_title('Reward at each time step', fontsize=16)
+    ax.set_title('Reward at each time step', fontsize=20)
     ax.legend()
     pdf = os.path.join(output_dir, "aggregates", 'reward_time_series.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
@@ -769,7 +779,7 @@ def _plot_cumulative_reward(sim_times, reward_array, reset_times, output_dir, pi
     draw_resets(ax, reset_times)
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Cumulative reward (-)')
-    ax.set_title('Cumulative reward', fontsize=16)
+    ax.set_title('Cumulative reward', fontsize=20)
     ax.legend()
     pdf = os.path.join(output_dir, "aggregates", 'cumulative_reward.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
@@ -794,7 +804,7 @@ def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_time
 
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Cost of Transport (-)')
-    ax.set_title('Instantaneous Cost of Transport', fontsize=16)
+    ax.set_title('Instantaneous Cost of Transport', fontsize=20)
     ax.set_ylim(0, 6)
     ax.legend()
     pdf = os.path.join(output_dir, "aggregates", "cost_of_transport", 'cost_of_transport_over_time.pdf')
@@ -812,7 +822,7 @@ def _plot_hist_cost_of_transport(cost_of_transport_time_series, output_dir, pick
     ax.set_xlabel('Cost of Transport (-)')
     ax.set_xlim(0, 6)
     ax.set_ylabel('Count')
-    ax.set_title('Histogram of Cost of Transport', fontsize=16)
+    ax.set_title('Histogram of Cost of Transport', fontsize=20)
     pdf = os.path.join(output_dir, "aggregates", "cost_of_transport", 'hist_cot_overview.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
@@ -897,7 +907,7 @@ def _plot_total_base_overview(sim_times, base_position_array, base_orientation_a
         for i, lbl in enumerate(axis_labels):
             ax.plot(sim_times, arr[:, i], label=lbl)
             draw_resets(ax, reset_times)
-        ax.set_title(title, fontsize=16)
+        ax.set_title(title, fontsize=20)
         ax.set_xlabel('Time (s)')
         ax.legend()
     pdf = os.path.join(output_dir, "base_kinematics", 'base_overview_world.pdf')
@@ -922,14 +932,14 @@ def _plot_box_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, m
     4x3 grid of box plots, one per joint, for the given metric.
     """
     fig, axes = plt.subplots(4, 3, figsize=(18, 12), sharex=False, sharey=False)
-    fig.suptitle(f"box Plot of Joint {metric_name.replace('_', ' ').title()}", fontsize=18)
+    fig.suptitle(f"box Plot of Joint {metric_name.replace('_', ' ').title()}", fontsize=22)
 
     for j, jn in enumerate(joint_names):
         row, col = leg_row[j], leg_col[j]
         ax = axes[row, col]
         ax.boxplot(x=data_arr[:, j], showmeans=True, showcaps=True, showbox=True, showfliers=False)
-        ax.set_title(jn, fontsize=12)
-        ax.set_xlabel(rf"$\text{{{metric_name.capitalize().replace('_', ' ')}}} ({metric_to_unit_mapping[metric_name]})$", fontsize=8)
+        ax.set_title(jn, fontsize=16)
+        ax.set_xlabel(rf"$\text{{{metric_name.capitalize().replace('_', ' ')}}} ({metric_to_unit_mapping[metric_name]})$", fontsize=12)
 
     pdf = os.path.join(output_dir, "joint_metrics", metric_name, f"box_joint_{metric_name}_grid.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
@@ -946,7 +956,7 @@ def _plot_box_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_ma
     fig, ax = plt.subplots(figsize=FIGSIZE)
 
     ax.boxplot(x=[data_arr[:, j] for j in range(data_arr.shape[1])], positions=np.arange(1, len(joint_names) + 1), showmeans=True, showcaps=True, showbox=True, showfliers=False)
-    ax.set_title(f"Box Plot of Joint {metric_name.replace('_', ' ')}", fontsize=16)
+    ax.set_title(f"Box Plot of Joint {metric_name.replace('_', ' ')}", fontsize=20)
     ax.set_xlabel("Joint")
     ax.set_ylabel(rf"$\text{{{metric_name.capitalize().replace('_', ' ')}}} ({metric_to_unit_mapping[metric_name]})$")
     ax.set_xticks(np.arange(1, len(joint_names) + 1))
@@ -965,17 +975,17 @@ def _plot_box_contact_forces_grid(contact_forces_array, foot_labels, output_dir,
     2×2 grid of box plots of contact-force magnitudes (>0 N) per foot.
     """
     fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
-    fig.suptitle("box Plot of Foot Contact Forces", fontsize=18)
+    fig.suptitle("box Plot of Foot Contact Forces", fontsize=22)
 
     for i, label in enumerate(foot_labels):
         ax = axes.flat[i]
         forces = contact_forces_array[:, i]
         positive = forces[forces > 0]
         if positive.size == 0:
-            ax.text(0.5, 0.5, "No forces > 0 N", ha="center", va="center", transform=ax.transAxes, fontsize=12, color="red")
+            ax.text(0.5, 0.5, "No forces > 0 N", ha="center", va="center", transform=ax.transAxes, fontsize=16, color="red")
         else:
             ax.boxplot(positive, showmeans=True, showcaps=True, showbox=True, showfliers=False)
-        ax.set_title(label, fontsize=14)
+        ax.set_title(label, fontsize=18)
         ax.set_xlabel("Force (N)")
 
     pdf = os.path.join(output_dir, "foot_contact_forces", "box_contact_forces_grid.pdf")
@@ -1000,7 +1010,7 @@ def _plot_box_contact_forces_overview(contact_forces_array, foot_labels, output_
 
     if data:
         ax.boxplot(data, positions=np.arange(1, len(data) + 1), showmeans=True, showcaps=True, showbox=True, showfliers=False)
-    ax.set_title("Box Plot of Foot Contact Forces", fontsize=16)
+    ax.set_title("Box Plot of Foot Contact Forces", fontsize=20)
     ax.set_xlabel("Foot")
     ax.set_ylabel("Force (N)")
     ax.set_xticks(np.arange(1, len(used_labels) + 1))
@@ -1019,14 +1029,14 @@ def _plot_box_air_time_per_foot_grid(air_segments_per_foot, foot_labels, output_
     2×2 grid of box plots of air-time durations per foot.
     """
     fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
-    fig.suptitle("box Plot of Air-Time Durations per Foot", fontsize=18)
+    fig.suptitle("box Plot of Air-Time Durations per Foot", fontsize=22)
 
     for i, label in enumerate(foot_labels):
         durations = air_segments_per_foot[label]
         ax = axes.flat[i]
         if durations:
             ax.boxplot(durations, showmeans=True, showcaps=True, showbox=True, showfliers=False)
-        ax.set_title(label, fontsize=14)
+        ax.set_title(label, fontsize=18)
         ax.set_xlabel("Air Time (s)")
 
     pdf = os.path.join(output_dir, "aggregates", "air_time", "box_air_time_grid.pdf")
@@ -1045,9 +1055,9 @@ def _plot_box_air_time_per_foot_single(label, durations, output_dir, pickle_dir,
     if durations:
         ax.boxplot(durations, showmeans=True, showcaps=True, showbox=True, showfliers=False)
     else:
-        ax.text(0.5, 0.5, "No air-time segments", ha="center", va="center", transform=ax.transAxes, fontsize=12, color="red")
+        ax.text(0.5, 0.5, "No air-time segments", ha="center", va="center", transform=ax.transAxes, fontsize=16, color="red")
 
-    ax.set_title(f"Box Plot of Air-Time Durations ({label})", fontsize=16)
+    ax.set_title(f"Box Plot of Air-Time Durations ({label})", fontsize=20)
     ax.set_xlabel("Air Time (s)")
 
     safe_label = label.replace(" ", "_")
@@ -1068,7 +1078,7 @@ def _plot_box_cost_of_transport(cost_of_transport_time_series, output_dir, pickl
     if data.size > 0:
         ax.boxplot(data, showmeans=True, showcaps=True, showbox=True, showfliers=False)
     ax.set_xlabel("Cost of Transport")
-    ax.set_title("Box Plot of Cost of Transport", fontsize=16)
+    ax.set_title("Box Plot of Cost of Transport", fontsize=20)
 
     pdf = os.path.join(output_dir, "aggregates", "cost_of_transport", "box_cot_overview.pdf")
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
