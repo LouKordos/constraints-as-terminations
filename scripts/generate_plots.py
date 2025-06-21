@@ -22,7 +22,12 @@ plt.rcParams.update({
     'xtick.labelsize': 12,
     'ytick.labelsize': 12,
     'legend.fontsize': 12,
-    'figure.titlesize': 18
+    'figure.titlesize': 18,
+    'figure.constrained_layout.use': True,
+    # 'figure.constrained_layout.h_pad': 0.01, 
+    # 'figure.constrained_layout.w_pad': 0.01,
+    # 'figure.constrained_layout.hspace': 0.005,
+    # 'figure.constrained_layout.wspace': 0.005,
 })
 
 from metrics_utils import (
@@ -394,6 +399,133 @@ def _animate_body_frame_foot_positions(foot_positions_body_frame: np.ndarray, co
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     ani = animation.FuncAnimation(fig, _animate, init_func=_init, frames=T, interval=1000 / fps, blit=True)
     ani.save(output_path, fps=fps)
+    plt.close(fig)
+
+
+def _plot_body_frame_foot_position_xy_grid(
+    foot_positions_body_frame: np.ndarray,
+    foot_labels: list[str],
+    contact_state_array: np.ndarray,
+    output_dir: str,
+    pickle_dir: str,
+    FIGSIZE: tuple[int, int] = (20, 20)
+):
+    """
+    2x2 grid of XY trajectory plots - one per foot - in body frame.
+    Stance phases are marked with scatter points.
+    """
+    fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
+    fig.suptitle("Foot XY Trajectories (body frame, per foot)", fontsize=22)
+
+    for i, (ax, lbl) in enumerate(zip(axes.flat, foot_labels)):
+        x = foot_positions_body_frame[:, i, 0]
+        y = foot_positions_body_frame[:, i, 1]
+        
+        # Full trajectory path
+        ax.plot(x, y, alpha=0.6, label="Swing Trajectory")
+
+        # Stance points
+        stance_indices = np.where(contact_state_array[:, i])[0]
+        if len(stance_indices) > 0:
+            ax.scatter(x[stance_indices], y[stance_indices], s=5, label="Stance Points", color='red')
+
+        ax.set_title(lbl)
+        ax.set_xlabel("Body-X (m)")
+        ax.set_ylabel("Body-Y (m)")
+        ax.legend()
+        ax.grid(True)
+
+    pdf_dir = os.path.join(output_dir, "foot_com_positions_body_frame", "xy_trajectory")
+    os.makedirs(pdf_dir, exist_ok=True)
+    pdf_path = os.path.join(pdf_dir, "foot_com_position_xy_trajectory_body_frame_grid.pdf")
+    fig.savefig(pdf_path, dpi=600)
+
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, "foot_com_position_xy_trajectory_body_frame_grid.pickle"), "wb") as f:
+            pickle.dump(fig, f)
+
+    plt.close(fig)
+
+
+def _plot_body_frame_foot_position_xy_overview(
+    foot_positions_body_frame: np.ndarray,
+    foot_labels: list[str],
+    output_dir: str,
+    pickle_dir: str,
+    FIGSIZE: tuple[int, int] = (20, 20)
+):
+    """
+    Overlayed XY trajectory of all feet in the *body* frame.
+    """
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.set_title("Foot XY Trajectories (body frame, overview)", fontsize=22)
+
+    for i, lbl in enumerate(foot_labels):
+        x = foot_positions_body_frame[:, i, 0]
+        y = foot_positions_body_frame[:, i, 1]
+        ax.plot(x, y, label=lbl, alpha=0.7)
+
+    ax.set_xlabel("Body-X (m)")
+    ax.set_ylabel("Body-Y (m)")
+    ax.set_aspect('equal', adjustable='box')
+    ax.legend()
+    ax.grid(True)
+
+    pdf_dir = os.path.join(output_dir, "foot_com_positions_body_frame", "xy_trajectory")
+    os.makedirs(pdf_dir, exist_ok=True)
+    pdf_path = os.path.join(pdf_dir, "foot_com_position_xy_trajectory_body_frame_overview.pdf")
+    fig.savefig(pdf_path, dpi=600)
+
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, "foot_com_position_xy_trajectory_body_frame_overview.pickle"), "wb") as f:
+            pickle.dump(fig, f)
+
+    plt.close(fig)
+
+
+def _plot_body_frame_foot_position_xy_single(
+    foot_positions_body_frame: np.ndarray,
+    foot_idx: int,
+    foot_label: str,
+    contact_state_array: np.ndarray,
+    output_dir: str,
+    pickle_dir: str,
+    FIGSIZE: tuple[int, int] = (20, 20)
+):
+    """
+    XY trajectory plot for a single foot in body frame.
+    Stance phases are marked with scatter points.
+    """
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    
+    x = foot_positions_body_frame[:, foot_idx, 0]
+    y = foot_positions_body_frame[:, foot_idx, 1]
+    
+    # Full trajectory path
+    ax.plot(x, y, alpha=0.6, label="Swing Trajectory")
+
+    # Stance points
+    stance_indices = np.where(contact_state_array[:, foot_idx])[0]
+    if len(stance_indices) > 0:
+        ax.scatter(x[stance_indices], y[stance_indices], s=5, label="Stance Points", color='red')
+
+    ax.set_title(f"Foot XY Trajectory (body frame) - {foot_label}")
+    ax.set_xlabel("Body-X (m)")
+    ax.set_ylabel("Body-Y (m)")
+    ax.set_aspect('equal', adjustable='box')
+    ax.legend()
+    ax.grid(True)
+
+    safe_lbl = foot_label.replace(" ", "_")
+    pdf_dir = os.path.join(output_dir, "foot_com_positions_body_frame", "xy_trajectory")
+    os.makedirs(pdf_dir, exist_ok=True)
+    pdf_path = os.path.join(pdf_dir, f"foot_com_position_xy_trajectory_{safe_lbl.lower()}.pdf")
+    fig.savefig(pdf_path, dpi=600)
+    
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f"foot_com_position_xy_trajectory_{safe_lbl.lower()}.pickle"), "wb") as f:
+            pickle.dump(fig, f)
+
     plt.close(fig)
 
 def _plot_foot_position_time_series(
@@ -1670,6 +1802,44 @@ def generate_plots(data, output_dir, interactive=False):
                 FIGSIZE=(20, 20),
             )
         )
+
+        # Foot XY trajectory plots
+        futures.append(
+            executor.submit(
+                _plot_body_frame_foot_position_xy_grid,
+                foot_positions_body_frame,
+                foot_labels,
+                contact_state_array,
+                output_dir,
+                pickle_dir,
+                FIGSIZE=(20, 20),
+            )
+        )
+
+        futures.append(
+            executor.submit(
+                _plot_body_frame_foot_position_xy_overview,
+                foot_positions_body_frame,
+                foot_labels,
+                output_dir,
+                pickle_dir,
+                FIGSIZE=(20, 20),
+            )
+        )
+
+        for idx, lbl in enumerate(foot_labels):
+            futures.append(
+                executor.submit(
+                    _plot_body_frame_foot_position_xy_single,
+                    foot_positions_body_frame,
+                    idx,
+                    lbl,
+                    contact_state_array,
+                    output_dir,
+                    pickle_dir,
+                    FIGSIZE=(20, 20),
+                )
+            )
 
         # Ensure all tasks complete
         for f in futures:
