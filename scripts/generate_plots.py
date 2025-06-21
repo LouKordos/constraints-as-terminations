@@ -359,37 +359,91 @@ def _plot_body_frame_foot_position_heatmap_single(foot_positions_body_frame: np.
 
     plt.close(fig)
 
-def generate_frame_to_buffer(k: int, frame_queue, data: dict):
+# Globals for worker processes, initialized by init_animation_worker
+_worker_shared_queue = None
+_worker_foot_positions = None
+_worker_contact_state = None
+# Matplotlib objects, also global per worker
+_worker_fig = None
+_worker_ax = None
+_worker_scatters = None
+# Other static data
+_worker_foot_labels = None
+_worker_colours = None
+_worker_xlims = None
+_worker_ylims = None
+_worker_dpi = None
+
+
+def init_animation_worker(shared_queue, foot_positions, contact_state,
+                        foot_labels_data, colours_data, xlims_data, ylims_data, dpi_val):
+    """Initializer for each worker process in the Pool. Sets up Matplotlib objects once."""
+    global _worker_shared_queue, _worker_foot_positions, _worker_contact_state, \
+           _worker_fig, _worker_ax, _worker_scatters, \
+           _worker_foot_labels, _worker_colours, _worker_xlims, _worker_ylims, _worker_dpi
+    
+    _worker_shared_queue = shared_queue
+    _worker_foot_positions = foot_positions
+    _worker_contact_state = contact_state
+    _worker_foot_labels = foot_labels_data
+    _worker_colours = colours_data
+    _worker_xlims = xlims_data
+    _worker_ylims = ylims_data
+    _worker_dpi = dpi_val
+
+    # --- Setup the plot objects ONCE per worker ---
+    _worker_fig, _worker_ax = plt.subplots(figsize=(8, 6)) # figsize can be parameterized if needed
+    _worker_ax.set_aspect('equal')
+    _worker_ax.set_xlabel('Body-X (m)')
+    _worker_ax.set_ylabel('Body-Y (m)')
+    _worker_scatters = [_worker_ax.scatter([], [], s=60, c=c, edgecolor=c, label=lbl)
+                        for c, lbl in zip(_worker_colours, _worker_foot_labels)]
+    _worker_ax.legend(loc='upper right')
+    _worker_ax.set_xlim(_worker_xlims)
+    _worker_ax.set_ylim(_worker_ylims)
+    
+    # Apply tight_layout once during setup
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        _worker_fig.tight_layout()
+
+def generate_frame_to_buffer(k: int): # Frame index k is the only argument
     """
     Generates a single frame and puts its raw byte data into a shared queue.
-    The data is a tuple: (frame_index, frame_bytes).
+    The frame index `k` is the only argument.
     """
+    global _worker_shared_queue, _worker_foot_positions, _worker_contact_state, \
+           _worker_fig, _worker_ax, _worker_scatters, \
+           _worker_foot_labels, _worker_colours, _worker_dpi # xlims, ylims are set on ax already
+    
+    # Assert that globals have been initialized
+    assert _worker_shared_queue is not None, "Worker shared_queue not initialized"
+    assert _worker_foot_positions is not None, "Worker foot_positions not initialized"
+    assert _worker_contact_state is not None, "Worker contact_state not initialized"
+    assert _worker_fig is not None, "Worker Matplotlib figure not initialized"
+    assert _worker_ax is not None, "Worker Matplotlib axes not initialized"
+    assert _worker_scatters is not None, "Worker Matplotlib scatter artists not initialized"
+    assert _worker_foot_labels is not None, "Worker foot_labels not initialized"
+    assert _worker_colours is not None, "Worker colours not initialized"
+    assert _worker_dpi is not None, "Worker dpi not initialized"
+
     try:
-        # Unpack the data dictionary
-        foot_positions_body_frame = data['foot_positions']
-        contact_state_array = data['contact_state']
-        foot_labels = data['foot_labels']
-        colours = data['colours']
-        xlims = data['xlims']
-        ylims = data['ylims']
-        dpi = data['dpi']
+        # Access data from globals
+        foot_positions_body_frame = _worker_foot_positions
+        contact_state_array = _worker_contact_state
+        # foot_labels = _worker_foot_labels # Used in init
+        colours = _worker_colours
+        # xlims = _worker_xlims # Used in init
+        # ylims = _worker_ylims # Used in init
+        dpi = _worker_dpi
+        
+        fig = _worker_fig
+        ax = _worker_ax
+        scatters = _worker_scatters
 
-        # --- Setup the plot (must be done in each process) ---
-        # Set a specific figure size (e.g., 8x6 inches)
-        fig, ax = plt.subplots(figsize=(8, 6))
-        ax.set_aspect('equal')
-        ax.set_xlabel('Body-X (m)')
-        ax.set_ylabel('Body-Y (m)')
-        ax.set_title(f'Foot Trajectories (Body Frame) - Frame {k}')
-        scatters = [ax.scatter([], [], s=60, c=c, edgecolor=c, label=lbl) for c, lbl in zip(colours, foot_labels)]
-        ax.legend(loc='upper right')
-        ax.set_xlim(xlims)
-        ax.set_ylim(ylims)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-            fig.tight_layout()
+        # --- Update dynamic parts of the plot for frame k ---
+        ax.set_title(f'Foot Trajectories (Body Frame) - Frame {k}') # Update title
 
-        # --- Animate the specific frame k ---
         for i, sc in enumerate(scatters):
             xy = foot_positions_body_frame[k, i, :2].reshape(1, 2)
             sc.set_offsets(xy)
@@ -397,7 +451,7 @@ def generate_frame_to_buffer(k: int, frame_queue, data: dict):
                 sc.set_facecolor(colours[i])
             else:
                 sc.set_facecolor('none')
-            sc.set_edgecolor(colours[i])
+            # sc.set_edgecolor(colours[i]) # Edge color is static, set in init
 
         # --- Save the figure to an in-memory buffer ---
         with io.BytesIO() as buf:
@@ -405,15 +459,16 @@ def generate_frame_to_buffer(k: int, frame_queue, data: dict):
             buf.seek(0)
             frame_bytes = buf.getvalue()
 
-        plt.close(fig)  # Crucial to free memory in the worker process
+        # DO NOT call plt.close(fig) here, as the figure is reused.
+        # It's cleaned up when the worker process terminates.
 
-        # Put the frame index and its data onto the queue
-        frame_queue.put((k, frame_bytes))
+        # Put the frame index and its data onto the shared queue
+        _worker_shared_queue.put((k, frame_bytes))
 
     except Exception as e:
         # Ensure errors in workers are reported
         print(f"Error in worker for frame {k}: {e}")
-        frame_queue.put((k, None)) # Signal failure for this frame
+        _worker_shared_queue.put((k, None)) # Signal failure for this frame
 
 
 def _animate_body_frame_pipe_to_ffmpeg(foot_positions_body_frame: np.ndarray, contact_state_array: np.ndarray, foot_labels: list[str], output_path: str, fps: int = 30, dpi: int = 300):
@@ -441,7 +496,7 @@ def _animate_body_frame_pipe_to_ffmpeg(foot_positions_body_frame: np.ndarray, co
         '-c:v', 'hevc_nvenc',                 # VIDEO CODEC: H.265 (HEVC) with NVIDIA Acceleration
         '-preset', 'p1',                      # PRESET: p7 is fastest, p1 is best quality
         '-pix_fmt', 'yuv420p',                # Pixel format for compatibility
-        '-loglevel', 'error',                 # Suppress verbose frame-by-frame logging to stderr
+        '-loglevel', 'info',                 # Suppress verbose frame-by-frame logging to stderr
         '-y',                                 # Overwrite output file if it exists
         output_path
     ]
@@ -450,30 +505,40 @@ def _animate_body_frame_pipe_to_ffmpeg(foot_positions_body_frame: np.ndarray, co
     ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
 
     # --- 2. Setup the Producer Pool and Shared Queue ---
-    # A Manager queue can be shared between processes
-    manager = Manager()
-    frame_queue = manager.Queue()
+    # Use a standard multiprocessing.Queue for better performance
+    # Maxsize provides backpressure if producers are too fast
+    num_processes = cpu_count()
+    # frame_queue = multiprocessing.Queue(maxsize=num_processes * 4)
+    # Using Manager queue for now as direct mp.Queue with spawn can be tricky with initializers if not careful
+    # Reverting to Manager.Queue for stability, will re-evaluate mp.Queue if this isn't enough.
+    # For true mp.Queue, it would need to be created outside and passed to initializer,
+    # or workers would need a different way to access it if it's not easily inheritable with 'spawn'.
+    # The primary bottleneck is likely data pickling, which worker_init fixes.
+    manager = Manager() # Keep Manager for Queue for now, focus on worker_init first.
+    frame_queue = manager.Queue(maxsize=num_processes * 4 if num_processes else 4)
+
+
 
     # Pre-calculate rendering data to pass to all workers
     x_min, x_max = np.min(foot_positions_body_frame[:, :, 0]), np.max(foot_positions_body_frame[:, :, 0])
     y_min, y_max = np.min(foot_positions_body_frame[:, :, 1]), np.max(foot_positions_body_frame[:, :, 1])
     padding = 0.05
-    render_data = {
-        'foot_positions': foot_positions_body_frame, 'contact_state': contact_state_array,
-        'foot_labels': foot_labels, 'colours': colours,
-        'xlims': (x_min - padding, x_max + padding), 'ylims': (y_min - padding, y_max + padding),
-        'dpi': dpi
-    }
+    # Data for worker initialization
+    init_args = (
+        frame_queue, # Pass the queue to the workers
+        foot_positions_body_frame, contact_state_array,
+        foot_labels, colours,
+        (x_min - padding, x_max + padding), (y_min - padding, y_max + padding),
+        dpi
+    )
 
-    num_processes = cpu_count()
-    print(f"Starting frame generation with {num_processes} worker processes for {T} frames...")
+    print(f"Starting frame generation with {num_processes} worker processes for {T} frames (DPI: {dpi})...")
     
-    # Use partial to pre-fill arguments for the worker function
-    worker_func = partial(generate_frame_to_buffer, frame_queue=frame_queue, data=render_data)
-
-    with Pool(processes=num_processes) as pool:
+    # Worker function no longer needs data or queue via partial, it gets them from globals
+    # The iterable for map_async is just the frame indices
+    with Pool(processes=num_processes, initializer=init_animation_worker, initargs=init_args) as pool:
         # Dispatch all jobs asynchronously to the pool. This is non-blocking.
-        async_result = pool.map_async(worker_func, range(T))
+        async_result = pool.map_async(generate_frame_to_buffer, range(T))
 
         # --- 3. Orchestrator Loop: Re-order and Pipe Frames to FFmpeg ---
         print("Starting to pipe frames to FFmpeg...")
@@ -2245,7 +2310,14 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             f.result()
 
     # This one is not wrapped in a future since it manages its own process pool internally
-    _animate_body_frame_pipe_to_ffmpeg(foot_positions_body_frame, contact_state_array, foot_labels, os.path.join(output_dir, "foot_com_positions_body_frame", "foot_com_positions_body_frame_animation.mp4"), fps=50)
+    _animate_body_frame_pipe_to_ffmpeg(
+        foot_positions_body_frame,
+        contact_state_array,
+        foot_labels,
+        os.path.join(output_dir, "foot_com_positions_body_frame", "foot_com_positions_body_frame_animation.mp4"),
+        fps=50,
+        dpi=150 # Explicitly set lower DPI for performance
+    )
     
     end_time = time.time()
     print(f"Plot generation took {(end_time-start_time):.4f} seconds.")
