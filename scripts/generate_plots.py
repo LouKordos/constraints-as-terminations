@@ -1492,7 +1492,7 @@ def _plot_combined_base_velocity(sim_times, base_linear_velocity_array, commande
             axes_blv[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f'cmd_{vel_label}')
         draw_resets(axes_blv[i], reset_times)
         axes_blv[i].set_ylabel(rf"$\text{{{vel_label.replace(' ', '_')}}} (\text{{m}} \cdot \text{{s}}^{{-1}})$")
-        axes_blv[i].set_title(f'Base Linear {vel_label}')
+        axes_blv[i].set_title(f'Base Linear {vel_label} (Body Frame)')
         axes_blv[i].legend()
     axes_blv[-1].set_xlabel(r'Time ($\text{s}$)')
     pdf = os.path.join(output_dir, "base_kinematics", 'base_linear_velocity_subplots.pdf')
@@ -1510,7 +1510,7 @@ def _plot_combined_base_angular_velocities(sim_times, base_angular_velocity_arra
             axes_bav[i].plot(sim_times, commanded_velocity_array[:, i], linestyle='--', label=f'cmd_{vel_label}')
         draw_resets(axes_bav[i], reset_times)
         axes_bav[i].set_ylabel(rf"{vel_label} ($\text{{rad}} \cdot \text{{s}}^{{-1}})$")
-        axes_bav[i].set_title(f'Base {vel_label}')
+        axes_bav[i].set_title(f'Base {vel_label} (Body Frame)')
         axes_bav[i].legend()
     axes_bav[-1].set_xlabel(r'Time ($\text{s}$)')
     pdf = os.path.join(output_dir, "base_kinematics", 'base_angular_velocity_subplots.pdf')
@@ -1538,6 +1538,97 @@ def _plot_total_base_overview(sim_times, base_position_array, base_orientation_a
     if pickle_dir != "":
         with open(os.path.join(pickle_dir, 'base_overview_world.pickle'), 'wb') as f:
             pickle.dump(fig_overview, f)
+
+def _plot_command_abs_error_base_kinematics(
+    sim_times,
+    base_linear_velocity_array,
+    base_angular_velocity_array,
+    commanded_velocity_array,
+    reset_times,
+    output_dir,
+    pickle_dir,
+    FIGSIZE
+):
+    """
+    Plots the absolute error between commanded and actual base kinematic components (Vx, Vy, Omega_Z) over time.
+    Generates a grid plot (3x1) and an overview plot.
+    """
+    # Calculate absolute errors
+    # commanded_velocity_array[:, 0] is cmd_vx
+    # base_linear_velocity_array[:, 0] is actual_vx
+    abs_err_vx = np.abs(commanded_velocity_array[:, 0] - base_linear_velocity_array[:, 0])
+
+    # commanded_velocity_array[:, 1] is cmd_vy
+    # base_linear_velocity_array[:, 1] is actual_vy
+    abs_err_vy = np.abs(commanded_velocity_array[:, 1] - base_linear_velocity_array[:, 1])
+
+    # commanded_velocity_array[:, 2] is cmd_omega_z (yaw rate)
+    # base_angular_velocity_array[:, 2] is actual_omega_z (yaw rate)
+    abs_err_omega_z = np.abs(commanded_velocity_array[:, 2] - base_angular_velocity_array[:, 2])
+
+    error_arrays = [abs_err_vx, abs_err_vy, abs_err_omega_z]
+    error_labels_full = [ # Full labels for titles etc.
+        'Abs. Err. Lin. Vel. X',
+        'Abs. Err. Lin. Vel. Y',
+        'Abs. Err. Ang. Vel. Z (Yaw)'
+    ]
+    error_labels_short = [ # Short labels for y-axis and individual titles
+        'Lin. Vel. X',
+        'Lin. Vel. Y',
+        'Ang. Vel. Z (Yaw)'
+    ]
+    error_units = [
+        r'$\text{m/s}$',
+        r'$\text{m/s}$',
+        r'$\text{rad/s}$'
+    ]
+
+    # Grid Plot (3 subplots, 1 for each error component)
+    fig_grid, axes_grid = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)
+    # fig_grid.suptitle('Commanded vs Actual Base Kinematics Absolute Error', fontsize=18) # Optional overall title
+
+    for i, ax in enumerate(axes_grid.flat):
+        ax.plot(sim_times, error_arrays[i], label=f'Abs. Error {error_labels_short[i]}')
+        draw_resets(ax, reset_times)
+        ax.set_ylabel(f'Abs. Error ({error_units[i]})')
+        ax.set_title(f'Absolute Error: Cmd vs Actual Base {error_labels_short[i]}')
+        ax.legend(loc='upper right')
+    axes_grid[-1].set_xlabel(r'Time ($\text{s}$)')
+    fig_grid.tight_layout() # Adjust layout
+
+    plot_dir = os.path.join(output_dir, "base_kinematics")
+    os.makedirs(plot_dir, exist_ok=True)
+    plot_path_grid = os.path.join(plot_dir, 'base_command_abs_error_subplots.pdf')
+    fig_grid.savefig(plot_path_grid, dpi=600)
+
+    if pickle_dir != "":
+        pickle_plot_dir = os.path.join(pickle_dir, "base_kinematics")
+        os.makedirs(pickle_plot_dir, exist_ok=True)
+        with open(os.path.join(pickle_plot_dir, 'base_command_abs_error_subplots.pickle'), 'wb') as f:
+            pickle.dump(fig_grid, f)
+    plt.close(fig_grid)
+
+    # Overview Plot
+    fig_overview, ax_overview = plt.subplots(figsize=FIGSIZE)
+    ax_overview.set_title('Commanded vs Actual Base Kinematics Absolute Error (Overview)', fontsize=18)
+    
+    for i in range(len(error_arrays)):
+        ax_overview.plot(sim_times, error_arrays[i], label=f'{error_labels_full[i]} ({error_units[i]})')
+
+    draw_resets(ax_overview, reset_times)
+    ax_overview.set_xlabel(r'Time ($\text{s}$)')
+    ax_overview.set_ylabel(r'Absolute Error')
+    ax_overview.legend(loc='upper right', ncol=1)
+    fig_overview.tight_layout()
+
+    plot_path_overview = os.path.join(plot_dir, 'base_command_abs_error_overview.pdf')
+    fig_overview.savefig(plot_path_overview, dpi=600)
+    if pickle_dir != "":
+        # pickle_plot_dir already created
+        with open(os.path.join(pickle_plot_dir, 'base_command_abs_error_overview.pickle'), 'wb') as f:
+            pickle.dump(fig_overview, f)
+    plt.close(fig_overview)
+
 
 def _plot_gait_diagram(contact_state_array, sim_times, reset_times, foot_labels, output_dir, pickle_dir):
     fig = plot_gait_diagram(contact_state_array, sim_times, reset_times, foot_labels, os.path.join(output_dir, "aggregates", 'gait_diagram.pdf'), spacing=1.0)
@@ -2409,28 +2500,16 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
     joint_action_rates = data['action_rate_array']
     base_positions = data['base_position_array']
     base_orientations = data['base_orientation_array']
-    base_linear_velocities = data['base_linear_velocity_array']
-    base_angular_velocities = data['base_angular_velocity_array']
+    base_linear_velocities = data['base_linear_velocity_body_array']
+    base_angular_velocities = data['base_angular_velocity_body_array']
     base_commanded_velocities = data['commanded_velocity_array']
     energy_per_joint, combined_energy, cost_of_transport_time_series = compute_energy_arrays(power_array=power_array, base_lin_vel=base_linear_velocities, reset_steps=reset_timesteps, step_dt=step_dt, robot_mass=total_robot_mass)
     foot_positions_body_frame    = data['foot_positions_body_frame_array'] # (T,4,3)
     foot_positions_contact_frame = data['foot_positions_contact_frame_array'] # (T,4,3)
     foot_positions_world_frame   = data['foot_positions_world_frame_array'] # (T,4,3)
     foot_velocities_world_frame = data['foot_velocities_world_frame_array']
-    foot_velocities_body_frame_array = np.zeros_like(foot_velocities_world_frame)
+    foot_velocities_body_frame_array = data['foot_velocities_body_frame_array']
     T = base_orientations.shape[0]
-    for t in range(T):
-        yaw, pitch, roll = base_orientations[t]
-        cy, sy = np.cos(yaw), np.sin(yaw)
-        cp, sp = np.cos(pitch), np.sin(pitch)
-        cr, sr = np.cos(roll), np.sin(roll)
-        Rz = np.array([[cy, -sy, 0], [sy, cy, 0], [0, 0, 1]])
-        Ry = np.array([[cp, 0, sp], [0, 1, 0], [-sp, 0, cp]])
-        Rx = np.array([[1, 0, 0], [0, cr, -sr], [0, sr, cr]])
-        R_body_to_world = Rz @ Ry @ Rx
-        R_world_to_body = R_body_to_world.T
-        for i in range(4):
-            foot_velocities_body_frame_array[t, i, :] = R_world_to_body @ foot_velocities_world_frame[t, i, :]
     # Calculate magnitudes robustly, T is defined earlier
     if T > 0:
         if foot_velocities_world_frame.ndim == 3 and foot_velocities_world_frame.shape[0] == T: # (T, 4, 3)
@@ -2681,14 +2760,14 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         futures.append(
             executor.submit(
                 _plot_combined_base_velocity,
-                sim_times, base_linear_velocities, base_commanded_velocities,
+                sim_times, data['base_linear_velocity_body_array'], base_commanded_velocities,
                 reset_times, output_dir, pickle_dir, FIGSIZE
             )
         )
         futures.append(
             executor.submit(
                 _plot_combined_base_angular_velocities,
-                sim_times, base_angular_velocities, base_commanded_velocities,
+                sim_times, data['base_angular_velocity_body_array'], base_commanded_velocities,
                 reset_times, output_dir, pickle_dir, FIGSIZE
             )
         )
@@ -2698,6 +2777,19 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 sim_times, base_positions, base_orientations,
                 base_linear_velocities, base_angular_velocities,
                 reset_times, output_dir, pickle_dir, FIGSIZE
+            )
+        )
+        futures.append(
+            executor.submit(
+                _plot_command_abs_error_base_kinematics,
+                sim_times,
+                data['base_linear_velocity_body_array'],
+                data['base_angular_velocity_body_array'],
+                base_commanded_velocities,
+                reset_times,
+                output_dir,
+                pickle_dir,
+                FIGSIZE
             )
         )
 

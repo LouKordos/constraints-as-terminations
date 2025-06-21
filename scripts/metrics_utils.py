@@ -207,9 +207,12 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
     base_orientation  = data_arrays["base_orientation"][mask]
     base_linear_velocity = data_arrays["base_linear_velocity"][mask]
     base_angular_velocity = data_arrays["base_angular_velocity"][mask]
+    base_linear_velocity_body = data_arrays["base_linear_velocity_body"][mask]
+    base_angular_velocity_body = data_arrays["base_angular_velocity_body"][mask]
     commanded_velocity  = data_arrays["commanded_velocity"][mask]
     contact_state  = data_arrays["contact_state"][mask]
     foot_positions_world_frame = data_arrays["foot_positions_world_frame"][mask]
+    foot_velocities_world_frame = data_arrays["foot_velocities_world_frame"][mask]
     foot_positions_contact_frame = data_arrays["foot_positions_contact_frame"][mask]
     reward = data_arrays["reward"][mask]
 
@@ -230,9 +233,9 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
     mean_cost_of_transport = float(np.nanmean(cost_of_transport_time_series))
 
     # ---------- tracking / heading errors ---------------------------------
-    linear_vel_x_rms = np.sqrt(np.mean((commanded_velocity[:, 0] - base_linear_velocity[:, 0])**2))
-    linear_vel_y_rms = np.sqrt(np.mean((commanded_velocity[:, 1] - base_linear_velocity[:, 1])**2))
-    yaw_rms    = np.sqrt(np.mean((commanded_velocity[:, 2] - base_angular_velocity[:, 2])**2))
+    linear_vel_x_rms = np.sqrt(np.mean((commanded_velocity[:, 0] - base_linear_velocity_body[:, 0])**2))
+    linear_vel_y_rms = np.sqrt(np.mean((commanded_velocity[:, 1] - base_linear_velocity_body[:, 1])**2))
+    yaw_rms    = np.sqrt(np.mean((commanded_velocity[:, 2] - base_angular_velocity_body[:, 2])**2))
 
     # ---------- constraint violations ------------------------------------
     violations = {}
@@ -292,6 +295,8 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
     step_height_summary = {lbl: summarize_metric(data) for lbl, data in step_height_data.items()}
     step_length_summary = {lbl: summarize_metric(data) for lbl, data in step_length_data.items()}
 
+    foot_velocity_world_frame_summary = compute_foot_velocity_summaries(contact_state, foot_velocities_world_frame, foot_labels)
+
     # ---------- symmetry TVD ---------------------------------------------
     joint_mapping = {jn: i for i, jn in enumerate(joint_names)}
     dofs = ["hip_joint", "thigh_joint", "calf_joint"]
@@ -331,6 +336,7 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
         "contact_force_summary"                               : contact_force_summary,
         "step_length_summary"                                 : step_length_summary,
         "step_height_summary"                                 : step_height_summary,
+        "foot_velocity_world_frame_summary"                   : foot_velocity_world_frame_summary,
         "energy_consumption_per_joint"                        : {jn: float(energy_per_joint[-1, j]) for j, jn in enumerate(joint_names)},
         "total_energy_consumption"                            : float(combined_energy[-1]),
         "mean_cost_of_transport"                              : mean_cost_of_transport,
@@ -339,3 +345,30 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
         "aggregate_joint_symmetry_tvd"                        : average_symmetry_tvd,
         "axis_symmetry_tvd"                                   : axis_symmetry_tvd,
     }
+
+def compute_foot_velocity_summaries(contact_state: np.ndarray, foot_velocities: np.ndarray, foot_labels: list[str]) -> dict:
+    """
+    Computes summary statistics for foot velocities in the world frame, separated by stance and swing phase.
+    """
+    summaries = {}
+    for foot_id, label in enumerate(foot_labels):
+        in_contact = contact_state[:, foot_id].astype(bool)
+        
+        stance_velocities = foot_velocities[in_contact, foot_id, :]
+        swing_velocities = foot_velocities[~in_contact, foot_id, :]
+        
+        summaries[label] = {
+            "stance": {
+                "x": summarize_metric(stance_velocities[:, 0].tolist()),
+                "y": summarize_metric(stance_velocities[:, 1].tolist()),
+                "z": summarize_metric(stance_velocities[:, 2].tolist()),
+                "magnitude": summarize_metric(np.linalg.norm(stance_velocities, axis=1).tolist())
+            },
+            "swing": {
+                "x": summarize_metric(swing_velocities[:, 0].tolist()),
+                "y": summarize_metric(swing_velocities[:, 1].tolist()),
+                "z": summarize_metric(swing_velocities[:, 2].tolist()),
+                "magnitude": summarize_metric(np.linalg.norm(swing_velocities, axis=1).tolist())
+            }
+        }
+    return summaries

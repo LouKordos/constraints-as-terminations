@@ -29,6 +29,16 @@ os.environ["OMNICLIENT_HUB_MODE"] = "disabled"
 
 eval_script_path = os.path.dirname(os.path.abspath(__file__))
 
+def infer_checkpoint_input_dimensions(state_dict: dict[str, torch.Tensor]) -> int:
+    """
+    Return in-features of the first linear layer saved in `state_dict`.
+    Assumes CleanRL naming pattern 'actor.0.weight' or similar.
+    """
+    for k, v in state_dict.items():
+        if k.endswith(".0.weight") and v.ndim == 2:
+            return v.shape[1]
+    raise RuntimeError("Could not infer input dimension from checkpoint")
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Play an RL agent with detailed logging.")
     parser.add_argument("--run_dir", type=str, required=True,
@@ -41,7 +51,7 @@ def parse_arguments():
                         help="Number of environments to simulate.")
     parser.add_argument("--task", type=str, required=True,
                         help="Name of the task/environment.")
-    parser.add_argument("--foot_vel_height_threshold", type=float, default=0.1,
+    parser.add_argument("--foot_vel_height_threshold", type=float, default=0.02,
                         help="Maximum foot height to include in the foot-velocity-vs-height plot.")
     # Good seeds for eval: 44, 46, 49
     # DEPRECATED: Hardcoded seed in env config is used
@@ -211,7 +221,7 @@ def main():
     from cat_envs.tasks.utils.cleanrl.ppo import Agent
     from cat_envs.tasks.locomotion.velocity.config.solo12.cat_go2_rough_terrain_env_cfg import height_map_grid
     from isaaclab.managers import EventTermCfg
-    from isaaclab.utils.math import euler_xyz_from_quat
+    from isaaclab.utils.math import euler_xyz_from_quat, quat_rotate_inverse
     from isaaclab.envs.mdp.observations import root_quat_w
     from isaaclab.managers import SceneEntityCfg
 
@@ -250,22 +260,22 @@ def main():
     plots_directory = os.path.join(eval_base_dir, "plots")
     os.makedirs(plots_directory, exist_ok=True)
 
-    fixed_command_sim_steps = 500 # If you want to increase this you also need to increase episode length otherwise env will reset mid-way
+    fixed_command_sim_steps = 200 # If you want to increase this you also need to increase episode length otherwise env will reset mid-way
     fixed_command_scenarios = [ # Scenario positions depend on seed!
         ("fast_walk_stairs_up", torch.tensor([1, 0.0, 0.0], device=device), (torch.tensor([-8, 16, -0.1], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("pure_spin", torch.tensor([0.0, 0.0, 0.5], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("slow_walk_x_flat_terrain", torch.tensor([0.1, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("slow_walk_y_flat_terrain", torch.tensor([0.0, 0.1, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        # ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        # ("pure_spin", torch.tensor([0.0, 0.0, 0.5], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        # ("slow_walk_x_flat_terrain", torch.tensor([0.1, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        # ("slow_walk_y_flat_terrain", torch.tensor([0.0, 0.1, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("medium_walk_x_flat_terrain", torch.tensor([0.5, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("medium_walk_y_flat_terrain", torch.tensor([0.0, 0.5, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        # ("medium_walk_y_flat_terrain", torch.tensor([0.0, 0.5, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_x_flat_terrain", torch.tensor([1.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("fast_walk_y_flat_terrain", torch.tensor([0.0, 1.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        # ("fast_walk_y_flat_terrain", torch.tensor([0.0, 1.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("very_fast_walk_x_flat_terrain", torch.tensor([2.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("slow_walk_x_uneven_terrain", torch.tensor([0.1, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("slow_walk_y_uneven_terrain", torch.tensor([0.0, 0.1, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        # ("slow_walk_x_uneven_terrain", torch.tensor([0.1, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        # ("slow_walk_y_uneven_terrain", torch.tensor([0.0, 0.1, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("medium_walk_x_uneven_terrain", torch.tensor([0.5, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("medium_walk_y_uneven_terrain", torch.tensor([0.0, 0.5, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        # ("medium_walk_y_uneven_terrain", torch.tensor([0.0, 0.5, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_x_uneven_terrain", torch.tensor([1.0, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("very_fast_walk_x_uneven_terrain", torch.tensor([2.0, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         # ("fast_walk_y_uneven_terrain", torch.tensor([0.0, 1.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
@@ -323,11 +333,14 @@ def main():
     base_orientation_buffer = []
     base_linear_velocity_buffer = []
     base_angular_velocity_buffer = []
+    base_linear_velocity_body_buffer = []
+    base_angular_velocity_body_buffer = []
     commanded_velocity_buffer = []
     contact_state_buffer = []
     height_map_buffer = []
     foot_positions_world_frame_buffer = []
     foot_velocities_world_frame_buffer = []
+    foot_velocities_body_frame_buffer = []
     foot_positions_body_frame_buffer = []
     foot_positions_contact_frame_buffer = [] # Height above terrain, also called sole frame
 
@@ -437,10 +450,15 @@ def main():
         base_position_buffer.append(base_world_position)
         base_orientation_buffer.append([yaw, pitch, roll])
 
-        linear_velocity = scene_robot_data.root_lin_vel_w[0].cpu().numpy()
-        angular_velocity = scene_robot_data.root_ang_vel_w[0].cpu().numpy()
-        base_linear_velocity_buffer.append(linear_velocity)
-        base_angular_velocity_buffer.append(angular_velocity)
+        linear_velocity_w = scene_robot_data.root_lin_vel_w[0]
+        angular_velocity_w = scene_robot_data.root_ang_vel_w[0]
+        # The returned quat is (w, x, y, z) which is what quat_rotate_inverse expects.
+        linear_velocity_b = quat_rotate_inverse(quat_wxyz, linear_velocity_w.unsqueeze(0)).squeeze()
+        angular_velocity_b = quat_rotate_inverse(quat_wxyz, angular_velocity_w.unsqueeze(0)).squeeze()
+        base_linear_velocity_buffer.append(linear_velocity_w.cpu().numpy())
+        base_angular_velocity_buffer.append(angular_velocity_w.cpu().numpy())
+        base_linear_velocity_body_buffer.append(linear_velocity_b.cpu().numpy())
+        base_angular_velocity_body_buffer.append(angular_velocity_b.cpu().numpy())
 
         commanded_velocity_buffer.append(env.unwrapped.command_manager.get_command("base_velocity").clone()) # three components: lin_vel_x, lin_vel_y, ang_vel_z
         contact_state = (max_per_foot > 0).astype(int)
@@ -453,8 +471,11 @@ def main():
         foot_positions_world = np.stack([scene_robot_data.body_link_pos_w[0, scene_robot_data.body_names.index(link)].cpu().numpy() for link in foot_links])
         foot_positions_world_frame_buffer.append(foot_positions_world)
         
-        foot_velocities_world = np.stack([scene_robot_data.body_link_vel_w[0, scene_robot_data.body_names.index(link), :3].cpu().numpy() for link in foot_links])
-        foot_velocities_world_frame_buffer.append(foot_velocities_world)
+        foot_velocities_world_t = torch.stack([scene_robot_data.body_link_vel_w[0, scene_robot_data.body_names.index(link), :3] for link in foot_links])
+        quat_expanded = quat_wxyz.expand(4, -1)
+        foot_velocities_body_t = quat_rotate_inverse(quat_expanded, foot_velocities_world_t)
+        foot_velocities_world_frame_buffer.append(foot_velocities_world_t.cpu().numpy())
+        foot_velocities_body_frame_buffer.append(foot_velocities_body_t.cpu().numpy())
         
         foot_positions_body = env.unwrapped.scene["foot_frame_transformer"].data.target_pos_source[0].cpu().numpy()
         # print(f"foot_positions_body={foot_positions_body}")
@@ -490,9 +511,12 @@ def main():
     print(base_orientation_array.shape)
     base_linear_velocity_array = np.vstack(base_linear_velocity_buffer)
     base_angular_velocity_array = np.vstack(base_angular_velocity_buffer)
+    base_linear_velocity_body_array = np.vstack(base_linear_velocity_body_buffer)
+    base_angular_velocity_body_array = np.vstack(base_angular_velocity_body_buffer)
     contact_state_array = np.vstack(contact_state_buffer)
     commanded_velocity_array = np.vstack([cv.cpu().numpy() if isinstance(cv, torch.Tensor) else np.asarray(cv) for cv in commanded_velocity_buffer])
     foot_velocities_world_frame_array = np.array(foot_velocities_world_frame_buffer)
+    foot_velocities_body_frame_array = np.array(foot_velocities_body_frame_buffer)
     foot_positions_world_frame_array = np.array(foot_positions_world_frame_buffer)
     foot_positions_body_frame_array = np.array(foot_positions_body_frame_buffer)
     foot_positions_contact_frame_array = np.array(foot_positions_contact_frame_buffer)
@@ -516,10 +540,13 @@ def main():
         base_orientation_array=base_orientation_array,
         base_linear_velocity_array=base_linear_velocity_array,
         base_angular_velocity_array=base_angular_velocity_array,
+        base_linear_velocity_body_array=base_linear_velocity_body_array,
+        base_angular_velocity_body_array=base_angular_velocity_body_array,
         commanded_velocity_array=commanded_velocity_array,
         contact_state_array=contact_state_array,
         height_map_array=np.array(height_map_buffer),
         foot_velocities_world_frame_array=foot_velocities_world_frame_array,
+        foot_velocities_body_frame_array=foot_velocities_body_frame_array,
         foot_positions_world_frame_array=foot_positions_world_frame_array,
         foot_positions_body_frame_array=foot_positions_body_frame_array,
         foot_positions_contact_frame_array=foot_positions_contact_frame_array,
@@ -541,9 +568,12 @@ def main():
         "base_orientation"     : base_orientation_array,
         "base_linear_velocity" : base_linear_velocity_array,
         "base_angular_velocity": base_angular_velocity_array,
+        "base_linear_velocity_body": base_linear_velocity_body_array,
+        "base_angular_velocity_body": base_angular_velocity_body_array,
         "commanded_velocity"   : commanded_velocity_array,
         "contact_state"        : contact_state_array,
         "foot_velocities_world_frame": foot_velocities_world_frame_array,
+        "foot_velocities_body_frame": foot_velocities_body_frame_array,
         "foot_positions_world_frame" : foot_positions_world_frame_array,
         "foot_positions_body"  : foot_positions_body_frame_array,
         "foot_positions_contact_frame": foot_positions_contact_frame_array,
