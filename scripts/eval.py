@@ -502,6 +502,7 @@ def main():
     np_data_file = os.path.join(plots_directory, "sim_data.npz")
     np.savez(
         np_data_file,
+        env_name=env_name,
         sim_times=sim_times,
         reset_times=np.array(reset_times),
         reward_array=reward_array,
