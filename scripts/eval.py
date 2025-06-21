@@ -18,9 +18,12 @@ from tqdm import tqdm
 import fcntl
 from queue import Queue
 import subprocess
+import shutil
+from pathlib import Path
 import os
 import re
 import yaml
+import uuid
 from typing import Dict, Tuple, Optional, List, Any
 from metrics_utils import compute_summary_metrics
 
@@ -155,9 +158,29 @@ def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[fl
 
     return bounds
 
+def _find_cgroup2_mountpoint() -> str:
+    """Return the mountpoint of the cgroup v2 unified hierarchy."""
+    with open("/proc/self/mountinfo") as mi:
+        for line in mi:
+            parts = line.split()
+            # field 9 is filesystem type, field 5 is mount_point
+            if parts[8] == "cgroup2":
+                return parts[4]
+    raise RuntimeError("cgroup v2 unified mount not found")
+
+def _find_self_cgroup_path() -> str:
+    """Return the current process's cgroup path (the '0::/…' suffix)."""
+    with open("/proc/self/cgroup") as cg:
+        for line in cg:
+            if line.startswith("0::"):
+                # strip "0::" and trailing newline
+                return line[3:].strip()
+    raise RuntimeError("Could not determine own cgroup path")
+
 def run_generate_plots(start_step: int, end_step: int, subdir: str, plots_directory: str, sim_data_file_path: str, foot_vel_height_threshold: float, memory_limit_gb: Optional[float] = 40) -> int:
     """
     Launch generate_plots.py for [start_step, end_step) and block until it finishes. Return the subprocess' return-code.
+    NOTE: MEMORY LIMIT IS DEPRECATED AND IGNORED; JUSTFILE USES systemd-run --scope --user -p MemoryMax=40G instead!
     """
     output_dir = os.path.join(plots_directory, subdir)
     os.makedirs(output_dir, exist_ok=True)
@@ -175,21 +198,13 @@ def run_generate_plots(start_step: int, end_step: int, subdir: str, plots_direct
         # "--interactive",
     ]
 
-    preexec: Optional[callable] = None
-    if memory_limit_gb is not None:
-        limit_bytes = int(memory_limit_gb * (1024 ** 3))
-        def _set_mem_limit():
-            import resource
-            # RLIMIT_AS sets the maximum address space (virtual memory) for the process
-            resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
-        preexec = _set_mem_limit
-
-    print(f"[INFO] Spawning: {' '.join(cmd)}")
+    print(f"[INFO] Spawning {' '.join(cmd)} (log → {log_path})")
     with open(log_path, "w") as lf:
-        proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, preexec_fn=preexec)
-        proc.wait()
-        print(f"[INFO]  generate_plots.py for '{subdir}' exited with code {proc.returncode}  (log → {log_path})")
-        return proc.returncode
+        proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT)
+        code = proc.wait()
+
+    print(f"[INFO] Exited with {code}")
+    return code
 
 def main():
     args = parse_arguments()
@@ -260,7 +275,7 @@ def main():
     plots_directory = os.path.join(eval_base_dir, "plots")
     os.makedirs(plots_directory, exist_ok=True)
 
-    fixed_command_sim_steps = 200 # If you want to increase this you also need to increase episode length otherwise env will reset mid-way
+    fixed_command_sim_steps = 20 # If you want to increase this you also need to increase episode length otherwise env will reset mid-way
     fixed_command_scenarios = [ # Scenario positions depend on seed!
         ("fast_walk_stairs_up", torch.tensor([1, 0.0, 0.0], device=device), (torch.tensor([-8, 16, -0.1], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         # ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
