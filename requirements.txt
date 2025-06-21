@@ -13,3 +13,4 @@ statsmodels
 matplotlib
 seaborn
 tqdm
+SciencePlots
