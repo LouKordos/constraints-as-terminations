@@ -41,6 +41,8 @@ def parse_arguments():
                         help="Number of environments to simulate.")
     parser.add_argument("--task", type=str, required=True,
                         help="Name of the task/environment.")
+    parser.add_argument("--foot_vel_height_threshold", type=float, default=0.1,
+                        help="Maximum foot height to include in the foot-velocity-vs-height plot.")
     # Good seeds for eval: 44, 46, 49
     # DEPRECATED: Hardcoded seed in env config is used
     # parser.add_argument("--seed", type=int, required=False, default=46, help="Seed for numpy, torch, env, terrain, terrain generator etc.. Good seeds for eval are 44, 46, 49")
@@ -143,7 +145,7 @@ def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[fl
 
     return bounds
 
-def run_generate_plots(start_step: int, end_step: int, subdir: str, plots_directory: str, sim_data_file_path: str, memory_limit_gb: Optional[float] = 40) -> int:
+def run_generate_plots(start_step: int, end_step: int, subdir: str, plots_directory: str, sim_data_file_path: str, foot_vel_height_threshold: float, memory_limit_gb: Optional[float] = 40) -> int:
     """
     Launch generate_plots.py for [start_step, end_step) and block until it finishes. Return the subprocess' return-code.
     """
@@ -159,6 +161,7 @@ def run_generate_plots(start_step: int, end_step: int, subdir: str, plots_direct
         "--output_dir", output_dir,
         "--start_step", str(start_step),
         "--end_step", str(end_step),
+        "--foot_vel_height_threshold", str(foot_vel_height_threshold),
         # "--interactive",
     ]
 
@@ -600,9 +603,9 @@ def main():
         start = args.random_sim_step_length + k * fixed_command_sim_steps
         end = start + fixed_command_sim_steps # End is exclusive
         subdir = f"scenario_{scenario_tag}"
-        run_generate_plots(start, end, subdir, plots_directory=plots_directory, sim_data_file_path=np_data_file)
-    random_rc = run_generate_plots(start_step=0, end_step=args.random_sim_step_length, subdir="random_simulation_steps", plots_directory=plots_directory, sim_data_file_path=np_data_file)
-    overall_rc = run_generate_plots(start_step=0, end_step=total_sim_steps, subdir="overall", plots_directory=plots_directory, sim_data_file_path=np_data_file)
+        run_generate_plots(start, end, subdir, plots_directory=plots_directory, sim_data_file_path=np_data_file, foot_vel_height_threshold=args.foot_vel_height_threshold)
+    random_rc = run_generate_plots(start_step=0, end_step=args.random_sim_step_length, subdir="random_simulation_steps", plots_directory=plots_directory, sim_data_file_path=np_data_file, foot_vel_height_threshold=args.foot_vel_height_threshold)
+    overall_rc = run_generate_plots(start_step=0, end_step=total_sim_steps, subdir="overall", plots_directory=plots_directory, sim_data_file_path=np_data_file, foot_vel_height_threshold=args.foot_vel_height_threshold)
 
     if any(rc != 0 for rc in (overall_rc, random_rc)):
         print("[WARN] At least one generate_plots.py run returned a non-zero exit code.")
