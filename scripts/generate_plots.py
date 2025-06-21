@@ -1311,7 +1311,7 @@ def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, 
         with open(os.path.join(pickle_dir, f"hist_joint_{metric_name}_grid.pickle"), 'wb') as f:
             pickle.dump(fig, f)
 
-def _plot_hist_joint_metric(metric_name, data_arr, joint_names, metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE):
+def _plot_hist_joint_metric_overview(metric_name, data_arr, joint_names, metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE):
     fig, ax = plt.subplots(figsize=FIGSIZE)
     for j, jn in enumerate(joint_names):
         counts, edges = compute_trimmed_histogram_data(data_arr[:, j])
@@ -2677,7 +2677,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         for metric_name, data_arr in metrics.items():
             futures.append(
                 executor.submit(
-                    _plot_hist_joint_metric,
+                    _plot_hist_joint_metric_overview,
                     metric_name, data_arr, joint_names,
                     metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE
                 )
@@ -2734,13 +2734,13 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         )
 
         # Hist air-time per foot separate
-        for label, durations in swing_durations.items():
-            futures.append(
-                executor.submit(
-                    _plot_hist_air_time_per_foot_single,
-                    label, durations, output_dir, pickle_dir, FIGSIZE
-                )
-            )
+        # for label, durations in swing_durations.items():
+            # futures.append(
+            #     executor.submit(
+            #         _plot_hist_air_time_per_foot_single,
+            #         label, durations, output_dir, pickle_dir, FIGSIZE
+            #     )
+            # )
 
         # Base plots
         futures.append(
@@ -2840,13 +2840,13 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         #         swing_durations, foot_labels, output_dir, pickle_dir, FIGSIZE
         #     )
         # )
-        for label, durations in swing_durations.items():
-            futures.append(
-                executor.submit(
-                    _plot_box_air_time_per_foot_single,
-                    label, durations, output_dir, pickle_dir, FIGSIZE
-                )
-            )
+        # for label, durations in swing_durations.items():
+        #     futures.append(
+        #         executor.submit(
+        #             _plot_box_air_time_per_foot_single,
+        #             label, durations, output_dir, pickle_dir, FIGSIZE
+        #         )
+        #     )
 
         # d) Cost-of-transport box plot
         futures.append(
@@ -3079,15 +3079,15 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                     output_dir, pickle_dir, FIGSIZE, subdir
                 )
             )
-            for i, lbl in enumerate(foot_labels):
-                futures.append(
-                    executor.submit(
-                        _plot_foot_velocity_time_series_single,
-                        velocities_axis, axis_label, 'world_frame',
-                        sim_times, lbl, i, contact_state_array, reset_times,
-                        output_dir, pickle_dir, FIGSIZE, subdir
-                    )
-                )
+            # for i, lbl in enumerate(foot_labels):
+            #     futures.append(
+            #         executor.submit(
+            #             _plot_foot_velocity_time_series_single,
+            #             velocities_axis, axis_label, 'world_frame',
+            #             sim_times, lbl, i, contact_state_array, reset_times,
+            #             output_dir, pickle_dir, FIGSIZE, subdir
+            #         )
+            #     )
 
             futures.append(
                 executor.submit(
@@ -3149,15 +3149,15 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                     output_dir, pickle_dir, FIGSIZE, subdir
                 )
             )
-            for i, lbl in enumerate(foot_labels):
-                futures.append(
-                    executor.submit(
-                        _plot_foot_velocity_time_series_single,
-                        velocities_axis, axis_label, 'body_frame',
-                        sim_times, lbl, i, contact_state_array, reset_times,
-                        output_dir, pickle_dir, FIGSIZE, subdir
-                    )
-                )
+            # for i, lbl in enumerate(foot_labels):
+            #     futures.append(
+            #         executor.submit(
+            #             _plot_foot_velocity_time_series_single,
+            #             velocities_axis, axis_label, 'body_frame',
+            #             sim_times, lbl, i, contact_state_array, reset_times,
+            #             output_dir, pickle_dir, FIGSIZE, subdir
+            #         )
+            #     )
 
             futures.append(
                 executor.submit(
@@ -3216,15 +3216,15 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 output_dir, pickle_dir, FIGSIZE, subdir_world_mag
             )
         )
-        for i, lbl in enumerate(foot_labels):
-            futures.append(
-                executor.submit(
-                    _plot_foot_velocity_magnitude_time_series_single,
-                    foot_velocities_world_magnitude, 'world_frame',
-                    sim_times, lbl, i, contact_state_array, reset_times,
-                    output_dir, pickle_dir, FIGSIZE, subdir_world_mag
-                )
-            )
+        # for i, lbl in enumerate(foot_labels):
+        #     futures.append(
+        #         executor.submit(
+        #             _plot_foot_velocity_magnitude_time_series_single,
+        #             foot_velocities_world_magnitude, 'world_frame',
+        #             sim_times, lbl, i, contact_state_array, reset_times,
+        #             output_dir, pickle_dir, FIGSIZE, subdir_world_mag
+        #         )
+        #     )
         metric_dict_world_mag = _array_to_metric_dict(foot_velocities_world_magnitude, foot_labels)
         futures.append(executor.submit(_plot_hist_metric_grid, metric_dict_world_mag, "Histogram of Foot Velocity Magnitude (world frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE))
         futures.append(executor.submit(_plot_hist_metric_overview, metric_dict_world_mag, "Histogram of Foot Velocity Magnitude (world frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE))
@@ -3241,15 +3241,15 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 output_dir, pickle_dir, FIGSIZE, subdir_body_mag
             )
         )
-        for i, lbl in enumerate(foot_labels):
-            futures.append(
-                executor.submit(
-                    _plot_foot_velocity_magnitude_time_series_single,
-                    foot_velocities_body_magnitude, 'body_frame',
-                    sim_times, lbl, i, contact_state_array, reset_times,
-                    output_dir, pickle_dir, FIGSIZE, subdir_body_mag
-                )
-            )
+        # for i, lbl in enumerate(foot_labels):
+        #     futures.append(
+        #         executor.submit(
+        #             _plot_foot_velocity_magnitude_time_series_single,
+        #             foot_velocities_body_magnitude, 'body_frame',
+        #             sim_times, lbl, i, contact_state_array, reset_times,
+        #             output_dir, pickle_dir, FIGSIZE, subdir_body_mag
+        #         )
+        #     )
         metric_dict_body_mag = _array_to_metric_dict(foot_velocities_body_magnitude, foot_labels)
         futures.append(executor.submit(_plot_hist_metric_grid, metric_dict_body_mag, "Histogram of Foot Velocity Magnitude (body frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE))
         futures.append(executor.submit(_plot_hist_metric_overview, metric_dict_body_mag, "Histogram of Foot Velocity Magnitude (body frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE))
@@ -3271,19 +3271,19 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             )
         )
 
-        for idx, lbl in enumerate(foot_labels):
-            futures.append(
-                executor.submit(
-                    _plot_body_frame_foot_position_heatmap_single,
-                    foot_positions_body_frame,
-                    idx,
-                    lbl,
-                    output_dir,
-                    pickle_dir,
-                    gridsize=foot_heatmap_gridsize,
-                    FIGSIZE=(20, 20),
-                )
-            )
+        # for idx, lbl in enumerate(foot_labels):
+        #     futures.append(
+        #         executor.submit(
+        #             _plot_body_frame_foot_position_heatmap_single,
+        #             foot_positions_body_frame,
+        #             idx,
+        #             lbl,
+        #             output_dir,
+        #             pickle_dir,
+        #             gridsize=foot_heatmap_gridsize,
+        #             FIGSIZE=(20, 20),
+        #         )
+        #     )
 
         futures.append(
             executor.submit(
@@ -3320,19 +3320,19 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             )
         )
 
-        for idx, lbl in enumerate(foot_labels):
-            futures.append(
-                executor.submit(
-                    _plot_body_frame_foot_position_xy_single,
-                    foot_positions_body_frame,
-                    idx,
-                    lbl,
-                    contact_state_array,
-                    output_dir,
-                    pickle_dir,
-                    FIGSIZE=(20, 20),
-                )
-            )
+        # for idx, lbl in enumerate(foot_labels):
+        #     futures.append(
+        #         executor.submit(
+        #             _plot_body_frame_foot_position_xy_single,
+        #             foot_positions_body_frame,
+        #             idx,
+        #             lbl,
+        #             contact_state_array,
+        #             output_dir,
+        #             pickle_dir,
+        #             FIGSIZE=(20, 20),
+        #         )
+        #     )
 
         # Foot Velocity vs Height plots
         futures.append(
@@ -3359,20 +3359,20 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 FIGSIZE,
             )
         )
-        for idx, lbl in enumerate(foot_labels):
-            futures.append(
-                executor.submit(
-                    _plot_foot_velocity_vs_height_single,
-                    foot_velocities_world_frame,
-                    foot_positions_contact_frame,
-                    idx,
-                    lbl,
-                    output_dir,
-                    pickle_dir,
-                    foot_vel_height_threshold,
-                    FIGSIZE,
-                )
-            )
+        # for idx, lbl in enumerate(foot_labels):
+        #     futures.append(
+        #         executor.submit(
+        #             _plot_foot_velocity_vs_height_single,
+        #             foot_velocities_world_frame,
+        #             foot_positions_contact_frame,
+        #             idx,
+        #             lbl,
+        #             output_dir,
+        #             pickle_dir,
+        #             foot_vel_height_threshold,
+        #             FIGSIZE,
+        #         )
+        #     )
 
         # For comparing to new parallel version
         # futures.append(executor.submit(_animate_body_frame_foot_positions, foot_positions_body_frame, contact_state_array, foot_labels, os.path.join(output_dir, "foot_com_positions_body_frame", "OLD_FOR_COMPARISON_foot_com_positions_body_frame_animation.mp4"), fps=50))
@@ -3443,12 +3443,12 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 data_x, data_y, foot_labels, xlabel, ylabel, f"{title_prefix} (Line)",
                 line_output_dir, line_pickle_dir, FIGSIZE=(24, 24)
             ))
-            for i, label in enumerate(foot_labels):
-                futures.append(executor.submit(
-                    _plot_joint_phase_line_single,
-                    data_x[:, i], data_y[:, i], label, xlabel, ylabel, title_prefix,
-                    line_output_dir, line_pickle_dir, FIGSIZE=(20, 20)
-                ))
+            # for i, label in enumerate(foot_labels):
+            #     futures.append(executor.submit(
+            #         _plot_joint_phase_line_single,
+            #         data_x[:, i], data_y[:, i], label, xlabel, ylabel, title_prefix,
+            #         line_output_dir, line_pickle_dir, FIGSIZE=(20, 20)
+            #     ))
 
 
         # --- Angle vs. Angular Velocity Phase Plots ---
@@ -3498,13 +3498,13 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity (All Joints, Line)",
             av_line_output_dir, av_line_pickle_dir
         ))
-        for j, jn in enumerate(joint_names):
-            futures.append(executor.submit(
-                _plot_joint_phase_line_single,
-                joint_positions[:, j], joint_velocities[:, j], jn,
-                av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity",
-                av_line_output_dir, av_line_pickle_dir
-            ))
+        # for j, jn in enumerate(joint_names):
+        #     futures.append(executor.submit(
+        #         _plot_joint_phase_line_single,
+        #         joint_positions[:, j], joint_velocities[:, j], jn,
+        #         av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity",
+        #         av_line_output_dir, av_line_pickle_dir
+        #     ))
         
         # --- New Stance-Only Velocity Plots (World Frame) ---
         padding_for_stance_lineplots = -1#Number of sim steps for padding
