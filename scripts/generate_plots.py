@@ -20,7 +20,8 @@ import io
 import shutil
 import multiprocessing
 from multiprocessing import Pool, Manager, cpu_count
-from functools import partial
+from matplotlib.axes import Axes
+from functools import partialmethod
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 plt.style.use(['science','ieee'])
 
@@ -33,8 +34,14 @@ plt.rcParams.update({
     'legend.fontsize': 12,
     'figure.titlesize': 18,
     'figure.constrained_layout.use': True,
-
+    'xtick.minor.visible': True,
+    'ytick.minor.visible': True,
+    'axes.grid': True,
+    'grid.linestyle': '--',
 })
+
+# Patch to  minor plots
+Axes.grid = partialmethod(Axes.grid, which='both') # type: ignore
 
 from metrics_utils import (
     compute_energy_arrays,
@@ -865,10 +872,10 @@ def _plot_foot_position_time_series(
 
     subdir = os.path.join(output_dir, subfolder)
     os.makedirs(subdir, exist_ok=True)
-    pdf = os.path.join(subdir, f'foot_pos_{axis_label.lower()}_each.pdf')
+    pdf = os.path.join(subdir, f'foot_pos_{axis_label.lower()}_grid.pdf')
     fig.savefig(pdf, dpi=600)
     if pickle_dir != "":
-        with open(os.path.join(pickle_dir, f'foot_pos_{axis_label.lower()}_each_{frame_label}.pickle'), 'wb') as f:
+        with open(os.path.join(pickle_dir, f'foot_pos_{axis_label.lower()}_grid_{frame_label}.pickle'), 'wb') as f:
             pickle.dump(fig, f)
 
     # ---------- overview ----------
@@ -885,6 +892,181 @@ def _plot_foot_position_time_series(
     if pickle_dir != "":
         with open(os.path.join(pickle_dir, f'foot_pos_{axis_label.lower()}_overview_{frame_label}.pickle'), 'wb') as f:
             pickle.dump(fig_ov, f)
+
+def _plot_foot_velocity_time_series(
+        velocities_array: np.ndarray,
+        axis_label: str,
+        frame_label: str,
+        sim_times: np.ndarray,
+        foot_labels: list[str],
+        contact_state_array: np.ndarray,
+        reset_times: list[float],
+        output_dir: str,
+        pickle_dir: str,
+        FIGSIZE: tuple[int, int],
+        subfolder: str
+):
+    # ---------- per-foot grid ----------
+    fig, axes = plt.subplots(2, 2, sharex=True, figsize=FIGSIZE)
+    for i, ax in enumerate(axes.flat):
+        ax.plot(sim_times, velocities_array[:, i], label=f'vel_{axis_label.lower()}_{foot_labels[i]}')
+        first = True
+        for start_timestep, end_timestep in compute_stance_segments(contact_state_array[:, i].astype(bool)):
+            ax.axvspan(sim_times[start_timestep], sim_times[end_timestep - 1], color='gray', alpha=.3, label='in contact' if first else None)
+            first = False
+        draw_resets(ax, reset_times)
+        ax.set_title(f'Foot {axis_label} Velocity ({frame_label.replace("_", " ")}) {foot_labels[i]}', fontsize=18)
+        ax.set_ylabel(rf'Velocity {axis_label} ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
+        ax.legend()
+    axes[-1, 0].set_xlabel(r'Time ($\text{s}$)')
+
+    subdir = os.path.join(output_dir, subfolder)
+    os.makedirs(subdir, exist_ok=True)
+    pdf = os.path.join(subdir, f'foot_vel_{axis_label.lower()}_grid.pdf')
+    fig.savefig(pdf, dpi=600)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f'foot_vel_{axis_label.lower()}_grid_{frame_label}.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
+    plt.close(fig)
+
+    # ---------- overview ----------
+    fig_ov, ax = plt.subplots(figsize=(FIGSIZE[0], FIGSIZE[1]))
+    for i, lbl in enumerate(foot_labels):
+        ax.plot(sim_times, velocities_array[:, i], label=lbl)
+    draw_resets(ax, reset_times)
+    ax.set_xlabel(r'Time ($\text{s}$)')
+    ax.set_ylabel(rf'Velocity {axis_label} ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
+    ax.set_title(f'Foot {axis_label} Velocity ({frame_label.replace("_", " ")}) overview', fontsize=18)
+    ax.legend(ncol=2, loc='upper right')
+    pdf = os.path.join(subdir, f'foot_vel_{axis_label.lower()}_overview.pdf')
+    fig_ov.savefig(pdf, dpi=600)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f'foot_vel_{axis_label.lower()}_overview_{frame_label}.pickle'), 'wb') as f:
+            pickle.dump(fig_ov, f)
+    plt.close(fig_ov)
+
+
+def _plot_foot_velocity_time_series_single(
+        velocities_array: np.ndarray,
+        axis_label: str,
+        frame_label: str,
+        sim_times: np.ndarray,
+        foot_label: str,
+        foot_idx: int,
+        contact_state_array: np.ndarray,
+        reset_times: list[float],
+        output_dir: str,
+        pickle_dir: str,
+        FIGSIZE: tuple[int, int],
+        subfolder: str
+):
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.plot(sim_times, velocities_array[:, foot_idx], label=f'vel_{axis_label.lower()}_{foot_label}')
+    first = True
+    for start_timestep, end_timestep in compute_stance_segments(contact_state_array[:, foot_idx].astype(bool)):
+        ax.axvspan(sim_times[start_timestep], sim_times[end_timestep - 1], color='gray', alpha=.3, label='in contact' if first else None)
+        first = False
+    draw_resets(ax, reset_times)
+    ax.set_title(f'Foot {axis_label} Velocity ({frame_label.replace("_", " ")}) {foot_label}', fontsize=18)
+    ax.set_ylabel(rf'Velocity {axis_label} ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
+    ax.set_xlabel(r'Time ($\text{s}$)')
+    ax.legend()
+
+    subdir = os.path.join(output_dir, subfolder)
+    os.makedirs(subdir, exist_ok=True)
+    safe_label = foot_label.replace(" ", "_").lower()
+    pdf = os.path.join(subdir, f'foot_vel_{axis_label.lower()}_single_{safe_label}.pdf')
+    fig.savefig(pdf, dpi=600)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f'foot_vel_{axis_label.lower()}_single_{safe_label}_{frame_label}.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
+    plt.close(fig)
+
+def _plot_foot_velocity_magnitude_time_series(
+        velocity_magnitudes_array: np.ndarray, # Shape (T, 4)
+        frame_label: str,
+        sim_times: np.ndarray,
+        foot_labels: list[str],
+        contact_state_array: np.ndarray,
+        reset_times: list[float],
+        output_dir: str,
+        pickle_dir: str,
+        FIGSIZE: tuple[int, int],
+        subfolder: str
+):
+    # ---------- per-foot grid ----------
+    fig, axes = plt.subplots(2, 2, sharex=True, figsize=FIGSIZE)
+    for i, ax in enumerate(axes.flat):
+        ax.plot(sim_times, velocity_magnitudes_array[:, i], label=f'vel_mag_{foot_labels[i]}')
+        first = True
+        for start_timestep, end_timestep in compute_stance_segments(contact_state_array[:, i].astype(bool)):
+            ax.axvspan(sim_times[start_timestep], sim_times[end_timestep - 1], color='gray', alpha=.3, label='in contact' if first else None)
+            first = False
+        draw_resets(ax, reset_times)
+        ax.set_title(f'Foot Velocity Magnitude ({frame_label.replace("_", " ")}) {foot_labels[i]}', fontsize=18)
+        ax.set_ylabel(rf'Velocity Magnitude ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
+        ax.legend()
+    axes[-1, 0].set_xlabel(r'Time ($\text{s}$)')
+
+    subdir = os.path.join(output_dir, subfolder)
+    os.makedirs(subdir, exist_ok=True)
+    pdf = os.path.join(subdir, f'foot_vel_magnitude_grid.pdf')
+    fig.savefig(pdf, dpi=600)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f'foot_vel_magnitude_grid_{frame_label}.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
+    plt.close(fig)
+
+    # ---------- overview ----------
+    fig_ov, ax = plt.subplots(figsize=(FIGSIZE[0], FIGSIZE[1]))
+    for i, lbl in enumerate(foot_labels):
+        ax.plot(sim_times, velocity_magnitudes_array[:, i], label=lbl)
+    draw_resets(ax, reset_times)
+    ax.set_xlabel(r'Time ($\text{s}$)')
+    ax.set_ylabel(rf'Velocity Magnitude ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
+    ax.set_title(f'Foot Velocity Magnitude ({frame_label.replace("_", " ")}) overview', fontsize=18)
+    ax.legend(ncol=2, loc='upper right')
+    pdf = os.path.join(subdir, f'foot_vel_magnitude_overview.pdf')
+    fig_ov.savefig(pdf, dpi=600)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f'foot_vel_magnitude_overview_{frame_label}.pickle'), 'wb') as f:
+            pickle.dump(fig_ov, f)
+    plt.close(fig_ov)
+
+def _plot_foot_velocity_magnitude_time_series_single(
+        velocity_magnitudes_array: np.ndarray, # Shape (T, 4)
+        frame_label: str,
+        sim_times: np.ndarray,
+        foot_label: str,
+        foot_idx: int,
+        contact_state_array: np.ndarray,
+        reset_times: list[float],
+        output_dir: str,
+        pickle_dir: str,
+        FIGSIZE: tuple[int, int],
+        subfolder: str
+):
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.plot(sim_times, velocity_magnitudes_array[:, foot_idx], label=f'vel_mag_{foot_label}')
+    first = True
+    for start_timestep, end_timestep in compute_stance_segments(contact_state_array[:, foot_idx].astype(bool)):
+        ax.axvspan(sim_times[start_timestep], sim_times[end_timestep - 1], color='gray', alpha=.3, label='in contact' if first else None)
+        first = False
+    draw_resets(ax, reset_times)
+    ax.set_title(f'Foot Velocity Magnitude ({frame_label.replace("_", " ")}) {foot_label}', fontsize=18)
+    ax.set_ylabel(rf'Velocity Magnitude ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
+    ax.set_xlabel(r'Time ($\text{s}$)')
+    ax.legend()
+
+    subdir = os.path.join(output_dir, subfolder)
+    os.makedirs(subdir, exist_ok=True)
+    safe_label = foot_label.replace(" ", "_").lower()
+    pdf = os.path.join(subdir, f'foot_vel_magnitude_single_{safe_label}.pdf')
+    fig.savefig(pdf, dpi=600)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, f'foot_vel_magnitude_single_{safe_label}_{frame_label}.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
+    plt.close(fig)
 
 def _plot_hist_metric_grid(metric_dict: dict[str, list[float]], title: str, xlabel: str, foot_labels: list[str], output_dir: str, pickle_dir: str, subfolder: str, FIGSIZE: tuple[int, int]):
     """
@@ -987,11 +1169,11 @@ def _plot_foot_contact_force_per_foot(sim_times, contact_forces_array, foot_labe
         ax.set_title(f"Foot contact force magnitude {foot_labels[i]}", fontsize=20)
         ax.set_ylabel(r'Force ($\text{N}$)')
         ax.legend()
-    pdf = os.path.join(output_dir, "foot_contact_forces",'foot_contact_force_each.pdf')
+    pdf = os.path.join(output_dir, "foot_contact_forces",'foot_contact_force_grid.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
     if pickle_dir != "":
-        with open(os.path.join(pickle_dir, 'foot_contact_force_each.pickle'), 'wb') as f:
+        with open(os.path.join(pickle_dir, 'foot_contact_force_grid.pickle'), 'wb') as f:
             pickle.dump(fig, f)
 
 def _plot_hist_contact_forces_grid(contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE):
@@ -1808,6 +1990,184 @@ def _plot_joint_phase_single(
             pickle.dump(fig, f)
     plt.close(fig)
 
+def _prepare_stance_only_velocity_data(
+    foot_velocities_all_frames: np.ndarray, # (T, 4, 3) for components, or (T, 4) for magnitude
+    contact_state_array: np.ndarray, # (T, 4)
+    foot_labels: list[str],
+    component_idx: int | None = None # 0 for X, 1 for Y, 2 for Z, None for magnitude
+) -> dict[str, list[float]]:
+    stance_data_dict = {lbl: [] for lbl in foot_labels}
+    num_timesteps_velocities = foot_velocities_all_frames.shape[0]
+    num_timesteps_contact = contact_state_array.shape[0]
+
+    # Ensure we don't go out of bounds if arrays have different T (e.g. due to slicing)
+    # This can happen if sim_data.npz is from a very short run.
+    # We assume contact_state_array dictates the valid range of timesteps.
+    
+    if num_timesteps_velocities == 0 or num_timesteps_contact == 0:
+        return stance_data_dict # Not enough data
+
+    for foot_i, lbl in enumerate(foot_labels):
+        # Get all timesteps where this foot is in contact based on contact_state_array
+        stance_indices_for_foot_contact_time = np.where(contact_state_array[:, foot_i])[0]
+        
+        if len(stance_indices_for_foot_contact_time) == 0:
+            continue
+
+        # Filter these indices to be valid for the foot_velocities_all_frames array
+        valid_stance_indices_for_velocities = stance_indices_for_foot_contact_time[stance_indices_for_foot_contact_time < num_timesteps_velocities]
+        
+        if len(valid_stance_indices_for_velocities) == 0:
+            continue
+            
+        if component_idx is not None: # Components
+            # foot_velocities_all_frames has shape (T_vel, 4, 3)
+            velocities_this_foot_this_component_stance = foot_velocities_all_frames[valid_stance_indices_for_velocities, foot_i, component_idx]
+        else: # Magnitude
+            # foot_velocities_all_frames has shape (T_vel, 4)
+            velocities_this_foot_this_component_stance = foot_velocities_all_frames[valid_stance_indices_for_velocities, foot_i]
+        
+        if velocities_this_foot_this_component_stance.size > 0:
+            stance_data_dict[lbl].extend(velocities_this_foot_this_component_stance.tolist())
+    return stance_data_dict
+
+
+def _plot_foot_velocity_time_series_stance_focused(
+    sim_times: np.ndarray,
+    velocity_data: np.ndarray,  # Shape (T, 4) - can be one component or magnitude
+    component_label: str,  # e.g., "VX", "VY", "VZ", "Magnitude"
+    frame_label: str, # "world_frame"
+    foot_labels: list[str],
+    contact_state_array: np.ndarray, # Shape (T, 4)
+    reset_times: list[float],
+    output_dir: str,
+    pickle_dir: str,
+    FIGSIZE: tuple[int, int],
+    subfolder_prefix: str,
+    padding_steps: int = 10
+):
+    plot_subdir = os.path.join(output_dir, subfolder_prefix, component_label.lower().replace(" ", "_").replace("/", "_")) # Ensure component_label is filename-safe
+    os.makedirs(plot_subdir, exist_ok=True)
+    
+    pickle_subdir = ""
+    if pickle_dir: # Ensure pickle_dir is not an empty string
+        pickle_subdir = os.path.join(pickle_dir, subfolder_prefix, component_label.lower().replace(" ", "_").replace("/", "_"))
+        os.makedirs(pickle_subdir, exist_ok=True)
+
+    # ---------- per-foot grid (stance-focused line plot) ----------
+    fig_grid, axes_grid = plt.subplots(2, 2, sharex=True, figsize=FIGSIZE)
+    # fig_grid.suptitle(f'Stance-Focused Foot {component_label} Velocity ({frame_label.replace("_", " ")})', fontsize=18)
+    fig_grid.suptitle(f'Stance Foot {component_label} Vel. ({frame_label.replace("_", " ")}, {padding_steps} steps padding)', fontsize=18)
+
+
+    for i, ax in enumerate(axes_grid.flat):
+        foot_idx = i
+        # Ensure contact_state_array has data for this foot_idx
+        if foot_idx >= contact_state_array.shape[1]:
+            ax.text(0.5, 0.5, "No data for this foot index", ha="center", va="center", transform=ax.transAxes)
+            ax.set_title(f'{foot_labels[foot_idx]} (Error)', fontsize=16)
+            continue
+
+        stance_segments = compute_stance_segments(contact_state_array[:, foot_idx].astype(bool))
+        
+        first_segment_in_plot = True
+        first_stance_span_for_legend = True
+        plotted_anything = False
+
+        if not stance_segments: # No stance phases for this foot
+            ax.text(0.5, 0.5, "No stance data", ha="center", va="center", transform=ax.transAxes)
+        
+        for s_start, s_end in stance_segments:
+            s_pad_start = max(0, s_start - padding_steps)
+            # s_pad_end needs to be relative to sim_times length, and also velocity_data length
+            s_pad_end = min(min(len(sim_times), velocity_data.shape[0]), s_end + padding_steps)
+
+
+            if s_pad_start >= s_pad_end: # Skip if padded segment is empty or invalid
+                continue
+
+            times_to_plot = sim_times[s_pad_start:s_pad_end]
+            # Ensure velocity_data has data for this foot_idx
+            if foot_idx >= velocity_data.shape[1]:
+                continue # Should not happen if contact_state_array check passed, but defensive
+            
+            data_to_plot = velocity_data[s_pad_start:s_pad_end, foot_idx]
+            
+            if times_to_plot.size == 0 or data_to_plot.size == 0: # Skip if no data after padding
+                continue
+
+            ax.plot(times_to_plot, data_to_plot, label=f'{component_label}_{foot_labels[foot_idx]}' if first_segment_in_plot else None)
+            first_segment_in_plot = False
+            plotted_anything = True
+
+            # Highlight the actual stance phase within the padded segment
+            # Ensure s_start and s_end-1 are valid indices for sim_times
+            if s_start < len(sim_times) and s_end > 0 and s_start < s_end:
+                actual_s_end_time_idx = min(s_end - 1, len(sim_times) - 1) # s_end is exclusive, so use s_end-1
+                if actual_s_end_time_idx >= s_start : # Ensure valid span
+                     ax.axvspan(sim_times[s_start], sim_times[actual_s_end_time_idx], color='gray', alpha=0.3, label='stance phase' if first_stance_span_for_legend else None)
+                     if first_stance_span_for_legend:
+                         first_stance_span_for_legend = False
+        
+        draw_resets(ax, reset_times)
+        ax.set_title(f'{foot_labels[foot_idx]}', fontsize=16)
+        ax.set_ylabel(rf'Velocity {component_label} ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
+        
+        if plotted_anything or not first_stance_span_for_legend: # Add legend if plots were made or if stance highlight was added
+             ax.legend(loc='best')
+
+
+    axes_grid[-1, 0].set_xlabel(r'Time ($\text{s}$)')
+    axes_grid[-1, 1].set_xlabel(r'Time ($\text{s}$)')
+    
+    pdf_grid_path = os.path.join(plot_subdir, f'line_grid_stance_focused.pdf')
+    fig_grid.savefig(pdf_grid_path, dpi=600)
+    if pickle_subdir: # Check again if pickle_subdir is valid
+        with open(os.path.join(pickle_subdir, f'line_grid_stance_focused.pickle'), 'wb') as f:
+            pickle.dump(fig_grid, f)
+    plt.close(fig_grid)
+
+    # ---------- overview (stance-focused line plot) ----------
+    fig_ov, ax_ov = plt.subplots(figsize=FIGSIZE)
+    # ax_ov.set_title(f'Stance-Focused Foot {component_label} Velocity ({frame_label.replace("_", " ")}) Overview', fontsize=18)
+    ax_ov.set_title(f'Stance Foot {component_label} Vel. ({frame_label.replace("_", " ")}, {padding_steps} steps padding) Overview', fontsize=18)
+
+
+    for foot_idx, lbl in enumerate(foot_labels):
+        if foot_idx >= contact_state_array.shape[1]: continue # Skip if no data for this foot
+
+        stance_segments = compute_stance_segments(contact_state_array[:, foot_idx].astype(bool))
+        first_segment_for_foot = True
+        for s_start, s_end in stance_segments:
+            s_pad_start = max(0, s_start - padding_steps)
+            s_pad_end = min(min(len(sim_times), velocity_data.shape[0]), s_end + padding_steps)
+
+
+            if s_pad_start >= s_pad_end: continue
+            if foot_idx >= velocity_data.shape[1]: continue
+
+
+            times_to_plot = sim_times[s_pad_start:s_pad_end]
+            data_to_plot = velocity_data[s_pad_start:s_pad_end, foot_idx]
+
+            if times_to_plot.size == 0 or data_to_plot.size == 0: continue
+            
+            ax_ov.plot(times_to_plot, data_to_plot, label=lbl if first_segment_for_foot else None, alpha=0.7)
+            first_segment_for_foot = False
+            
+    draw_resets(ax_ov, reset_times)
+    ax_ov.set_xlabel(r'Time ($\text{s}$)')
+    ax_ov.set_ylabel(rf'Velocity {component_label} ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
+    ax_ov.legend(ncol=min(len(foot_labels), 4), loc='best')
+    
+    pdf_ov_path = os.path.join(plot_subdir, f'line_overview_stance_focused.pdf')
+    fig_ov.savefig(pdf_ov_path, dpi=600)
+    if pickle_subdir: # Check again
+        with open(os.path.join(pickle_subdir, f'line_overview_stance_focused.pickle'), 'wb') as f:
+            pickle.dump(fig_ov, f)
+    plt.close(fig_ov)
+
+
 def _plot_joint_phase_line_overview(
     data_x: np.ndarray,
     data_y: np.ndarray,
@@ -2019,9 +2379,10 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
     """
     os.makedirs(output_dir, exist_ok=True)
     # pickle_dir = os.path.join(output_dir, "plot_figures_serialized")
-    pickle_dir = "" # Takes up too much space and can be regenerated with this script anyway (sim_data.npz is saved)
-    if pickle_dir != "":
-        os.makedirs(pickle_dir, exist_ok=True)
+    # Ensure pickle_dir is "" or a valid path. If you want to enable pickling, set it here.
+    pickle_dir = ""
+    # if pickle_dir != "" and not os.path.exists(pickle_dir): # Check if it's a non-empty string before creating
+    #     os.makedirs(pickle_dir, exist_ok=True)
 
     start_time = time.time()
 
@@ -2056,6 +2417,36 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
     foot_positions_contact_frame = data['foot_positions_contact_frame_array'] # (T,4,3)
     foot_positions_world_frame   = data['foot_positions_world_frame_array'] # (T,4,3)
     foot_velocities_world_frame = data['foot_velocities_world_frame_array']
+    foot_velocities_body_frame_array = np.zeros_like(foot_velocities_world_frame)
+    T = base_orientations.shape[0]
+    for t in range(T):
+        yaw, pitch, roll = base_orientations[t]
+        cy, sy = np.cos(yaw), np.sin(yaw)
+        cp, sp = np.cos(pitch), np.sin(pitch)
+        cr, sr = np.cos(roll), np.sin(roll)
+        Rz = np.array([[cy, -sy, 0], [sy, cy, 0], [0, 0, 1]])
+        Ry = np.array([[cp, 0, sp], [0, 1, 0], [-sp, 0, cp]])
+        Rx = np.array([[1, 0, 0], [0, cr, -sr], [0, sr, cr]])
+        R_body_to_world = Rz @ Ry @ Rx
+        R_world_to_body = R_body_to_world.T
+        for i in range(4):
+            foot_velocities_body_frame_array[t, i, :] = R_world_to_body @ foot_velocities_world_frame[t, i, :]
+    # Calculate magnitudes robustly, T is defined earlier
+    if T > 0:
+        if foot_velocities_world_frame.ndim == 3 and foot_velocities_world_frame.shape[0] == T: # (T, 4, 3)
+            foot_velocities_world_magnitude = np.linalg.norm(foot_velocities_world_frame, axis=2) # (T, 4)
+            foot_velocities_body_magnitude = np.linalg.norm(foot_velocities_body_frame_array, axis=2) # (T, 4)
+        elif foot_velocities_world_frame.ndim == 2 and T == 1 and foot_velocities_world_frame.shape[0] == 4 and foot_velocities_world_frame.shape[1] == 3: # Single timestep data (4,3)
+            foot_velocities_world_magnitude = np.linalg.norm(foot_velocities_world_frame, axis=1).reshape(1, 4) # (1,4)
+            foot_velocities_body_magnitude = np.linalg.norm(foot_velocities_body_frame_array, axis=1).reshape(1,4) # (1,4)
+        else: # Fallback for unexpected shapes, assuming T might be number of samples
+            num_samples = foot_velocities_world_frame.shape[0] if foot_velocities_world_frame.ndim > 1 else 0
+            foot_velocities_world_magnitude = np.zeros((num_samples, 4))
+            foot_velocities_body_magnitude = np.zeros((num_samples, 4))
+            if num_samples > 0 : print(f"[Warning] Unexpected shape for foot_velocities_world_frame: {foot_velocities_world_frame.shape}, T={T}. Magnitudes zeroed.")
+    else: # T == 0
+        foot_velocities_world_magnitude = np.zeros((0,4))
+        foot_velocities_body_magnitude = np.zeros((0,4))
     foot_heights_body_frame = foot_positions_body_frame[:, :, 2]
     foot_heights_contact_frame = foot_positions_contact_frame[:, :, 2]
     step_heights = compute_swing_heights(contact_state=contact_state_array, foot_heights_contact=foot_heights_contact_frame, reset_steps=reset_timesteps, foot_labels=foot_labels)
@@ -2580,6 +2971,200 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             )
         )
 
+        # ---------------- Foot-velocity time series ----------------
+        velocities_axes = {'X': 0, 'Y': 1, 'Z': 2}
+        # World frame
+        for axis_label, axis_idx in velocities_axes.items():
+            velocities_axis = foot_velocities_world_frame[:, :, axis_idx]
+            metric_dict    = _array_to_metric_dict(velocities_axis, foot_labels)
+            subdir = os.path.join("foot_velocities_world_frame", f"{axis_label}")
+
+            futures.append(
+                executor.submit(
+                    _plot_foot_velocity_time_series,
+                    velocities_axis, axis_label, 'world_frame',
+                    sim_times, foot_labels, contact_state_array, reset_times,
+                    output_dir, pickle_dir, FIGSIZE, subdir
+                )
+            )
+            for i, lbl in enumerate(foot_labels):
+                futures.append(
+                    executor.submit(
+                        _plot_foot_velocity_time_series_single,
+                        velocities_axis, axis_label, 'world_frame',
+                        sim_times, lbl, i, contact_state_array, reset_times,
+                        output_dir, pickle_dir, FIGSIZE, subdir
+                    )
+                )
+
+            futures.append(
+                executor.submit(
+                    _plot_hist_metric_grid,
+                    metric_dict,
+                    f"Histogram of Foot {axis_label} Velocity (world frame)",
+                    f"Velocity {axis_label} (m/s)", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+            futures.append(
+                executor.submit(
+                    _plot_hist_metric_overview,
+                    metric_dict,
+                    f"Histogram of Foot {axis_label} Velocity (world frame) overview",
+                    f"Velocity {axis_label} (m/s)", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+
+            futures.append(
+                executor.submit(
+                    _plot_box_metric_grid,
+                    metric_dict,
+                    f"Box Plot of Foot {axis_label} Velocity (world frame)",
+                    f"Velocity {axis_label} (m/s)", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+            futures.append(
+                executor.submit(
+                    _plot_box_metric_overview,
+                    metric_dict,
+                    f"Box Plot of Foot {axis_label} Velocity (world frame) overview",
+                    f"Velocity {axis_label} (m/s)", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+
+        # Body frame
+        for axis_label, axis_idx in velocities_axes.items():
+            velocities_axis = foot_velocities_body_frame_array[:, :, axis_idx]
+            metric_dict    = _array_to_metric_dict(velocities_axis, foot_labels)
+            subdir = os.path.join("foot_velocities_body_frame", f"{axis_label}")
+
+            futures.append(
+                executor.submit(
+                    _plot_foot_velocity_time_series,
+                    velocities_axis, axis_label, 'body_frame',
+                    sim_times, foot_labels, contact_state_array, reset_times,
+                    output_dir, pickle_dir, FIGSIZE, subdir
+                )
+            )
+            for i, lbl in enumerate(foot_labels):
+                futures.append(
+                    executor.submit(
+                        _plot_foot_velocity_time_series_single,
+                        velocities_axis, axis_label, 'body_frame',
+                        sim_times, lbl, i, contact_state_array, reset_times,
+                        output_dir, pickle_dir, FIGSIZE, subdir
+                    )
+                )
+
+            futures.append(
+                executor.submit(
+                    _plot_hist_metric_grid,
+                    metric_dict,
+                    f"Histogram of Foot {axis_label} Velocity (body frame)",
+                    f"Velocity {axis_label} (m/s)", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+            futures.append(
+                executor.submit(
+                    _plot_hist_metric_overview,
+                    metric_dict,
+                    f"Histogram of Foot {axis_label} Velocity (body frame) overview",
+                    f"Velocity {axis_label} (m/s)", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+
+            futures.append(
+                executor.submit(
+                    _plot_box_metric_grid,
+                    metric_dict,
+                    f"Box Plot of Foot {axis_label} Velocity (body frame)",
+                    f"Velocity {axis_label} (m/s)", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+            futures.append(
+                executor.submit(
+                    _plot_box_metric_overview,
+                    metric_dict,
+                    f"Box Plot of Foot {axis_label} Velocity (body frame) overview",
+                    f"Velocity {axis_label} (m/s)", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+            )
+
+        # ---------------- Foot-velocity magnitude time series ----------------
+        # World frame magnitude
+        subdir_world_mag = os.path.join("foot_velocities_world_frame", "magnitude")
+        futures.append(
+            executor.submit(
+                _plot_foot_velocity_magnitude_time_series,
+                foot_velocities_world_magnitude, 'world_frame',
+                sim_times, foot_labels, contact_state_array, reset_times,
+                output_dir, pickle_dir, FIGSIZE, subdir_world_mag
+            )
+        )
+        for i, lbl in enumerate(foot_labels):
+            futures.append(
+                executor.submit(
+                    _plot_foot_velocity_magnitude_time_series_single,
+                    foot_velocities_world_magnitude, 'world_frame',
+                    sim_times, lbl, i, contact_state_array, reset_times,
+                    output_dir, pickle_dir, FIGSIZE, subdir_world_mag
+                )
+            )
+        metric_dict_world_mag = _array_to_metric_dict(foot_velocities_world_magnitude, foot_labels)
+        futures.append(executor.submit(_plot_hist_metric_grid, metric_dict_world_mag, "Histogram of Foot Velocity Magnitude (world frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE))
+        futures.append(executor.submit(_plot_hist_metric_overview, metric_dict_world_mag, "Histogram of Foot Velocity Magnitude (world frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE))
+        futures.append(executor.submit(_plot_box_metric_grid, metric_dict_world_mag, "Box Plot of Foot Velocity Magnitude (world frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE))
+        futures.append(executor.submit(_plot_box_metric_overview, metric_dict_world_mag, "Box Plot of Foot Velocity Magnitude (world frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE))
+
+        # Body frame magnitude
+        subdir_body_mag = os.path.join("foot_velocities_body_frame", "magnitude")
+        futures.append(
+            executor.submit(
+                _plot_foot_velocity_magnitude_time_series,
+                foot_velocities_body_magnitude, 'body_frame',
+                sim_times, foot_labels, contact_state_array, reset_times,
+                output_dir, pickle_dir, FIGSIZE, subdir_body_mag
+            )
+        )
+        for i, lbl in enumerate(foot_labels):
+            futures.append(
+                executor.submit(
+                    _plot_foot_velocity_magnitude_time_series_single,
+                    foot_velocities_body_magnitude, 'body_frame',
+                    sim_times, lbl, i, contact_state_array, reset_times,
+                    output_dir, pickle_dir, FIGSIZE, subdir_body_mag
+                )
+            )
+        metric_dict_body_mag = _array_to_metric_dict(foot_velocities_body_magnitude, foot_labels)
+        futures.append(executor.submit(_plot_hist_metric_grid, metric_dict_body_mag, "Histogram of Foot Velocity Magnitude (body frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE))
+        futures.append(executor.submit(_plot_hist_metric_overview, metric_dict_body_mag, "Histogram of Foot Velocity Magnitude (body frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE))
+        futures.append(executor.submit(_plot_box_metric_grid, metric_dict_body_mag, "Box Plot of Foot Velocity Magnitude (body frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE))
+        futures.append(executor.submit(_plot_box_metric_overview, metric_dict_body_mag, "Box Plot of Foot Velocity Magnitude (body frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE))
+
+
         foot_heatmap_gridsize = 50 # 2.5cmx2.5cm
 
         futures.append(
@@ -2829,8 +3414,82 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 av_line_output_dir, av_line_pickle_dir
             ))
         
+        # --- New Stance-Focused Velocity Plots (World Frame) ---
+        padding_for_stance_lineplots = 10 # Number of sim steps for padding
+
+        # Velocity Components (X, Y, Z)
+        velocity_components_axes = {'VX': 0, 'VY': 1, 'VZ': 2}
+        for comp_label, comp_idx in velocity_components_axes.items():
+            # Data for this component: foot_velocities_world_frame (T, 4, 3) -> (T, 4)
+            # Ensure current_velocity_component_data is correctly dimensioned even if T=0 or T=1
+            if foot_velocities_world_frame.shape[0] > 0 and foot_velocities_world_frame.ndim == 3:
+                current_velocity_component_data = foot_velocities_world_frame[:, :, comp_idx]
+            elif foot_velocities_world_frame.shape[0] > 0 and foot_velocities_world_frame.ndim == 2 and foot_velocities_world_frame.shape[1] == 3: # Single step (4,3)
+                 current_velocity_component_data = foot_velocities_world_frame[:, comp_idx].reshape(1,4) # Make it (1,4)
+            else: # Zero timesteps or unexpected
+                current_velocity_component_data = np.zeros((foot_velocities_world_frame.shape[0], 4))
+
+
+            # 1. Line plots (stance-focused)
+            stance_line_plot_subfolder = "foot_velocities_world_frame_stance_focused"
+            futures.append(executor.submit(
+                _plot_foot_velocity_time_series_stance_focused,
+                sim_times, current_velocity_component_data, comp_label, 'world_frame',
+                foot_labels, contact_state_array, reset_times,
+                output_dir, pickle_dir, FIGSIZE, stance_line_plot_subfolder, padding_for_stance_lineplots
+            ))
+
+            # 2. Histograms & Box plots (stance-only)
+            stance_only_data_dict = _prepare_stance_only_velocity_data(
+                foot_velocities_world_frame, contact_state_array, foot_labels, component_idx=comp_idx
+            )
+            hist_box_subfolder_base = os.path.join("foot_velocities_world_frame_stance_only", comp_label.lower())
+            
+            # Histograms
+            hist_title = f"Histogram of Stance Foot {comp_label} Velocity (World Frame)"
+            hist_xlabel = f"Velocity {comp_label} (m/s)"
+            futures.append(executor.submit(_plot_hist_metric_grid, stance_only_data_dict, hist_title, hist_xlabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_subfolder_base, "hist"), FIGSIZE))
+            futures.append(executor.submit(_plot_hist_metric_overview, stance_only_data_dict, f"{hist_title} Overview", hist_xlabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_subfolder_base, "hist"), FIGSIZE))
+
+            # Box plots
+            box_title = f"Box Plot of Stance Foot {comp_label} Velocity (World Frame)"
+            box_ylabel = f"Velocity {comp_label} (m/s)" # For overview, xlabel is "Foot"
+            futures.append(executor.submit(_plot_box_metric_grid, stance_only_data_dict, box_title, hist_xlabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_subfolder_base, "box"), FIGSIZE)) # hist_xlabel is fine for grid boxplot x-axis
+            futures.append(executor.submit(_plot_box_metric_overview, stance_only_data_dict, f"{box_title} Overview", box_ylabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_subfolder_base, "box"), FIGSIZE))
+
+        # Velocity Magnitude
+        comp_label_mag = "Magnitude"
+        # 1. Line plots (stance-focused) for Magnitude
+        # foot_velocities_world_magnitude is already (T,4) or (1,4)
+        futures.append(executor.submit(
+            _plot_foot_velocity_time_series_stance_focused,
+            sim_times, foot_velocities_world_magnitude, comp_label_mag, 'world_frame',
+            foot_labels, contact_state_array, reset_times,
+            output_dir, pickle_dir, FIGSIZE, stance_line_plot_subfolder, padding_for_stance_lineplots # use same subfolder
+        ))
+
+        # 2. Histograms & Box plots (stance-only) for Magnitude
+        stance_only_mag_data_dict = _prepare_stance_only_velocity_data(
+            foot_velocities_world_magnitude, contact_state_array, foot_labels, component_idx=None # None for magnitude
+        )
+        hist_box_mag_subfolder_base = os.path.join("foot_velocities_world_frame_stance_only", comp_label_mag.lower())
+
+        # Histograms for Magnitude
+        hist_mag_title = f"Histogram of Stance Foot {comp_label_mag} Velocity (World Frame)"
+        hist_mag_xlabel = f"Velocity {comp_label_mag} (m/s)"
+        futures.append(executor.submit(_plot_hist_metric_grid, stance_only_mag_data_dict, hist_mag_title, hist_mag_xlabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_mag_subfolder_base, "hist"), FIGSIZE))
+        futures.append(executor.submit(_plot_hist_metric_overview, stance_only_mag_data_dict, f"{hist_mag_title} Overview", hist_mag_xlabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_mag_subfolder_base, "hist"), FIGSIZE))
+
+        # Box plots for Magnitude
+        box_mag_title = f"Box Plot of Stance Foot {comp_label_mag} Velocity (World Frame)"
+        box_mag_ylabel = f"Velocity {comp_label_mag} (m/s)" # For overview, xlabel is "Foot"
+        futures.append(executor.submit(_plot_box_metric_grid, stance_only_mag_data_dict, box_mag_title, hist_mag_xlabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_mag_subfolder_base, "box"), FIGSIZE))
+        futures.append(executor.submit(_plot_box_metric_overview, stance_only_mag_data_dict, f"{box_mag_title} Overview", box_mag_ylabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_mag_subfolder_base, "box"), FIGSIZE))
+
+
         # This one is not wrapped in a future since it manages its own process pool internally
-        _animate_body_frame_pipe_to_ffmpeg(
+        if foot_positions_body_frame.shape[0] > 1 : # Avoid animation if only one frame
+            _animate_body_frame_pipe_to_ffmpeg(
             foot_positions_body_frame,
             contact_state_array,
             foot_labels,
@@ -2840,8 +3499,12 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         )
 
         # Ensure all tasks complete
-        for f in futures:
-            f.result()
+        for i, f in enumerate(futures):
+            try:
+                f.result(timeout=300) # 5 min timeout per plot
+            except Exception as e:
+                print(f"ERROR: Plot generation for future {i} failed: {e}")
+                # Optionally, find out which plot it was if you store more info with futures
 
     end_time = time.time()
     print(f"Plot generation took {(end_time-start_time):.4f} seconds.")
