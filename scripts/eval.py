@@ -324,6 +324,7 @@ def main():
     contact_state_buffer = []
     height_map_buffer = []
     foot_positions_world_frame_buffer = []
+    foot_velocities_world_frame_buffer = []
     foot_positions_body_frame_buffer = []
     foot_positions_contact_frame_buffer = [] # Height above terrain, also called sole frame
 
@@ -449,6 +450,9 @@ def main():
         foot_positions_world = np.stack([scene_robot_data.body_link_pos_w[0, scene_robot_data.body_names.index(link)].cpu().numpy() for link in foot_links])
         foot_positions_world_frame_buffer.append(foot_positions_world)
         
+        foot_velocities_world = np.stack([scene_robot_data.body_link_vel_w[0, scene_robot_data.body_names.index(link), :3].cpu().numpy() for link in foot_links])
+        foot_velocities_world_frame_buffer.append(foot_velocities_world)
+        
         foot_positions_body = env.unwrapped.scene["foot_frame_transformer"].data.target_pos_source[0].cpu().numpy()
         # print(f"foot_positions_body={foot_positions_body}")
         foot_positions_body_frame_buffer.append(foot_positions_body)
@@ -485,6 +489,7 @@ def main():
     base_angular_velocity_array = np.vstack(base_angular_velocity_buffer)
     contact_state_array = np.vstack(contact_state_buffer)
     commanded_velocity_array = np.vstack([cv.cpu().numpy() if isinstance(cv, torch.Tensor) else np.asarray(cv) for cv in commanded_velocity_buffer])
+    foot_velocities_world_frame_array = np.array(foot_velocities_world_frame_buffer)
     foot_positions_world_frame_array = np.array(foot_positions_world_frame_buffer)
     foot_positions_body_frame_array = np.array(foot_positions_body_frame_buffer)
     foot_positions_contact_frame_array = np.array(foot_positions_contact_frame_buffer)
@@ -510,6 +515,7 @@ def main():
         commanded_velocity_array=commanded_velocity_array,
         contact_state_array=contact_state_array,
         height_map_array=np.array(height_map_buffer),
+        foot_velocities_world_frame_array=foot_velocities_world_frame_array,
         foot_positions_world_frame_array=foot_positions_world_frame_array,
         foot_positions_body_frame_array=foot_positions_body_frame_array,
         foot_positions_contact_frame_array=foot_positions_contact_frame_array,
@@ -533,6 +539,7 @@ def main():
         "base_angular_velocity": base_angular_velocity_array,
         "commanded_velocity"   : commanded_velocity_array,
         "contact_state"        : contact_state_array,
+        "foot_velocities_world_frame": foot_velocities_world_frame_array,
         "foot_positions_world_frame" : foot_positions_world_frame_array,
         "foot_positions_body"  : foot_positions_body_frame_array,
         "foot_positions_contact_frame": foot_positions_contact_frame_array,
