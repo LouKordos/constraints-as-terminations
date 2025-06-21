@@ -2044,7 +2044,7 @@ def _plot_foot_velocity_time_series_stance_focused(
     pickle_dir: str,
     FIGSIZE: tuple[int, int],
     subfolder_prefix: str,
-    padding_steps: int = 10
+    padding_steps: int = 1
 ):
     plot_subdir = os.path.join(output_dir, subfolder_prefix, component_label.lower().replace(" ", "_").replace("/", "_")) # Ensure component_label is filename-safe
     os.makedirs(plot_subdir, exist_ok=True)
@@ -3414,14 +3414,14 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 av_line_output_dir, av_line_pickle_dir
             ))
         
-        # --- New Stance-Focused Velocity Plots (World Frame) ---
-        padding_for_stance_lineplots = 10 # Number of sim steps for padding
+        # --- New Stance-Only Velocity Plots (World Frame) ---
+        padding_for_stance_lineplots = -1#Number of sim steps for padding
+        # Consolidated parent directory for all stance-only world frame velocity plots
+        stance_plot_parent_dir = "foot_velocities_world_frame_stance_only"
 
-        # Velocity Components (X, Y, Z)
         velocity_components_axes = {'VX': 0, 'VY': 1, 'VZ': 2}
         for comp_label, comp_idx in velocity_components_axes.items():
             # Data for this component: foot_velocities_world_frame (T, 4, 3) -> (T, 4)
-            # Ensure current_velocity_component_data is correctly dimensioned even if T=0 or T=1
             if foot_velocities_world_frame.shape[0] > 0 and foot_velocities_world_frame.ndim == 3:
                 current_velocity_component_data = foot_velocities_world_frame[:, :, comp_idx]
             elif foot_velocities_world_frame.shape[0] > 0 and foot_velocities_world_frame.ndim == 2 and foot_velocities_world_frame.shape[1] == 3: # Single step (4,3)
@@ -3429,62 +3429,64 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             else: # Zero timesteps or unexpected
                 current_velocity_component_data = np.zeros((foot_velocities_world_frame.shape[0], 4))
 
+            # Subfolder for this specific component (e.g., foot_velocities_world_frame_stance_only/vx)
+            # This is where line, hist, and box plots for this component will go.
+            component_specific_plot_dir = os.path.join(stance_plot_parent_dir, comp_label.lower())
 
             # 1. Line plots (stance-focused)
-            stance_line_plot_subfolder = "foot_velocities_world_frame_stance_focused"
             futures.append(executor.submit(
-                _plot_foot_velocity_time_series_stance_focused,
+                _plot_foot_velocity_time_series_stance_focused, # This function will create its own subfolder using component_label
                 sim_times, current_velocity_component_data, comp_label, 'world_frame',
                 foot_labels, contact_state_array, reset_times,
-                output_dir, pickle_dir, FIGSIZE, stance_line_plot_subfolder, padding_for_stance_lineplots
+                output_dir, pickle_dir, FIGSIZE, stance_plot_parent_dir, padding_for_stance_lineplots
             ))
 
             # 2. Histograms & Box plots (stance-only)
             stance_only_data_dict = _prepare_stance_only_velocity_data(
                 foot_velocities_world_frame, contact_state_array, foot_labels, component_idx=comp_idx
             )
-            hist_box_subfolder_base = os.path.join("foot_velocities_world_frame_stance_only", comp_label.lower())
             
             # Histograms
             hist_title = f"Histogram of Stance Foot {comp_label} Velocity (World Frame)"
             hist_xlabel = f"Velocity {comp_label} (m/s)"
-            futures.append(executor.submit(_plot_hist_metric_grid, stance_only_data_dict, hist_title, hist_xlabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_subfolder_base, "hist"), FIGSIZE))
-            futures.append(executor.submit(_plot_hist_metric_overview, stance_only_data_dict, f"{hist_title} Overview", hist_xlabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_subfolder_base, "hist"), FIGSIZE))
+            # Pass component_specific_plot_dir as the 'subfolder' argument
+            futures.append(executor.submit(_plot_hist_metric_grid, stance_only_data_dict, hist_title, hist_xlabel, foot_labels, output_dir, pickle_dir, component_specific_plot_dir, FIGSIZE))
+            futures.append(executor.submit(_plot_hist_metric_overview, stance_only_data_dict, f"{hist_title} Overview", hist_xlabel, foot_labels, output_dir, pickle_dir, component_specific_plot_dir, FIGSIZE))
 
             # Box plots
             box_title = f"Box Plot of Stance Foot {comp_label} Velocity (World Frame)"
             box_ylabel = f"Velocity {comp_label} (m/s)" # For overview, xlabel is "Foot"
-            futures.append(executor.submit(_plot_box_metric_grid, stance_only_data_dict, box_title, hist_xlabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_subfolder_base, "box"), FIGSIZE)) # hist_xlabel is fine for grid boxplot x-axis
-            futures.append(executor.submit(_plot_box_metric_overview, stance_only_data_dict, f"{box_title} Overview", box_ylabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_subfolder_base, "box"), FIGSIZE))
+            futures.append(executor.submit(_plot_box_metric_grid, stance_only_data_dict, box_title, hist_xlabel, foot_labels, output_dir, pickle_dir, component_specific_plot_dir, FIGSIZE))
+            futures.append(executor.submit(_plot_box_metric_overview, stance_only_data_dict, f"{box_title} Overview", box_ylabel, foot_labels, output_dir, pickle_dir, component_specific_plot_dir, FIGSIZE))
 
         # Velocity Magnitude
         comp_label_mag = "Magnitude"
+        magnitude_specific_plot_dir = os.path.join(stance_plot_parent_dir, comp_label_mag.lower())
+
         # 1. Line plots (stance-focused) for Magnitude
-        # foot_velocities_world_magnitude is already (T,4) or (1,4)
         futures.append(executor.submit(
-            _plot_foot_velocity_time_series_stance_focused,
+            _plot_foot_velocity_time_series_stance_focused, # This function will create its own subfolder using component_label
             sim_times, foot_velocities_world_magnitude, comp_label_mag, 'world_frame',
             foot_labels, contact_state_array, reset_times,
-            output_dir, pickle_dir, FIGSIZE, stance_line_plot_subfolder, padding_for_stance_lineplots # use same subfolder
+            output_dir, pickle_dir, FIGSIZE, stance_plot_parent_dir, padding_for_stance_lineplots
         ))
 
         # 2. Histograms & Box plots (stance-only) for Magnitude
         stance_only_mag_data_dict = _prepare_stance_only_velocity_data(
             foot_velocities_world_magnitude, contact_state_array, foot_labels, component_idx=None # None for magnitude
         )
-        hist_box_mag_subfolder_base = os.path.join("foot_velocities_world_frame_stance_only", comp_label_mag.lower())
 
         # Histograms for Magnitude
         hist_mag_title = f"Histogram of Stance Foot {comp_label_mag} Velocity (World Frame)"
         hist_mag_xlabel = f"Velocity {comp_label_mag} (m/s)"
-        futures.append(executor.submit(_plot_hist_metric_grid, stance_only_mag_data_dict, hist_mag_title, hist_mag_xlabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_mag_subfolder_base, "hist"), FIGSIZE))
-        futures.append(executor.submit(_plot_hist_metric_overview, stance_only_mag_data_dict, f"{hist_mag_title} Overview", hist_mag_xlabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_mag_subfolder_base, "hist"), FIGSIZE))
+        futures.append(executor.submit(_plot_hist_metric_grid, stance_only_mag_data_dict, hist_mag_title, hist_mag_xlabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE))
+        futures.append(executor.submit(_plot_hist_metric_overview, stance_only_mag_data_dict, f"{hist_mag_title} Overview", hist_mag_xlabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE))
 
         # Box plots for Magnitude
         box_mag_title = f"Box Plot of Stance Foot {comp_label_mag} Velocity (World Frame)"
-        box_mag_ylabel = f"Velocity {comp_label_mag} (m/s)" # For overview, xlabel is "Foot"
-        futures.append(executor.submit(_plot_box_metric_grid, stance_only_mag_data_dict, box_mag_title, hist_mag_xlabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_mag_subfolder_base, "box"), FIGSIZE))
-        futures.append(executor.submit(_plot_box_metric_overview, stance_only_mag_data_dict, f"{box_mag_title} Overview", box_mag_ylabel, foot_labels, output_dir, pickle_dir, os.path.join(hist_box_mag_subfolder_base, "box"), FIGSIZE))
+        box_mag_ylabel = f"Velocity {comp_label_mag} (m/s)"
+        futures.append(executor.submit(_plot_box_metric_grid, stance_only_mag_data_dict, box_mag_title, hist_mag_xlabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE))
+        futures.append(executor.submit(_plot_box_metric_overview, stance_only_mag_data_dict, f"{box_mag_title} Overview", box_mag_ylabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE))
 
 
         # This one is not wrapped in a future since it manages its own process pool internally
