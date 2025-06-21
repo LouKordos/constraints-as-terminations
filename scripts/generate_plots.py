@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from concurrent.futures import ProcessPoolExecutor
 import matplotlib.animation as animation
+import matplotlib.colors as colors
 import scienceplots
 import time
 import queue
@@ -20,6 +21,7 @@ import shutil
 import multiprocessing
 from multiprocessing import Pool, Manager, cpu_count
 from functools import partial
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 plt.style.use(['science','ieee'])
 
 plt.rcParams.update({
@@ -238,86 +240,87 @@ def _column_from_name(jname: str) -> int | None:
             return col
     raise ValueError("Could not determine joint row/col for plotting based on names")
 
-def _plot_body_frame_foot_position_heatmap(foot_positions_body_frame: np.ndarray, output_dir: str, pickle_dir: str, bin_count: int = 100, FIGSIZE: tuple[int, int] = (20, 20)):
+def _plot_body_frame_foot_position_heatmap(foot_positions_body_frame: np.ndarray, output_dir: str, pickle_dir: str, gridsize: int = 100, FIGSIZE: tuple[int, int] = (20, 20)):
     """
-    Discretised heat-map of all foot XY positions in the *body* frame.
-
-    Parameters
-    ----------
-    foot_positions_body_frame : np.ndarray
-        (T, 4, 3) array - XY columns are used.
-    output_dir : str
-        Root output directory (same as the other helpers).
-    pickle_dir : str
-        Directory where the pickled Figure is stored.
-    bin_count : int, optional
-        Number of bins per axis (uniform). 100x100 gives ~1 cm² cells for a typical quadruped workspace (~±0.5 m).
-    FIGSIZE : tuple[int, int], optional
-        Figure size in inches.
+    Discretised hexbin plot of all foot XY positions in the *body* frame.
     """
     xy = foot_positions_body_frame[:, :, :2].reshape(-1, 2) # (N, 2)
     x, y = xy[:, 0], xy[:, 1]
 
-    x_edges = np.linspace(x.min(), x.max(), bin_count + 1)
-    y_edges = np.linspace(y.min(), y.max(), bin_count + 1)
-    counts, _, _ = np.histogram2d(x, y, bins=[x_edges, y_edges])
-
-    # Use log-10 values if data range is high
-    if counts.max() > 0 and counts.max() / counts[counts > 0].min() > 50:
-        counts_display = np.log10(counts + 1)
-        cbar_label = r"$\log_{10}(\text{occupancy} + 1)$"
-    else:
-        counts_display = counts
-        cbar_label = "occupancy (samples)"
-
     fig, ax = plt.subplots(figsize=FIGSIZE)
-    im = ax.imshow(counts_display.T, origin="lower", extent=(x_edges[0], x_edges[-1], y_edges[0], y_edges[-1]), aspect="equal", cmap="viridis")
-    fig.colorbar(im, ax=ax, label=cbar_label)
-    ax.set_xlabel(r"Body-X ($\text{m}$)")
-    ax.set_ylabel(r"Body-Y ($\text{m}$)")
-    ax.set_title("Foot-position occupancy heat-map (body frame, CoM, top-down)")
+    
+    ax.set_title("Foot-position occupancy hexbin (body frame, CoM, top-down)", fontsize=28)
+    if len(x) == 0:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+    else:
+        hb = ax.hexbin(x, y, gridsize=gridsize, cmap='viridis', mincnt=1)
+        counts = hb.get_array()
+        
+        cbar_label = "Occupancy (samples)"
+        if counts.size > 0 and counts.max() > 10 and (counts.max() / counts.min() > 20):
+            hb.set_norm(colors.LogNorm(vmin=counts.min(), vmax=counts.max()))
+            cbar_label = r"$\log_{10}(\text{Occupancy})$"
+
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        cb = fig.colorbar(hb, cax=cax)
+        cb.set_label(cbar_label, size=22)
+        cb.ax.tick_params(labelsize=20)
+
+        # ax.set_aspect('equal', adjustable='box')
+        ax.set_xlabel(r"Body-X ($\text{m}$)", fontsize=22)
+        ax.set_ylabel(r"Body-Y ($\text{m}$)", fontsize=22)
+        ax.tick_params(axis='both', which='major', labelsize=20)
 
     pdf_dir = os.path.join(output_dir, "foot_com_positions_body_frame", "heatmap")
     os.makedirs(pdf_dir, exist_ok=True)
     pdf_path = os.path.join(pdf_dir, "foot_com_position_heatmap_body_frame.pdf")
-    fig.savefig(pdf_path, dpi=600)
+    fig.savefig(pdf_path, dpi=600, bbox_inches='tight')
     if pickle_dir != "":
         with open(os.path.join(pickle_dir, "foot_com_position_heatmap_body_frame.pickle"), "wb") as f:
             pickle.dump(fig, f)
     plt.close(fig)
 
-def _plot_body_frame_foot_position_heatmap_grid(foot_positions_body_frame: np.ndarray, foot_labels: list[str], output_dir: str, pickle_dir: str, bin_count: int = 100, FIGSIZE: tuple[int, int] = (20, 20)):
+def _plot_body_frame_foot_position_heatmap_grid(foot_positions_body_frame: np.ndarray, foot_labels: list[str], output_dir: str, pickle_dir: str, gridsize: int = 100, FIGSIZE: tuple[int, int] = (20, 20)):
     """
-    2x2 grid of occupancy heat-maps - one per foot - in body frame.
+    2x2 grid of occupancy hexbin plots - one per foot - in body frame.
     """
     fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
-    fig.suptitle("Foot-position heat-maps (body frame, per foot)", fontsize=22)
+    fig.suptitle("Foot-position Hexbin Plots (body frame, per foot)", fontsize=30)
 
     for i, (ax, lbl) in enumerate(zip(axes.flat, foot_labels)):
         xy = foot_positions_body_frame[:, i, :2] # (T, 2)
         x, y = xy[:, 0], xy[:, 1]
 
-        x_edges = np.linspace(x.min(), x.max(), bin_count + 1)
-        y_edges = np.linspace(y.min(), y.max(), bin_count + 1)
-        counts, _, _ = np.histogram2d(x, y, bins=[x_edges, y_edges])
+        ax.set_title(lbl, fontsize=26)
+        if len(x) == 0: # No data
+            ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+            continue
 
-        if counts.max() > 0 and counts.max() / counts[counts > 0].min() > 50:
-            counts_display = np.log10(counts + 1)
-            cbar_label = r"$\log_{10}(+1)$"
-        else:
-            counts_display = counts
-            cbar_label = "occupancy"
+        hb = ax.hexbin(x, y, gridsize=gridsize, cmap='viridis', mincnt=1)
+        
+        counts = hb.get_array()
+        cbar_label = "Occupancy (samples)"
+        if counts.size > 0 and counts.max() > 10 and (counts.max() / counts.min() > 20):
+             hb.set_norm(colors.LogNorm(vmin=max(1, counts.min()), vmax=counts.max()))
+             cbar_label = r"$\log_{10}(\text{Occupancy})$"
 
-        im = ax.imshow(counts_display.T, origin="lower", extent=(x_edges[0], x_edges[-1], y_edges[0], y_edges[-1]), aspect="equal", cmap="viridis")
-        ax.set_title(lbl)
-        ax.set_xlabel(r"Body-X ($\text{m}$)")
-        ax.set_ylabel(r"Body-Y ($\text{m}$)")
-        fig.colorbar(im, ax=ax, label=cbar_label)
+        # ax.set_aspect('equal', adjustable='box')
+        ax.set_xlabel(r"Body-X ($\text{m}$)", fontsize=22)
+        ax.set_ylabel(r"Body-Y ($\text{m}$)", fontsize=22)
+        ax.tick_params(axis='both', which='major', labelsize=20)
+        
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        cb = fig.colorbar(hb, cax=cax)
+        cb.set_label(cbar_label, size=22)
+        cb.ax.tick_params(labelsize=20)
 
+    # fig.subplots_adjust(top=0.92, hspace=0.4)
     pdf_dir = os.path.join(output_dir, "foot_com_positions_body_frame", "heatmap")
     os.makedirs(pdf_dir, exist_ok=True)
     pdf_path = os.path.join(pdf_dir, "foot_com_position_heatmap_body_frame_grid.pdf")
-    fig.savefig(pdf_path, dpi=600)
+    fig.savefig(pdf_path, dpi=600, bbox_inches='tight')
 
     if pickle_dir != "":
         with open(os.path.join(pickle_dir, "foot_com_position_heatmap_body_frame_grid.pickle"), "wb") as f:
@@ -325,33 +328,40 @@ def _plot_body_frame_foot_position_heatmap_grid(foot_positions_body_frame: np.nd
 
     plt.close(fig)
 
-def _plot_body_frame_foot_position_heatmap_single(foot_positions_body_frame: np.ndarray, foot_idx: int, foot_label: str, output_dir: str, pickle_dir: str, bin_count: int = 100, FIGSIZE: tuple[int, int] = (20, 20)):
+def _plot_body_frame_foot_position_heatmap_single(foot_positions_body_frame: np.ndarray, foot_idx: int, foot_label: str, output_dir: str, pickle_dir: str, gridsize: int = 100, FIGSIZE: tuple[int, int] = (20, 20)):
     xy = foot_positions_body_frame[:, foot_idx, :2]
     x, y = xy[:, 0], xy[:, 1]
 
-    x_edges = np.linspace(x.min(), x.max(), bin_count + 1)
-    y_edges = np.linspace(y.min(), y.max(), bin_count + 1)
-    counts, _, _ = np.histogram2d(x, y, bins=[x_edges, y_edges])
-
-    if counts.max() > 0 and counts.max() / counts[counts > 0].min() > 50:
-        counts_display = np.log10(counts + 1)
-        cbar_label = r"$\log_{10}(+1)$"
-    else:
-        counts_display = counts
-        cbar_label = "occupancy"
-
     fig, ax = plt.subplots(figsize=FIGSIZE)
-    im = ax.imshow(counts_display.T, origin="lower", extent=(x_edges[0], x_edges[-1], y_edges[0], y_edges[-1]), aspect="equal", cmap="viridis")
-    fig.colorbar(im, ax=ax, label=cbar_label)
-    ax.set_xlabel(r"Body-X ($\text{m}$)")
-    ax.set_ylabel(r"Body-Y ($\text{m}$)")
-    ax.set_title(f"Foot-position heat-map (body frame) – {foot_label}")
+    ax.set_title(f"Foot-position hexbin (body frame) – {foot_label}", fontsize=28)
+
+    if len(x) == 0:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+    else:
+        hb = ax.hexbin(x, y, gridsize=gridsize, cmap='viridis', mincnt=1)
+        counts = hb.get_array()
+        
+        cbar_label = "Occupancy (samples)"
+        if counts.size > 0 and counts.max() > 10 and (counts.max() / counts.min() > 20):
+            hb.set_norm(colors.LogNorm(vmin=counts.min(), vmax=counts.max()))
+            cbar_label = r"$\log_{10}(\text{Occupancy})$"
+
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        cb = fig.colorbar(hb, cax=cax)
+        cb.set_label(cbar_label, size=22)
+        cb.ax.tick_params(labelsize=20)
+        # ax.set_aspect('equal', adjustable='box')
+
+    ax.set_xlabel(r"Body-X ($\text{m}$)", fontsize=22)
+    ax.set_ylabel(r"Body-Y ($\text{m}$)", fontsize=22)
+    ax.tick_params(axis='both', which='major', labelsize=20)
 
     safe_lbl = foot_label.replace(" ", "_")
     pdf_dir = os.path.join(output_dir, "foot_com_positions_body_frame", "heatmap", safe_lbl.lower())
     os.makedirs(pdf_dir, exist_ok=True)
     pdf_path = os.path.join(pdf_dir, f"foot_position_heatmap_{safe_lbl.lower()}_com.pdf")
-    fig.savefig(pdf_path, dpi=600)
+    fig.savefig(pdf_path, dpi=600, bbox_inches='tight')
     
     if pickle_dir != "":
         with open(os.path.join(pickle_dir, f"foot_com_position_heatmap_{safe_lbl.lower()}.pickle"), "wb") as f:
@@ -393,7 +403,7 @@ def init_animation_worker(shared_queue, foot_positions, contact_state,
 
     # --- Setup the plot objects ONCE per worker ---
     _worker_fig, _worker_ax = plt.subplots(figsize=(8, 6)) # figsize can be parameterized if needed
-    _worker_ax.set_aspect('equal')
+    # _worker_ax.set_aspect('equal')
     _worker_ax.set_xlabel('Body-X (m)')
     _worker_ax.set_ylabel('Body-Y (m)')
     _worker_scatters = [_worker_ax.scatter([], [], s=60, c=c, edgecolor=c, label=lbl)
@@ -768,7 +778,7 @@ def _plot_body_frame_foot_position_xy_overview(
 
     ax.set_xlabel(r"Body-X ($\text{m}$)")
     ax.set_ylabel(r"Body-Y ($\text{m}$)")
-    ax.set_aspect('equal', adjustable='box')
+    # ax.set_aspect('equal', adjustable='box')
     ax.legend()
     ax.grid(True)
 
@@ -813,7 +823,7 @@ def _plot_body_frame_foot_position_xy_single(
     ax.set_title(f"Foot XY Trajectory (body frame) - {foot_label}")
     ax.set_xlabel(r"Body-X ($\text{m}$)")
     ax.set_ylabel(r"Body-Y ($\text{m}$)")
-    ax.set_aspect('equal', adjustable='box')
+    # ax.set_aspect('equal', adjustable='box')
     ax.legend()
     ax.grid(True)
 
@@ -2185,7 +2195,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             )
         )
 
-        foot_heatmap_bin_size = 50 # 2.5cmx2.5cm
+        foot_heatmap_gridsize = 50 # 2.5cmx2.5cm
 
         futures.append(
             executor.submit(
@@ -2194,8 +2204,8 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 foot_labels,
                 output_dir,
                 pickle_dir,
-                bin_count=foot_heatmap_bin_size,
-                FIGSIZE=(20, 20),
+                gridsize=foot_heatmap_gridsize,
+                FIGSIZE=(24, 24),
             )
         )
 
@@ -2208,7 +2218,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                     lbl,
                     output_dir,
                     pickle_dir,
-                    bin_count=foot_heatmap_bin_size,
+                    gridsize=foot_heatmap_gridsize,
                     FIGSIZE=(20, 20),
                 )
             )
@@ -2219,7 +2229,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 foot_positions_body_frame,
                 output_dir,
                 pickle_dir,
-                bin_count=foot_heatmap_bin_size,
+                gridsize=foot_heatmap_gridsize,
                 FIGSIZE=(20, 20),
             )
         )
@@ -2316,7 +2326,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         foot_labels,
         os.path.join(output_dir, "foot_com_positions_body_frame", "foot_com_positions_body_frame_animation.mp4"),
         fps=50,
-        dpi=150 # Explicitly set lower DPI for performance
+        dpi=300
     )
     
     end_time = time.time()
