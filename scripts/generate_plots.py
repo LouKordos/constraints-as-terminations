@@ -1652,6 +1652,264 @@ def _plot_foot_velocity_vs_height_single(
     plt.close(fig)
 
 # ----------------------------------------------------------------------------------------------------------------------
+# Joint Phase Plots
+# ----------------------------------------------------------------------------------------------------------------------
+
+def _plot_joint_phase_overview(
+    data_x: np.ndarray,
+    data_y: np.ndarray,
+    foot_labels: list[str],
+    xlabel: str,
+    ylabel: str,
+    title: str,
+    output_dir: str,
+    pickle_dir: str,
+    FIGSIZE: tuple[int, int] = (12, 12),
+    gridsize: int = 100
+):
+    """Generates an overview hexbin plot for joint phase data."""
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.set_title(title, fontsize=28)
+
+    x_flat = data_x.flatten()
+    y_flat = data_y.flatten()
+
+    if len(x_flat) == 0:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+    else:
+        hb = ax.hexbin(x_flat, y_flat, gridsize=gridsize, cmap='viridis', mincnt=1)
+        counts = hb.get_array()
+        
+        cbar_label = "Occupancy (samples)"
+        if counts.size > 0 and counts.max() > 10 and (counts.max() / (counts.min() + 1e-9) > 20):
+            hb.set_norm(colors.LogNorm(vmin=max(1, counts.min()), vmax=counts.max()))
+            cbar_label = r"$\log_{10}(\text{Occupancy})$"
+
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        cb = fig.colorbar(hb, cax=cax)
+        cb.set_label(cbar_label, size=22)
+        cb.ax.tick_params(labelsize=20)
+
+    ax.set_xlabel(xlabel, fontsize=22)
+    ax.set_ylabel(ylabel, fontsize=22)
+    ax.tick_params(axis='both', which='major', labelsize=20)
+    ax.grid(True)
+
+    os.makedirs(output_dir, exist_ok=True)
+    pdf_path = os.path.join(output_dir, "overview.pdf")
+    fig.savefig(pdf_path, dpi=600, bbox_inches='tight')
+    
+    if pickle_dir:
+        os.makedirs(pickle_dir, exist_ok=True)
+        with open(os.path.join(pickle_dir, "overview.pickle"), "wb") as f:
+            pickle.dump(fig, f)
+    plt.close(fig)
+
+
+def _plot_joint_phase_grid(
+    data_x: np.ndarray,
+    data_y: np.ndarray,
+    foot_labels: list[str],
+    xlabel: str,
+    ylabel: str,
+    title: str,
+    output_dir: str,
+    pickle_dir: str,
+    FIGSIZE: tuple[int, int] = (20, 20),
+    gridsize: int = 100
+):
+    """Generates a 2x2 grid of hexbin plots for joint phase data."""
+    fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
+    fig.suptitle(title, fontsize=30)
+
+    for i, (ax, lbl) in enumerate(zip(axes.flat, foot_labels)):
+        x = data_x[:, i]
+        y = data_y[:, i]
+
+        ax.set_title(lbl, fontsize=26)
+        if len(x) == 0:
+            ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+            continue
+
+        hb = ax.hexbin(x, y, gridsize=gridsize, cmap='viridis', mincnt=1)
+        counts = hb.get_array()
+        
+        cbar_label = "Occupancy (samples)"
+        if counts.size > 0 and counts.max() > 10 and (counts.max() / (counts.min() + 1e-9) > 20):
+            hb.set_norm(colors.LogNorm(vmin=max(1, counts.min()), vmax=counts.max()))
+            cbar_label = r"$\log_{10}(\text{Occupancy})$"
+
+        ax.set_xlabel(xlabel, fontsize=22)
+        ax.set_ylabel(ylabel, fontsize=22)
+        ax.tick_params(axis='both', which='major', labelsize=20)
+        ax.grid(True)
+
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        cb = fig.colorbar(hb, cax=cax)
+        cb.set_label(cbar_label, size=22)
+        cb.ax.tick_params(labelsize=20)
+
+    os.makedirs(output_dir, exist_ok=True)
+    pdf_path = os.path.join(output_dir, "grid.pdf")
+    fig.savefig(pdf_path, dpi=600, bbox_inches='tight')
+
+    if pickle_dir:
+        os.makedirs(pickle_dir, exist_ok=True)
+        with open(os.path.join(pickle_dir, "grid.pickle"), "wb") as f:
+            pickle.dump(fig, f)
+    plt.close(fig)
+
+
+def _plot_joint_phase_single(
+    data_x: np.ndarray,
+    data_y: np.ndarray,
+    foot_label: str,
+    xlabel: str,
+    ylabel: str,
+    title: str,
+    output_dir: str,
+    pickle_dir: str,
+    FIGSIZE: tuple[int, int] = (12, 12),
+    gridsize: int = 100
+):
+    """Generates a single hexbin plot for joint phase data for one foot."""
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.set_title(f"{title} - {foot_label}", fontsize=28)
+
+    if len(data_x) == 0:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+    else:
+        hb = ax.hexbin(data_x, data_y, gridsize=gridsize, cmap='viridis', mincnt=1)
+        counts = hb.get_array()
+        
+        cbar_label = "Occupancy (samples)"
+        if counts.size > 0 and counts.max() > 10 and (counts.max() / (counts.min() + 1e-9) > 20):
+            hb.set_norm(colors.LogNorm(vmin=max(1, counts.min()), vmax=counts.max()))
+            cbar_label = r"$\log_{10}(\text{Occupancy})$"
+
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        cb = fig.colorbar(hb, cax=cax)
+        cb.set_label(cbar_label, size=22)
+        cb.ax.tick_params(labelsize=20)
+
+    ax.set_xlabel(xlabel, fontsize=22)
+    ax.set_ylabel(ylabel, fontsize=22)
+    ax.tick_params(axis='both', which='major', labelsize=20)
+    ax.grid(True)
+
+    safe_lbl = foot_label.replace(" ", "_").lower()
+    os.makedirs(output_dir, exist_ok=True)
+    pdf_path = os.path.join(output_dir, f"single_{safe_lbl}.pdf")
+    fig.savefig(pdf_path, dpi=600, bbox_inches='tight')
+    
+    if pickle_dir:
+        os.makedirs(pickle_dir, exist_ok=True)
+        with open(os.path.join(pickle_dir, f"single_{safe_lbl}.pickle"), "wb") as f:
+            pickle.dump(fig, f)
+    plt.close(fig)
+
+def _plot_joint_phase_line_overview(
+    data_x: np.ndarray,
+    data_y: np.ndarray,
+    foot_labels: list[str],
+    xlabel: str,
+    ylabel: str,
+    title: str,
+    output_dir: str,
+    pickle_dir: str,
+    FIGSIZE: tuple[int, int] = (20, 20)
+):
+    """Generates an overview line plot for joint phase data."""
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.set_title(title, fontsize=28)
+
+    for i, lbl in enumerate(foot_labels):
+        ax.plot(data_x[:, i], data_y[:, i], label=lbl, alpha=0.7)
+
+    ax.set_xlabel(xlabel, fontsize=22)
+    ax.set_ylabel(ylabel, fontsize=22)
+    ax.tick_params(axis='both', which='major', labelsize=20)
+    ax.grid(True)
+    ax.legend()
+
+    os.makedirs(output_dir, exist_ok=True)
+    pdf_path = os.path.join(output_dir, "overview_line.pdf")
+    fig.savefig(pdf_path, dpi=600, bbox_inches='tight')
+    
+    if pickle_dir:
+        os.makedirs(pickle_dir, exist_ok=True)
+        with open(os.path.join(pickle_dir, "overview_line.pickle"), "wb") as f:
+            pickle.dump(fig, f)
+    plt.close(fig)
+
+def _plot_joint_phase_line_grid(
+    data_x: np.ndarray,
+    data_y: np.ndarray,
+    foot_labels: list[str],
+    xlabel: str,
+    ylabel: str,
+    title: str,
+    output_dir: str,
+    pickle_dir: str,
+    FIGSIZE: tuple[int, int] = (20, 20)
+):
+    """Generates a 2x2 grid of line plots for joint phase data."""
+    fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
+    fig.suptitle(title, fontsize=30)
+
+    for i, (ax, lbl) in enumerate(zip(axes.flat, foot_labels)):
+        ax.plot(data_x[:, i], data_y[:, i], alpha=0.7)
+        ax.set_title(lbl, fontsize=26)
+        ax.set_xlabel(xlabel, fontsize=22)
+        ax.set_ylabel(ylabel, fontsize=22)
+        ax.tick_params(axis='both', which='major', labelsize=20)
+        ax.grid(True)
+
+    os.makedirs(output_dir, exist_ok=True)
+    pdf_path = os.path.join(output_dir, "grid_line.pdf")
+    fig.savefig(pdf_path, dpi=600, bbox_inches='tight')
+
+    if pickle_dir:
+        os.makedirs(pickle_dir, exist_ok=True)
+        with open(os.path.join(pickle_dir, "grid_line.pickle"), "wb") as f:
+            pickle.dump(fig, f)
+    plt.close(fig)
+
+def _plot_joint_phase_line_single(
+    data_x: np.ndarray,
+    data_y: np.ndarray,
+    foot_label: str,
+    xlabel: str,
+    ylabel: str,
+    title: str,
+    output_dir: str,
+    pickle_dir: str,
+    FIGSIZE: tuple[int, int] = (20, 20)
+):
+    """Generates a single line plot for joint phase data for one foot."""
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.set_title(f"{title} - {foot_label}", fontsize=28)
+    ax.plot(data_x, data_y, alpha=0.7)
+    ax.set_xlabel(xlabel, fontsize=22)
+    ax.set_ylabel(ylabel, fontsize=22)
+    ax.tick_params(axis='both', which='major', labelsize=20)
+    ax.grid(True)
+
+    safe_lbl = foot_label.replace(" ", "_").lower()
+    os.makedirs(output_dir, exist_ok=True)
+    pdf_path = os.path.join(output_dir, f"single_{safe_lbl}_line.pdf")
+    fig.savefig(pdf_path, dpi=600, bbox_inches='tight')
+    
+    if pickle_dir:
+        os.makedirs(pickle_dir, exist_ok=True)
+        with open(os.path.join(pickle_dir, f"single_{safe_lbl}_line.pickle"), "wb") as f:
+            pickle.dump(fig, f)
+    plt.close(fig)
+
+# ----------------------------------------------------------------------------------------------------------------------
 # Main plot generation orchestrator
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -1767,6 +2025,35 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         elif name.startswith('RL_') or name.startswith('HL_'): foot_from_joint.append(2)
         elif name.startswith('RR_') or name.startswith('HR_'): foot_from_joint.append(3)
         else: foot_from_joint.append(None)
+
+    # --- Prepare for Joint Phase Plots ---
+    joint_type_map = {0: "hip", 1: "thigh", 2: "calf"}
+    joint_indices_by_leg_and_type = [[None] * 3 for _ in range(4)]
+    for j, name in enumerate(joint_names):
+        row, col = leg_row[j], leg_col[j]
+        if row is not None and col is not None:
+            joint_indices_by_leg_and_type[row][col] = j
+
+    phase_plot_combinations = [
+        # Positions
+        {"x_type": "thigh", "y_type": "calf", "data_key": "position"},
+        {"x_type": "thigh", "y_type": "hip", "data_key": "position"},
+        {"x_type": "hip", "y_type": "calf", "data_key": "position"},
+        # Velocities
+        {"x_type": "thigh", "y_type": "calf", "data_key": "velocity"},
+        {"x_type": "thigh", "y_type": "hip", "data_key": "velocity"},
+        {"x_type": "hip", "y_type": "calf", "data_key": "velocity"},
+    ]
+
+    data_arrays_for_phase_plots = {
+        "position": joint_positions,
+        "velocity": joint_velocities,
+    }
+    unit_labels_for_phase_plots = {
+        "position": "rad",
+        "velocity": r"rad $\cdot$ s$^{-1}$",
+    }
+    # --- End Prepare for Joint Phase Plots ---
 
     futures = []
     with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
@@ -2314,6 +2601,79 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
 
         # For comparing to new parallel version
         # futures.append(executor.submit(_animate_body_frame_foot_positions, foot_positions_body_frame, contact_state_array, foot_labels, os.path.join(output_dir, "foot_com_positions_body_frame", "OLD_FOR_COMPARISON_foot_com_positions_body_frame_animation.mp4"), fps=50))
+
+        # --- Joint Phase Plots ---
+        for combo in phase_plot_combinations:
+            x_type = combo["x_type"]
+            y_type = combo["y_type"]
+            data_key = combo["data_key"]
+
+            x_col_idx = next(k for k, v in joint_type_map.items() if v == x_type)
+            y_col_idx = next(k for k, v in joint_type_map.items() if v == y_type)
+
+            source_data_array = data_arrays_for_phase_plots[data_key]
+            num_timesteps = source_data_array.shape[0]
+            
+            data_x = np.zeros((num_timesteps, 4))
+            data_y = np.zeros((num_timesteps, 4))
+
+            for i in range(4):  # For each leg
+                x_joint_idx = joint_indices_by_leg_and_type[i][x_col_idx]
+                y_joint_idx = joint_indices_by_leg_and_type[i][y_col_idx]
+                if x_joint_idx is not None and y_joint_idx is not None:
+                    data_x[:, i] = source_data_array[:, x_joint_idx]
+                    data_y[:, i] = source_data_array[:, y_joint_idx]
+
+            unit = unit_labels_for_phase_plots[data_key]
+            data_name = "Angle" if data_key == "position" else "Ang. Vel."
+            
+            xlabel = f"{x_type.capitalize()} {data_name} ({unit})"
+            ylabel = f"{y_type.capitalize()} {data_name} ({unit})"
+            title_prefix = f"{x_type.capitalize()} vs {y_type.capitalize()} Joint {data_name}"
+            
+            # Directories for Hexbin plots
+            hexbin_output_dir = os.path.join(output_dir, "joint_phase_plots", "hexbin", data_key, f"{x_type}_vs_{y_type}")
+            hexbin_pickle_dir = os.path.join(pickle_dir, "joint_phase_plots", "hexbin", data_key, f"{x_type}_vs_{y_type}") if pickle_dir else ""
+
+            # Directories for Line plots
+            line_output_dir = os.path.join(output_dir, "joint_phase_plots", "line", data_key, f"{x_type}_vs_{y_type}")
+            line_pickle_dir = os.path.join(pickle_dir, "joint_phase_plots", "line", data_key, f"{x_type}_vs_{y_type}") if pickle_dir else ""
+
+            # --- Submit Hexbin Plot Jobs ---
+            futures.append(executor.submit(
+                _plot_joint_phase_overview,
+                data_x, data_y, foot_labels, xlabel, ylabel, f"{title_prefix} (All Feet, Hexbin)",
+                hexbin_output_dir, hexbin_pickle_dir, FIGSIZE=(20, 20), gridsize=20
+            ))
+            futures.append(executor.submit(
+                _plot_joint_phase_grid,
+                data_x, data_y, foot_labels, xlabel, ylabel, f"{title_prefix} (Hexbin)",
+                hexbin_output_dir, hexbin_pickle_dir, FIGSIZE=(24, 24), gridsize=20
+            ))
+            for i, label in enumerate(foot_labels):
+                futures.append(executor.submit(
+                    _plot_joint_phase_single,
+                    data_x[:, i], data_y[:, i], label, xlabel, ylabel, title_prefix,
+                    hexbin_output_dir, hexbin_pickle_dir, FIGSIZE=(20, 20), gridsize=20
+                ))
+
+            # --- Submit Line Plot Jobs ---
+            futures.append(executor.submit(
+                _plot_joint_phase_line_overview,
+                data_x, data_y, foot_labels, xlabel, ylabel, f"{title_prefix} (All Feet, Line)",
+                line_output_dir, line_pickle_dir, FIGSIZE=(20, 20)
+            ))
+            futures.append(executor.submit(
+                _plot_joint_phase_line_grid,
+                data_x, data_y, foot_labels, xlabel, ylabel, f"{title_prefix} (Line)",
+                line_output_dir, line_pickle_dir, FIGSIZE=(24, 24)
+            ))
+            for i, label in enumerate(foot_labels):
+                futures.append(executor.submit(
+                    _plot_joint_phase_line_single,
+                    data_x[:, i], data_y[:, i], label, xlabel, ylabel, title_prefix,
+                    line_output_dir, line_pickle_dir, FIGSIZE=(20, 20)
+                ))
 
         # Ensure all tasks complete
         for f in futures:
