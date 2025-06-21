@@ -12,7 +12,14 @@ from concurrent.futures import ProcessPoolExecutor
 import matplotlib.animation as animation
 import scienceplots
 import time
-
+import queue
+import warnings
+import subprocess
+import io
+import shutil
+import multiprocessing
+from multiprocessing import Pool, Manager, cpu_count
+from functools import partial
 plt.style.use(['science','ieee'])
 
 plt.rcParams.update({
@@ -352,8 +359,192 @@ def _plot_body_frame_foot_position_heatmap_single(foot_positions_body_frame: np.
 
     plt.close(fig)
 
+def generate_frame_to_buffer(k: int, frame_queue, data: dict):
+    """
+    Generates a single frame and puts its raw byte data into a shared queue.
+    The data is a tuple: (frame_index, frame_bytes).
+    """
+    try:
+        # Unpack the data dictionary
+        foot_positions_body_frame = data['foot_positions']
+        contact_state_array = data['contact_state']
+        foot_labels = data['foot_labels']
+        colours = data['colours']
+        xlims = data['xlims']
+        ylims = data['ylims']
+        dpi = data['dpi']
+
+        # --- Setup the plot (must be done in each process) ---
+        # Set a specific figure size (e.g., 8x6 inches)
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.set_aspect('equal')
+        ax.set_xlabel('Body-X (m)')
+        ax.set_ylabel('Body-Y (m)')
+        ax.set_title(f'Foot Trajectories (Body Frame) - Frame {k}')
+        scatters = [ax.scatter([], [], s=60, c=c, edgecolor=c, label=lbl) for c, lbl in zip(colours, foot_labels)]
+        ax.legend(loc='upper right')
+        ax.set_xlim(xlims)
+        ax.set_ylim(ylims)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            fig.tight_layout()
+
+        # --- Animate the specific frame k ---
+        for i, sc in enumerate(scatters):
+            xy = foot_positions_body_frame[k, i, :2].reshape(1, 2)
+            sc.set_offsets(xy)
+            if contact_state_array[k, i]:
+                sc.set_facecolor(colours[i])
+            else:
+                sc.set_facecolor('none')
+            sc.set_edgecolor(colours[i])
+
+        # --- Save the figure to an in-memory buffer ---
+        with io.BytesIO() as buf:
+            fig.savefig(buf, format='png', dpi=dpi)
+            buf.seek(0)
+            frame_bytes = buf.getvalue()
+
+        plt.close(fig)  # Crucial to free memory in the worker process
+
+        # Put the frame index and its data onto the queue
+        frame_queue.put((k, frame_bytes))
+
+    except Exception as e:
+        # Ensure errors in workers are reported
+        print(f"Error in worker for frame {k}: {e}")
+        frame_queue.put((k, None)) # Signal failure for this frame
+
+
+def _animate_body_frame_pipe_to_ffmpeg(foot_positions_body_frame: np.ndarray, contact_state_array: np.ndarray, foot_labels: list[str], output_path: str, fps: int = 30, dpi: int = 300):
+    """
+    Maximally efficient animation generation using a producer-consumer pipeline:
+    1. Parallel frame rendering to in-memory buffers (producers).
+    2. A single FFmpeg process consumes frames via stdin (consumer).
+    3. GPU-accelerated H.265 (HEVC) encoding with FFmpeg (NVENC).
+    """
+    T = foot_positions_body_frame.shape[0]
+    colours = ['red', 'blue', 'green', 'purple']
+
+    # --- 1. Start the FFmpeg Consumer Process ---
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    # FFmpeg command to read PNG image data from stdin
+    ffmpeg_cmd = [
+        'ffmpeg',
+        '-r', str(fps),                       # Frame rate of the input stream
+        '-f', 'image2pipe',                   # Tell FFmpeg to expect a stream of images
+        '-vcodec', 'png',                     # The codec of the images in the pipe is PNG
+        '-i', '-',                            # The input is stdin ('-')
+        '-c:v', 'hevc_nvenc',                 # VIDEO CODEC: H.265 (HEVC) with NVIDIA Acceleration
+        '-preset', 'p1',                      # PRESET: p7 is fastest, p1 is best quality
+        '-pix_fmt', 'yuv420p',                # Pixel format for compatibility
+        '-y',                                 # Overwrite output file if it exists
+        output_path
+    ]
+
+    # Popen starts the process without blocking, allowing us to feed it data.
+    ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # --- 2. Setup the Producer Pool and Shared Queue ---
+    # A Manager queue can be shared between processes
+    manager = Manager()
+    frame_queue = manager.Queue()
+
+    # Pre-calculate rendering data to pass to all workers
+    x_min, x_max = np.min(foot_positions_body_frame[:, :, 0]), np.max(foot_positions_body_frame[:, :, 0])
+    y_min, y_max = np.min(foot_positions_body_frame[:, :, 1]), np.max(foot_positions_body_frame[:, :, 1])
+    padding = 0.05
+    render_data = {
+        'foot_positions': foot_positions_body_frame, 'contact_state': contact_state_array,
+        'foot_labels': foot_labels, 'colours': colours,
+        'xlims': (x_min - padding, x_max + padding), 'ylims': (y_min - padding, y_max + padding),
+        'dpi': dpi
+    }
+
+    num_processes = cpu_count()
+    print(f"Starting frame generation with {num_processes} worker processes for {T} frames...")
+    
+    # Use partial to pre-fill arguments for the worker function
+    worker_func = partial(generate_frame_to_buffer, frame_queue=frame_queue, data=render_data)
+
+    with Pool(processes=num_processes) as pool:
+        # Dispatch all jobs asynchronously to the pool. This is non-blocking.
+        pool.map_async(worker_func, range(T))
+
+        # --- 3. Orchestrator Loop: Re-order and Pipe Frames to FFmpeg ---
+        print("Starting to pipe frames to FFmpeg...")
+        frames_written = 0
+        next_frame_to_write = 0
+        reorder_buffer = {} # Holds out-of-order frames
+
+        while frames_written < T:
+            try:
+                # Get the next available frame from the queue
+                k, frame_bytes = frame_queue.get(timeout=300) # Add a timeout to prevent infinite hangs
+
+                if frame_bytes is None:
+                    print(f"Worker failed on frame {k}, skipping.")
+                    k = -1 # Mark as processed
+                else:
+                    reorder_buffer[k] = frame_bytes
+
+                # Write all consecutive frames that are now available
+                while next_frame_to_write in reorder_buffer:
+                    frame_to_write = reorder_buffer.pop(next_frame_to_write)
+                    try:
+                        ffmpeg_process.stdin.write(frame_to_write)
+                    except (IOError, BrokenPipeError):
+                        print("FFmpeg process closed pipe unexpectedly. Aborting.")
+                        # Abort the loop if ffmpeg crashes
+                        frames_written = T
+                        break
+
+                    frames_written += 1
+                    next_frame_to_write += 1
+                
+                if frames_written % 100 == 0 and frames_written > 0:
+                     print(f"  ... {frames_written} / {T} frames piped.")
+            
+            except queue.Empty:
+                print("Queue is empty and workers seem to be finished, but not all frames were written. Something went wrong.")
+                break
+        
+        print("All frames have been sent to FFmpeg.")
+
+    # --- 4. Finalize and Clean Up ---
+    # Communicate to read stdout/stderr and wait for process to finish.
+    # communicate() will close stdin itself.
+    try:
+        _stdout, _stderr = ffmpeg_process.communicate(timeout=100)
+    except subprocess.TimeoutExpired:
+        ffmpeg_process.kill()
+        _stdout, _stderr = ffmpeg_process.communicate()
+        print("\n--- FFMPEG TIMED OUT ---")
+        print(f"FFmpeg command: {' '.join(ffmpeg_cmd)}")
+        if _stderr:
+            print(f"FFmpeg stderr (on timeout):\n{_stderr.decode('utf-8', errors='ignore')}")
+        return # Exit if timed out
+
+    ret_code = ffmpeg_process.returncode
+    
+    # Check for errors
+    if ret_code != 0:
+        print("\n--- FFMPEG FAILED ---")
+        print(f"FFmpeg command: {' '.join(ffmpeg_cmd)}")
+        if _stderr:
+            error_output = _stderr.decode('utf-8', errors='ignore')
+            print(f"FFmpeg stderr:\n{error_output}")
+    else:
+        print(f"\nSuccessfully created animation at: {output_path}")
+        if _stderr: # FFmpeg can sometimes output warnings to stderr even on success
+            error_output = _stderr.decode('utf-8', errors='ignore')
+            if error_output.strip():
+                print(f"FFmpeg stderr (success with warnings):\n{error_output}")
+
 def _animate_body_frame_foot_positions(foot_positions_body_frame: np.ndarray, contact_state_array: np.ndarray, foot_labels: list[str], output_path: str, fps: int = 30):
     """
+    [DEPRECATED] Use _animate_body_frame_pipe_to_ffmpeg for a much faster, parallelized implementation.
     Top-down animation of body-frame foot XY positions.
     - filled marker : stance / contact
     - hollow marker : swing / air
@@ -1459,8 +1650,6 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
 
     futures = []
     with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
-        # futures.append(executor.submit(_animate_body_frame_foot_positions, foot_positions_body_frame, contact_state_array, foot_labels, os.path.join(output_dir, "foot_com_positions_body_frame", "foot_com_positions_body_frame_animation.mp4"), fps=20))
-        
         # 1) Foot contact-force per-foot grid
         futures.append(
             executor.submit(
@@ -2003,10 +2192,16 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 )
             )
 
+        # For comparing to new parallel version
+        # futures.append(executor.submit(_animate_body_frame_foot_positions, foot_positions_body_frame, contact_state_array, foot_labels, os.path.join(output_dir, "foot_com_positions_body_frame", "OLD_FOR_COMPARISON_foot_com_positions_body_frame_animation.mp4"), fps=50))
+
         # Ensure all tasks complete
         for f in futures:
             f.result()
 
+    # This one is not wrapped in a future since it manages its own process pool internally
+    _animate_body_frame_pipe_to_ffmpeg(foot_positions_body_frame, contact_state_array, foot_labels, os.path.join(output_dir, "foot_com_positions_body_frame", "foot_com_positions_body_frame_animation.mp4"), fps=50)
+    
     end_time = time.time()
     print(f"Plot generation took {(end_time-start_time):.4f} seconds.")
 
@@ -2016,6 +2211,14 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         plt.show()
 
 def main():
+    # Set the multiprocessing start method to 'spawn' for cleaner process creation,
+    # which helps avoid deadlocks with subprocesses like FFmpeg.
+    try:
+        multiprocessing.set_start_method('spawn', force=True)
+    except RuntimeError:
+        # The start method can only be set once.
+        pass
+
     parser = argparse.ArgumentParser(description="Regenerate plots from saved simulation data.")
     parser.add_argument("--data_file", type=str, required=True,
                         help="Path to the .npz file containing recorded sim data.")
