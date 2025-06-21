@@ -428,6 +428,8 @@ def _animate_body_frame_pipe_to_ffmpeg(foot_positions_body_frame: np.ndarray, co
 
     # --- 1. Start the FFmpeg Consumer Process ---
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    start_time = time.time()
     
     # FFmpeg command to read PNG image data from stdin
     ffmpeg_cmd = [
@@ -439,6 +441,7 @@ def _animate_body_frame_pipe_to_ffmpeg(foot_positions_body_frame: np.ndarray, co
         '-c:v', 'hevc_nvenc',                 # VIDEO CODEC: H.265 (HEVC) with NVIDIA Acceleration
         '-preset', 'p1',                      # PRESET: p7 is fastest, p1 is best quality
         '-pix_fmt', 'yuv420p',                # Pixel format for compatibility
+        '-loglevel', 'error',                 # Suppress verbose frame-by-frame logging to stderr
         '-y',                                 # Overwrite output file if it exists
         output_path
     ]
@@ -470,53 +473,94 @@ def _animate_body_frame_pipe_to_ffmpeg(foot_positions_body_frame: np.ndarray, co
 
     with Pool(processes=num_processes) as pool:
         # Dispatch all jobs asynchronously to the pool. This is non-blocking.
-        pool.map_async(worker_func, range(T))
+        async_result = pool.map_async(worker_func, range(T))
 
         # --- 3. Orchestrator Loop: Re-order and Pipe Frames to FFmpeg ---
         print("Starting to pipe frames to FFmpeg...")
-        frames_written = 0
+        frames_processed_count = 0 # Counts frames either successfully written or acknowledged as failed
+        frames_actually_written_to_pipe = 0
         next_frame_to_write = 0
-        reorder_buffer = {} # Holds out-of-order frames
+        reorder_buffer = {} # Holds out-of-order frames (frame_index: frame_bytes | None)
 
-        while frames_written < T:
+        # Loop until all T frames have been processed (either written or acknowledged as failed)
+        while frames_processed_count < T:
             try:
-                # Get the next available frame from the queue
-                k, frame_bytes = frame_queue.get(timeout=300) # Add a timeout to prevent infinite hangs
+                # Get the next available frame data from the queue
+                # Timeout helps detect if workers hang or if queue logic is flawed
+                k, frame_bytes = frame_queue.get(timeout=T * 0.5)
 
-                if frame_bytes is None:
-                    print(f"Worker failed on frame {k}, skipping.")
-                    k = -1 # Mark as processed
-                else:
-                    reorder_buffer[k] = frame_bytes
+                reorder_buffer[k] = frame_bytes # Store frame_bytes (or None if failed)
 
-                # Write all consecutive frames that are now available
+                # Attempt to write all consecutive frames that are now available
                 while next_frame_to_write in reorder_buffer:
-                    frame_to_write = reorder_buffer.pop(next_frame_to_write)
-                    try:
-                        ffmpeg_process.stdin.write(frame_to_write)
-                    except (IOError, BrokenPipeError):
-                        print("FFmpeg process closed pipe unexpectedly. Aborting.")
-                        # Abort the loop if ffmpeg crashes
-                        frames_written = T
-                        break
+                    current_frame_bytes = reorder_buffer.pop(next_frame_to_write)
+                    
+                    if current_frame_bytes is not None: # Successfully rendered frame
+                        try:
+                            ffmpeg_process.stdin.write(current_frame_bytes)
+                            frames_actually_written_to_pipe +=1
+                        except (IOError, BrokenPipeError):
+                            print(f"FFmpeg process closed pipe unexpectedly while writing frame {next_frame_to_write}. Aborting.")
+                            # Ensure outer loop terminates if FFmpeg crashes
+                            frames_processed_count = T
+                            break # Break from inner write loop
+                    else: # Frame failed to render
+                        print(f"Skipping failed frame {next_frame_to_write} (not writing to FFmpeg).")
 
-                    frames_written += 1
+                    frames_processed_count += 1 # Increment for every frame index handled
                     next_frame_to_write += 1
                 
-                if frames_written % 100 == 0 and frames_written > 0:
-                     print(f"  ... {frames_written} / {T} frames piped.")
+                if frames_processed_count % 100 == 0 and frames_processed_count > 0:
+                     print(f"  ... {frames_processed_count} / {T} frames processed ({frames_actually_written_to_pipe} written to FFmpeg).")
             
             except queue.Empty:
-                print("Queue is empty and workers seem to be finished, but not all frames were written. Something went wrong.")
-                break
-        
-        print("All frames have been sent to FFmpeg.")
+                # This might happen if workers are slower than the timeout or if all workers finished
+                # but not all frames were accounted for (e.g., due to an earlier error).
+                # The async_result.get() below will catch worker errors.
+                print("Frame queue is empty. Checking if all workers have completed...")
+                if async_result.ready(): # Check if all tasks in map_async are done
+                    if frames_processed_count < T:
+                        print(f"Warning: Queue empty and workers finished, but only {frames_processed_count}/{T} frames processed.")
+                    break # Exit orchestrator loop; rely on async_result.get() for final status
+                else:
+                    print("Workers still running, continuing to wait for frames...")
+                    # Continue waiting, the timeout on queue.get() will trigger again if needed.
+            
+            if frames_processed_count == T and next_frame_to_write != T:
+                 # This case handles if the last frames were failures and reorder_buffer is now empty
+                 # but next_frame_to_write hasn't reached T yet.
+                 print(f"All {T} frames processed. Some later frames might have failed.")
+                 break
 
-    # --- 4. Finalize and Clean Up ---
-    # Communicate to read stdout/stderr and wait for process to finish.
-    # communicate() will close stdin itself.
+        print(f"Orchestrator loop finished. {frames_processed_count}/{T} frames processed. {frames_actually_written_to_pipe} frames written to FFmpeg.")
+        # Ensure all worker processes have completed and handle any exceptions from them.
+        # This is crucial for robust error handling and proper pool shutdown.
+        pool.close() # Signal that no more tasks will be submitted to this pool.
+        print("Waiting for all frame generation tasks to complete...")
+        try:
+            worker_completion_timeout = T * 0.5
+            async_result.get(timeout=worker_completion_timeout)
+            print("All frame generation tasks completed successfully.")
+        except multiprocessing.TimeoutError:
+            print(f"Timeout waiting for worker processes to complete after {worker_completion_timeout}s. Some frames may not have been generated.")
+        except Exception as e:
+            print(f"An error occurred in one of the worker processes: {e}")
+        
+        pool.join() # Wait for all worker processes to terminate.
+        print("Worker pool joined.")
+
+    # --- 4. Finalize and Clean Up FFmpeg ---
+    # ffmpeg_process.stdin was written to by the orchestrator loop.
+    # We don't need to explicitly close it here if we are using communicate(),
+    # as communicate() will handle closing stdin after sending its (optional) input.
+    # Since we are passing no new input to communicate(), it should close stdin.
+
+    print("Attempting to communicate with FFmpeg (finalize encoding)...")
     try:
-        _stdout, _stderr = ffmpeg_process.communicate(timeout=100)
+        # Communicate will read remaining stdout/stderr and wait for process termination.
+        # Timeout should be sufficient for FFmpeg to finish encoding the already piped frames.
+        ffmpeg_timeout = T * 0.2
+        _stdout, _stderr = ffmpeg_process.communicate(timeout=ffmpeg_timeout)
     except subprocess.TimeoutExpired:
         ffmpeg_process.kill()
         _stdout, _stderr = ffmpeg_process.communicate()
@@ -536,7 +580,8 @@ def _animate_body_frame_pipe_to_ffmpeg(foot_positions_body_frame: np.ndarray, co
             error_output = _stderr.decode('utf-8', errors='ignore')
             print(f"FFmpeg stderr:\n{error_output}")
     else:
-        print(f"\nSuccessfully created animation at: {output_path}")
+        end_time = time.time()
+        print(f"\nSuccessfully created animation with avg fps={(T / (end_time - start_time)):.4f} at: {output_path}")
         if _stderr: # FFmpeg can sometimes output warnings to stderr even on success
             error_output = _stderr.decode('utf-8', errors='ignore')
             if error_output.strip():
