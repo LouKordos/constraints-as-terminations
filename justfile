@@ -7,7 +7,7 @@ train num_envs="7500":
     python scripts/clean_rl/train.py --task=CaT-Go2-Rough-Terrain-v0 --headless --num_envs={{num_envs}} 2>&1 | tee ./logs/clean_rl/train-$(date +"%Y-%m-%d-%H:%M:%S").log
 
 eval run_dir *flags:
-    systemd-run --scope --user -p MemoryMax=40G python scripts/eval.py --task=CaT-Go2-Rough-Terrain-Play-v0 --headless --run_dir={{run_dir}} {{flags}}
+    systemd-run --scope --user -p MemoryMax=45G python scripts/eval.py --task=CaT-Go2-Rough-Terrain-Play-v0 --headless --run_dir={{run_dir}} {{flags}}
 
 eval-all logs_root_dir num_parallel_jobs *flags:
     @# Check for GNU parallel
