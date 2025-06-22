@@ -8,13 +8,24 @@ import json
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
 import matplotlib.animation as animation
 import matplotlib.colors as colors
 import scienceplots
 import time
 import queue
-from tqdm import tqdm
+from rich.console import Console
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    TimeElapsedColumn,
+    TaskProgressColumn,
+    MofNCompleteColumn,
+)
+from rich.live import Live
+from rich.table import Table
 import warnings
 import subprocess
 import io
@@ -92,27 +103,13 @@ def timeout(seconds):
 def timed_job_wrapper(func, plot_name, job_timeout_seconds, *args, **kwargs):
     """
     A wrapper that times a function's execution and applies a timeout.
-    It prints start/end/fail messages from the worker process.
-    The initial newline helps prevent overwriting the tqdm progress bar.
+    Exceptions are propagated to the main process to be handled by the progress manager.
     """
-    print(f"\n[START] Generating: {plot_name}")
-    start_time = time.time()
     try:
         # Apply the timeout decorator to the function before executing it
         timed_func = timeout(seconds=job_timeout_seconds)(func)
-        result = timed_func(*args, **kwargs)
-        end_time = time.time()
-        duration = end_time - start_time
-        print(f"[DONE] Finished '{plot_name}' in {duration:.2f}s.")
-        return result
+        return timed_func(*args, **kwargs)
     except (Exception, JobTimeoutError) as e:
-        end_time = time.time()
-        duration = end_time - start_time
-        # Check if it was a timeout or another exception
-        if isinstance(e, JobTimeoutError):
-            print(f"[TIMEOUT] '{plot_name}' timed out after {duration:.2f}s.")
-        else:
-            print(f"[FAILED] '{plot_name}' failed after {duration:.2f}s.")
         # Re-raise the exception to be handled by the main process loop
         raise e
 
@@ -2793,13 +2790,13 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         )
 
         # Hist overview per joint metric
-        for metric_name, data_arr in metrics.items():
-            submit_timed_job(
-                executor, futures_map, f"Joint metric histogram (overview): {metric_name}",
-                _plot_hist_joint_metric_overview, job_timeout_seconds,
-                metric_name, data_arr, joint_names,
-                metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE
-            )
+        # for metric_name, data_arr in metrics.items():
+        #     submit_timed_job(
+        #         executor, futures_map, f"Joint metric histogram (overview): {metric_name}",
+        #         _plot_hist_joint_metric_overview, job_timeout_seconds,
+        #         metric_name, data_arr, joint_names,
+        #         metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE
+        #     )
 
         # Hist contact forces overview
         submit_timed_job(
@@ -3412,20 +3409,90 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         box_mag_ylabel = f"Velocity {comp_label_mag} (m/s)"
         submit_timed_job(executor, futures_map, "Stance foot velocity magnitude box plot (overview, world_frame)", _plot_box_metric_overview, job_timeout_seconds, stance_only_mag_data_dict, f"{box_mag_title} Overview", box_mag_ylabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE)
 
-        # Process futures as they complete
-        with tqdm(total=len(futures_map), desc="Generating plots") as pbar:
+        console = Console()
+        if console.is_terminal:
+            # --- Rich-based concurrent progress tracking for interactive terminals ---
+            overall_progress = Progress(TextColumn("[bold blue]Generating plots"), BarColumn(), MofNCompleteColumn(), console=console)
+            job_progress = Progress(SpinnerColumn(), TextColumn("{task.description}"), TimeElapsedColumn(), console=console)
+
+            progress_table = Table.grid(expand=True)
+            progress_table.add_row(overall_progress)
+            progress_table.add_row(job_progress)
+            
+            job_results = []
+            with Live(progress_table, console=console, screen=True, redirect_stderr=False, refresh_per_second=12) as live:
+                overall_task = overall_progress.add_task("Total", total=len(futures_map))
+                active_futures = list(futures_map.keys())
+                tasks = {future: (job_progress.add_task(name, total=1), time.time()) for future, name in futures_map.items()}
+
+                num_complete = 0
+                while num_complete < len(futures_map):
+                    done, active_futures = wait(active_futures, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        task_id, start_time = tasks[future]
+                        plot_name = futures_map[future]
+                        duration = time.time() - start_time
+                        
+                        status = ""
+                        error_msg = None
+                        try:
+                            future.result()
+                            status = "[green]✓ Done[/green]"
+                        except JobTimeoutError as e:
+                            status = "[yellow]✗ Timeout[/yellow]"
+                            error_msg = str(e)
+                        except Exception as e:
+                            status = "[red]✗ Failed[/red]"
+                            error_msg = str(e)
+                        finally:
+                            job_results.append({"name": plot_name, "duration": duration, "status": status, "error": error_msg})
+                            job_progress.remove_task(task_id)
+                            overall_progress.update(overall_task, advance=1)
+                            num_complete += 1
+            
+            # --- Print results after the live display is finished ---
+            console.print("\n[bold underline]Job Execution Summary[/bold underline]")
+            for result in sorted(job_results, key=lambda x: x['name']):
+                console.print(f"{result['status']:<18} [bold]{result['name']}[/bold] ({result['duration']:.2f}s)")
+                if result['error']:
+                    console.print(f"  [dim red]└─ Error: {result['error']}[/dim red]")
+
+            console.print("\n[bold underline]Top 10 Longest Running Jobs[/bold underline]")
+            for result in sorted(job_results, key=lambda x: x['duration'], reverse=True)[:10]:
+                 console.print(f"• {result['duration']:.2f}s - [bold]{result['name']}[/bold]")
+
+        else:
+            # --- Simple print-based logging for non-interactive environments (e.g., log files) ---
+            console.log(f"Starting plot generation for {len(futures_map)} plots...")
+            results = []
             for future in as_completed(futures_map):
                 plot_name = futures_map[future]
-                pbar.set_description(f"Processing: {plot_name}")
+                start_time = time.time()
                 try:
-                    future.result()  # We now raise exceptions from the wrapper
+                    future.result()
+                    duration = time.time() - start_time
+                    results.append({"name": plot_name, "duration": duration, "status": "DONE"})
+                    console.log(f"[DONE] '{plot_name}' in {duration:.2f}s")
+                except JobTimeoutError:
+                    duration = time.time() - start_time
+                    results.append({"name": plot_name, "duration": duration, "status": "TIMEOUT"})
+                    console.log(f"[TIMEOUT] '{plot_name}' after {duration:.2f}s")
                 except Exception as e:
-                    # The error is already printed by the wrapper, but we can log it again here if needed.
-                    # The main purpose of this block is to ensure the loop continues.
-                    print(f"✗ Main loop caught error for '{plot_name}': {type(e).__name__}")
-                finally:
-                    # CRITICAL: Update the progress bar regardless of success or failure
-                    pbar.update(1)
+                    duration = time.time() - start_time
+                    results.append({"name": plot_name, "duration": duration, "status": "FAILED", "error": str(e)})
+                    console.log(f"[FAILED] '{plot_name}' after {duration:.2f}s. Error: {e}")
+            
+            # Final summary for log files
+            console.log("\n--- Execution Summary ---")
+            for result in sorted(results, key=lambda x: x['name']):
+                log_msg = f"{result['status']}: {result['name']} ({result['duration']:.2f}s)"
+                if "error" in result:
+                    log_msg += f" | Error: {result['error']}"
+                console.log(log_msg)
+
+            console.log("\n--- Top 10 Longest Running Jobs ---")
+            for result in sorted(results, key=lambda x: x['duration'], reverse=True)[:10]:
+                console.log(f"{result['duration']:.2f}s - {result['name']}")
 
     end_time = time.time()
     print(f"Plot generation took {(end_time-start_time):.4f} seconds.")
