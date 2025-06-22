@@ -115,8 +115,9 @@ def timed_job_wrapper(func, plot_name, job_timeout_seconds, *args, **kwargs):
 
 def submit_timed_job(executor, futures_map, plot_name, func, job_timeout_seconds, *args, **kwargs):
     """Wraps a function with a timer and timeout, then submits it to the executor."""
+    submission_time = time.time()
     future = executor.submit(timed_job_wrapper, func, plot_name, job_timeout_seconds, *args, **kwargs)
-    futures_map[future] = plot_name
+    futures_map[future] = (plot_name, submission_time) # Store plot_name and its submission time
 def load_data(npz_path, summary_path=None):
     """
     Load simulation data from a .npz file.
@@ -3424,15 +3425,19 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             with Live(progress_table, console=console, screen=True, redirect_stderr=False, refresh_per_second=12) as live:
                 overall_task = overall_progress.add_task("Total", total=len(futures_map))
                 active_futures = list(futures_map.keys())
-                tasks = {future: (job_progress.add_task(name, total=1), time.time()) for future, name in futures_map.items()}
+                # tasks stores: future -> (rich_task_id, submission_time)
+                tasks = {
+                    future: (job_progress.add_task(name_and_time[0], total=1), name_and_time[1])
+                    for future, name_and_time in futures_map.items()
+                }
 
                 num_complete = 0
                 while num_complete < len(futures_map):
                     done, active_futures = wait(active_futures, return_when=FIRST_COMPLETED)
                     for future in done:
-                        task_id, start_time = tasks[future]
-                        plot_name = futures_map[future]
-                        duration = time.time() - start_time
+                        task_id, submission_time = tasks[future] # submission_time is the original start_time
+                        plot_name = futures_map[future][0] # Get plot_name from the tuple
+                        duration = time.time() - submission_time # Calculate duration based on submission_time
                         
                         status = ""
                         error_msg = None
@@ -3464,36 +3469,40 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
 
         else:
             # --- Simple print-based logging for non-interactive environments (e.g., log files) ---
-            console.log(f"Starting plot generation for {len(futures_map)} plots...")
+            # Create a console specifically for file/non-TTY logging
+            # Disable log_path as it might contribute to line overwriting issues.
+            # Keep log_time for timestamps. force_terminal=False ensures plain output.
+            file_logger_console = Console(log_path=False, log_time=True, force_terminal=False)
+            
+            file_logger_console.log(f"Starting plot generation for {len(futures_map)} plots...")
             results = []
             for future in as_completed(futures_map):
-                plot_name = futures_map[future]
-                start_time = time.time()
+                plot_name, submission_time = futures_map[future] # Unpack plot_name and submission_time
                 try:
-                    future.result()
-                    duration = time.time() - start_time
+                    future.result() # Ensure future is resolved and exceptions are caught
+                    duration = time.time() - submission_time # Calculate duration from submission
                     results.append({"name": plot_name, "duration": duration, "status": "DONE"})
-                    console.log(f"[DONE] '{plot_name}' in {duration:.2f}s")
+                    file_logger_console.log(f"[DONE] '{plot_name}' in {duration:.2f}s")
                 except JobTimeoutError:
-                    duration = time.time() - start_time
+                    duration = time.time() - submission_time
                     results.append({"name": plot_name, "duration": duration, "status": "TIMEOUT"})
-                    console.log(f"[TIMEOUT] '{plot_name}' after {duration:.2f}s")
+                    file_logger_console.log(f"[TIMEOUT] '{plot_name}' after {duration:.2f}s (timeout was {job_timeout_seconds}s)")
                 except Exception as e:
-                    duration = time.time() - start_time
+                    duration = time.time() - submission_time
                     results.append({"name": plot_name, "duration": duration, "status": "FAILED", "error": str(e)})
-                    console.log(f"[FAILED] '{plot_name}' after {duration:.2f}s. Error: {e}")
+                    file_logger_console.log(f"[FAILED] '{plot_name}' after {duration:.2f}s. Error: {e}")
             
             # Final summary for log files
-            console.log("\n--- Execution Summary ---")
+            file_logger_console.log("\n--- Execution Summary ---")
             for result in sorted(results, key=lambda x: x['name']):
                 log_msg = f"{result['status']}: {result['name']} ({result['duration']:.2f}s)"
                 if "error" in result:
                     log_msg += f" | Error: {result['error']}"
-                console.log(log_msg)
+                file_logger_console.log(log_msg)
 
-            console.log("\n--- Top 10 Longest Running Jobs ---")
+            file_logger_console.log("\n--- Top 10 Longest Running Jobs ---")
             for result in sorted(results, key=lambda x: x['duration'], reverse=True)[:10]:
-                console.log(f"{result['duration']:.2f}s - {result['name']}")
+                file_logger_console.log(f"{result['duration']:.2f}s - {result['name']}")
 
     end_time = time.time()
     print(f"Plot generation took {(end_time-start_time):.4f} seconds.")
