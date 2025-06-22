@@ -1418,10 +1418,11 @@ def _plot_hist_joint_grid(metric_name, data_arr, joint_names, leg_row, leg_col, 
     for j, jn in enumerate(joint_names):
         row, col = leg_row[j], leg_col[j]
         ax = axes[row, col]
-
         counts, edges = compute_trimmed_histogram_data(data_arr[:, j])
         # ax.stairs is faster to draw but we have to manually make it look like default ax.hist
+        start_temp = time.time()
         ax.stairs(counts, edges, fill=True, linewidth=plt.rcParams["patch.linewidth"], alpha=0.7, edgecolor=None, baseline=0)
+        # print(f"Plotting joint hist grid for metric_name={metric_name} took {time.time() - start_temp} seconds")
         ax.set_title(jn, fontsize=16)
         ax.set_xlabel(f"{metric_name.capitalize().replace('_', ' ')} ({metric_to_unit_mapping[metric_name]})")
         ax.set_ylabel("Count")

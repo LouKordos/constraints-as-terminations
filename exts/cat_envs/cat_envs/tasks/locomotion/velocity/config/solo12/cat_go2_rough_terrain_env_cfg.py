@@ -250,7 +250,7 @@ class ObservationsCfg:
     @configclass
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
-
+        
         # observation terms (order preserved)
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel, noise=Unoise(n_min=-0.001, n_max=0.001), scale=0.25
@@ -507,7 +507,7 @@ class ConstraintsCfg:
     )
     # Never forget to also add a curriculum term for each added constraint
     # min_relative_base_height = ConstraintTerm(func=constraints.min_base_height_relative_to_ground, max_p=0.25, params={"limit": 0.2})
-
+    '''
     air_time_lower_bound = ConstraintTerm(
         func=constraints.air_time_lower_bound,
         max_p=0.25, # Overwritten by curriculum!
@@ -518,6 +518,7 @@ class ConstraintsCfg:
         max_p=0.6, # Overwritten by curriculum!
         params={"limit": 0.8, "names": [".*_foot"], "velocity_deadzone": 0.1},
     )
+    '''
     no_move = ConstraintTerm(
         func=constraints.no_move,
         max_p=0.1, # Overwritten by curriculum!
@@ -527,6 +528,7 @@ class ConstraintsCfg:
             "joint_vel_limit": 4.0,
         },
     )
+    '''
     two_foot_contact = ConstraintTerm(
         func=constraints.n_foot_contact,
         max_p=0.25, # Overwritten by curriculum!
@@ -536,6 +538,7 @@ class ConstraintsCfg:
             "min_command_value": 0.5,
         },
     )
+    '''
 
 
 @configclass
@@ -623,7 +626,7 @@ class CurriculumCfg:
         },
     )
     # min_relative_base_height = CurrTerm(func=curriculums.modify_constraint_p, params={"term_name": "min_relative_base_height", "num_steps": 24 * MAX_CURRICULUM_ITERATIONS, "init_max_p": 0.25})
-
+    '''
     air_time_lower_bound = CurrTerm(
         func=curriculums.modify_constraint_p,
         params={
@@ -648,6 +651,7 @@ class CurriculumCfg:
             "init_max_p": 0.25,
         },
     )
+    '''
 
     # As a hack, increase weight at interval, don't want to waste time on linear ramp up function
     power_1 = CurrTerm(
