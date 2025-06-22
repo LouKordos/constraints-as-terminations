@@ -58,7 +58,7 @@ def parse_arguments():
                         help="Maximum foot height to include in the foot-velocity-vs-height plot.")
     parser.add_argument("--num_plot_jobs_in_parallel", type=int, default=2,
                         help="Number of plot generation jobs to run in parallel.")
-    parser.add_argument("--plot_job_stagger_delay", type=int, default=15,
+    parser.add_argument("--plot_job_stagger_delay", type=int, default=10,
                         help="Delay in seconds between starting each plot generation job in a parallel batch.")
     # Good seeds for eval: 44, 46, 49
     # DEPRECATED: Hardcoded seed in env config is used
@@ -208,7 +208,7 @@ def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory
                 "--end_step", str(job_params["end_step"]),
                 "--foot_vel_height_threshold", str(foot_vel_height_threshold),
             ]
-            print(f"[INFO] Spawning plot generation for '{subdir}' (log → {log_path})")
+            print(f"[INFO] Spawning plot generation for '{subdir}' (log → {log_path}), command={cmd}")
             log_file = open(log_path, "w")
             proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
             running_procs.append((proc, subdir, log_file))
