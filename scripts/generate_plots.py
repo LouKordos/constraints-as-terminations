@@ -60,29 +60,65 @@ from metrics_utils import (
 # Disable interactive display until --interactive is set
 plt.ioff()
 
-def timed_job_wrapper(func, plot_name, *args, **kwargs):
+import signal
+from functools import wraps
+
+class JobTimeoutError(TimeoutError):
+    """Custom exception for clarity when a job times out."""
+
+def timeout(seconds):
     """
-    A wrapper that times a function execution, prints start/end messages from the worker.
-    The \n helps to not overwrite the tqdm bar.
+    Decorator to raise JobTimeoutError if the wrapped function
+    does not complete within `seconds`.
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # Handler to raise when the alarm goes off
+            def _handle_timeout(signum, frame):
+                raise JobTimeoutError(f"Function '{func.__name__}' timed out after {seconds}s")
+
+            # Install the handler and schedule the alarm
+            old_handler = signal.signal(signal.SIGALRM, _handle_timeout)
+            signal.alarm(seconds)
+            try:
+                return func(*args, **kwargs)
+            finally:
+                # Cancel the alarm and restore the old handler
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
+        return wrapper
+    return decorator
+def timed_job_wrapper(func, plot_name, job_timeout_seconds, *args, **kwargs):
+    """
+    A wrapper that times a function's execution and applies a timeout.
+    It prints start/end/fail messages from the worker process.
+    The initial newline helps prevent overwriting the tqdm progress bar.
     """
     print(f"\n[START] Generating: {plot_name}")
     start_time = time.time()
     try:
-        result = func(*args, **kwargs)
+        # Apply the timeout decorator to the function before executing it
+        timed_func = timeout(seconds=job_timeout_seconds)(func)
+        result = timed_func(*args, **kwargs)
         end_time = time.time()
         duration = end_time - start_time
         print(f"[DONE] Finished '{plot_name}' in {duration:.2f}s.")
         return result
-    except Exception as e:
+    except (Exception, JobTimeoutError) as e:
         end_time = time.time()
         duration = end_time - start_time
-        print(f"[FAILED] '{plot_name}' after {duration:.2f}s.")
+        # Check if it was a timeout or another exception
+        if isinstance(e, JobTimeoutError):
+            print(f"[TIMEOUT] '{plot_name}' timed out after {duration:.2f}s.")
+        else:
+            print(f"[FAILED] '{plot_name}' failed after {duration:.2f}s.")
         # Re-raise the exception to be handled by the main process loop
         raise e
 
-def submit_timed_job(executor, futures_map, plot_name, func, *args, **kwargs):
-    """Wraps a function with a timer and submits it to the executor."""
-    future = executor.submit(timed_job_wrapper, func, plot_name, *args, **kwargs)
+def submit_timed_job(executor, futures_map, plot_name, func, job_timeout_seconds, *args, **kwargs):
+    """Wraps a function with a timer and timeout, then submits it to the executor."""
+    future = executor.submit(timed_job_wrapper, func, plot_name, job_timeout_seconds, *args, **kwargs)
     futures_map[future] = plot_name
 def load_data(npz_path, summary_path=None):
     """
@@ -2550,7 +2586,7 @@ def _plot_joint_phase_line_grid_4x3(
 # ----------------------------------------------------------------------------------------------------------------------
 # Main plot generation orchestrator
 # ----------------------------------------------------------------------------------------------------------------------
-def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshold: float = 0.1):
+def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshold: float = 0.1, job_timeout_seconds: int = 900):
     """
     Recreate all plots from loaded data.
     - data: numpy.lib.npyio.NpzFile containing arrays
@@ -2716,7 +2752,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         # 1) Foot contact-force per-foot grid
         submit_timed_job(
             executor, futures_map, "Foot contact force per-foot grid",
-            _plot_foot_contact_force_per_foot,
+            _plot_foot_contact_force_per_foot, job_timeout_seconds,
             sim_times, contact_forces_array, foot_labels,
             contact_state_array, reset_times, constraint_bounds,
             output_dir, pickle_dir
@@ -2726,7 +2762,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         for metric_name, data_arr in metrics.items():
             submit_timed_job(
                 executor, futures_map, f"Joint metric: {metric_name}",
-                _plot_joint_metric,
+                _plot_joint_metric, job_timeout_seconds,
                 metric_name, data_arr, sim_times, joint_names, leg_row, leg_col,
                 foot_from_joint, contact_state_array, reset_times, constraint_bounds,
                 metric_to_constraint_term_mapping, metric_to_unit_mapping,
@@ -2737,7 +2773,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         for mname, data_arr in metrics.items():
             submit_timed_job(
                 executor, futures_map, f"Joint metric histogram (grid): {mname}",
-                _plot_hist_joint_grid,
+                _plot_hist_joint_grid, job_timeout_seconds,
                 mname, data_arr, joint_names, leg_row, leg_col,
                 metric_to_unit_mapping, output_dir, pickle_dir
             )
@@ -2745,14 +2781,14 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         # 2x2 Hist contact forces
         submit_timed_job(
             executor, futures_map, "Contact forces histogram (grid)",
-            _plot_hist_contact_forces_grid,
+            _plot_hist_contact_forces_grid, job_timeout_seconds,
             contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE
         )
     
         # 2x2 Hist air-time per foot
         submit_timed_job(
             executor, futures_map, "Air-time histogram (grid)",
-            _plot_hist_air_time_per_foot_grid,
+            _plot_hist_air_time_per_foot_grid, job_timeout_seconds,
             swing_durations, foot_labels, output_dir, pickle_dir, FIGSIZE
         )
 
@@ -2760,7 +2796,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         for metric_name, data_arr in metrics.items():
             submit_timed_job(
                 executor, futures_map, f"Joint metric histogram (overview): {metric_name}",
-                _plot_hist_joint_metric_overview,
+                _plot_hist_joint_metric_overview, job_timeout_seconds,
                 metric_name, data_arr, joint_names,
                 metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE
             )
@@ -2768,28 +2804,28 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         # Hist contact forces overview
         submit_timed_job(
             executor, futures_map, "Contact forces histogram (overview)",
-            _plot_hist_contact_forces_overview,
+            _plot_hist_contact_forces_overview, job_timeout_seconds,
             contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE
         )
 
         # Combined energy over time
         submit_timed_job(
             executor, futures_map, "Total cumulative joint energy",
-            _plot_combined_energy,
+            _plot_combined_energy, job_timeout_seconds,
             sim_times, combined_energy, reset_times,
             output_dir, pickle_dir, FIGSIZE
         )
 
         submit_timed_job(
             executor, futures_map, "Reward time series",
-            _plot_reward_time_series,
+            _plot_reward_time_series, job_timeout_seconds,
             sim_times, reward_array, reset_times,
             output_dir, pickle_dir, FIGSIZE
         )
 
         submit_timed_job(
             executor, futures_map, "Cumulative reward",
-            _plot_cumulative_reward,
+            _plot_cumulative_reward, job_timeout_seconds,
             sim_times, reward_array, reset_times,
             output_dir, pickle_dir, FIGSIZE
         )
@@ -2797,7 +2833,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         # Instantaneous cost of transport over time
         submit_timed_job(
             executor, futures_map, "Instantaneous cost of transport",
-            _plot_cost_of_transport,
+            _plot_cost_of_transport, job_timeout_seconds,
             sim_times, cost_of_transport_time_series, reset_times,
             output_dir, pickle_dir, FIGSIZE
         )
@@ -2805,45 +2841,45 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         # Histogram of cost of transport
         submit_timed_job(
             executor, futures_map, "Cost of transport histogram",
-            _plot_hist_cost_of_transport,
+            _plot_hist_cost_of_transport, job_timeout_seconds,
             cost_of_transport_time_series, output_dir, pickle_dir, FIGSIZE
         )
 
         # Base plots
         submit_timed_job(
             executor, futures_map, "Base position (world)",
-            _plot_combined_base_position,
+            _plot_combined_base_position, job_timeout_seconds,
             sim_times, base_positions, reset_times,
             output_dir, pickle_dir, FIGSIZE
         )
         submit_timed_job(
             executor, futures_map, "Base orientation (world)",
-            _plot_combined_orientation,
+            _plot_combined_orientation, job_timeout_seconds,
             sim_times, base_orientations, reset_times,
             output_dir, pickle_dir, FIGSIZE
         )
         submit_timed_job(
             executor, futures_map, "Base linear velocity (body)",
-            _plot_combined_base_velocity,
+            _plot_combined_base_velocity, job_timeout_seconds,
             sim_times, data['base_linear_velocity_body_array'], base_commanded_velocities,
             reset_times, output_dir, pickle_dir, FIGSIZE
         )
         submit_timed_job(
             executor, futures_map, "Base angular velocity (body)",
-            _plot_combined_base_angular_velocities,
+            _plot_combined_base_angular_velocities, job_timeout_seconds,
             sim_times, data['base_angular_velocity_body_array'], base_commanded_velocities,
             reset_times, output_dir, pickle_dir, FIGSIZE
         )
         submit_timed_job(
             executor, futures_map, "Base kinematics overview",
-            _plot_total_base_overview,
+            _plot_total_base_overview, job_timeout_seconds,
             sim_times, base_positions, base_orientations,
             base_linear_velocities, base_angular_velocities,
             reset_times, output_dir, pickle_dir, FIGSIZE
         )
         submit_timed_job(
             executor, futures_map, "Base command tracking error",
-            _plot_command_abs_error_base_kinematics,
+            _plot_command_abs_error_base_kinematics, job_timeout_seconds,
             sim_times,
             data['base_linear_velocity_body_array'],
             data['base_angular_velocity_body_array'],
@@ -2857,7 +2893,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         # Gait diagram
         submit_timed_job(
             executor, futures_map, "Gait diagram",
-            _plot_gait_diagram,
+            _plot_gait_diagram, job_timeout_seconds,
             contact_state_array, sim_times, reset_times,
             foot_labels, output_dir, pickle_dir
         )
@@ -2866,7 +2902,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         for metric_name, data_arr in metrics.items():
             submit_timed_job(
                 executor, futures_map, f"Joint metric box plot (overview): {metric_name}",
-                _plot_box_joint_metric_overview,
+                _plot_box_joint_metric_overview, job_timeout_seconds,
                 metric_name, data_arr, joint_names,
                 metric_to_unit_mapping, output_dir, pickle_dir, FIGSIZE
             )
@@ -2874,14 +2910,14 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         # b) Contact-force box plots
         submit_timed_job(
             executor, futures_map, "Contact forces box plot (overview)",
-            _plot_box_contact_forces_overview,
+            _plot_box_contact_forces_overview, job_timeout_seconds,
             contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE
         )
 
         # d) Cost-of-transport box plot
         submit_timed_job(
             executor, futures_map, "Cost of transport box plot",
-            _plot_box_cost_of_transport,
+            _plot_box_cost_of_transport, job_timeout_seconds,
             cost_of_transport_time_series, output_dir, pickle_dir, FIGSIZE
         )
 
@@ -2894,43 +2930,43 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
 
             submit_timed_job(
                 executor, futures_map, f"Foot position time series: {axis_label} (body_frame)",
-                _plot_foot_position_time_series,
+                _plot_foot_position_time_series, job_timeout_seconds,
                 positions_axis, axis_label, 'body_frame',
                 sim_times, foot_labels, contact_state_array, reset_times,
                 output_dir, pickle_dir, FIGSIZE, subdir
             )
 
-            submit_timed_job(
-                executor, futures_map, f"Foot position histogram (grid): {axis_label} (body_frame)",
-                _plot_hist_metric_grid,
-                metric_dict,
-                f"Histogram of Foot {axis_label} Position (body frame, CoM)",
-                f"{axis_label} (m)", foot_labels,
-                output_dir, pickle_dir,
-                subfolder=subdir,
-                FIGSIZE=FIGSIZE
-            )
-            submit_timed_job(
-                executor, futures_map, f"Foot position histogram (overview): {axis_label} (body_frame)",
-                _plot_hist_metric_overview,
-                metric_dict,
-                f"Histogram of Foot {axis_label} Position (body frame, CoM) overview",
-                f"{axis_label} (m)", foot_labels,
-                output_dir, pickle_dir,
-                subfolder=subdir,
-                FIGSIZE=FIGSIZE
-            )
-
-            submit_timed_job(
-                executor, futures_map, f"Foot position box plot (overview): {axis_label} (body_frame)",
-                _plot_box_metric_overview,
-                metric_dict,
-                f"Box Plot of Foot {axis_label} Position (body frame, CoM) overview",
-                f"{axis_label} (m)", foot_labels,
-                output_dir, pickle_dir,
-                subfolder=subdir,
-                FIGSIZE=FIGSIZE
-            )
+            # Do not generate for perf reasons, large data range and small bins causes long
+            # submit_timed_job(
+            #     executor, futures_map, f"Foot position histogram (grid): {axis_label} (body_frame)",
+            #     _plot_hist_metric_grid, job_timeout_seconds,
+            #     metric_dict,
+            #     f"Histogram of Foot {axis_label} Position (body frame, CoM)",
+            #     f"{axis_label} (m)", foot_labels,
+            #     output_dir, pickle_dir,
+            #     subfolder=subdir,
+            #     FIGSIZE=FIGSIZE
+            # )
+            # submit_timed_job(
+            #     executor, futures_map, f"Foot position histogram (overview): {axis_label} (body_frame)",
+            #     _plot_hist_metric_overview, job_timeout_seconds,
+            #     metric_dict,
+            #     f"Histogram of Foot {axis_label} Position (body frame, CoM) overview",
+            #     f"{axis_label} (m)", foot_labels,
+            #     output_dir, pickle_dir,
+            #     subfolder=subdir,
+            #     FIGSIZE=FIGSIZE
+            # )
+            # submit_timed_job(
+            #     executor, futures_map, f"Foot position box plot (overview): {axis_label} (body_frame)",
+            #     _plot_box_metric_overview, job_timeout_seconds,
+            #     metric_dict,
+            #     f"Box Plot of Foot {axis_label} Position (body frame, CoM) overview",
+            #     f"{axis_label} (m)", foot_labels,
+            #     output_dir, pickle_dir,
+            #     subfolder=subdir,
+            #     FIGSIZE=FIGSIZE
+            # )
 
         # Same for contact frame
         for axis_label, axis_idx in positions_axes.items():
@@ -2940,48 +2976,48 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
 
             submit_timed_job(
                 executor, futures_map, f"Foot position time series: {axis_label} (contact_frame)",
-                _plot_foot_position_time_series,
+                _plot_foot_position_time_series, job_timeout_seconds,
                 positions_axis, axis_label, 'contact_frame',
                 sim_times, foot_labels, contact_state_array, reset_times,
                 output_dir, pickle_dir, FIGSIZE, subdir
             )
 
-            submit_timed_job(
-                executor, futures_map, f"Foot position histogram (grid): {axis_label} (contact_frame)",
-                _plot_hist_metric_grid,
-                metric_dict,
-                f"Histogram of Foot {axis_label} Position (contact frame, toe tip)",
-                f"{axis_label} (m)", foot_labels,
-                output_dir, pickle_dir,
-                subfolder=subdir,
-                FIGSIZE=FIGSIZE
-            )
-            submit_timed_job(
-                executor, futures_map, f"Foot position histogram (overview): {axis_label} (contact_frame)",
-                _plot_hist_metric_overview,
-                metric_dict,
-                f"Histogram of Foot {axis_label} Position (contact frame, toe tip) overview",
-                f"{axis_label} (m)", foot_labels,
-                output_dir, pickle_dir,
-                subfolder=subdir,
-                FIGSIZE=FIGSIZE
-            )
-
-            submit_timed_job(
-                executor, futures_map, f"Foot position box plot (overview): {axis_label} (contact_frame)",
-                _plot_box_metric_overview,
-                metric_dict,
-                f"Box Plot of Foot {axis_label} Position (contact frame, toe tip) overview",
-                f"{axis_label} (m)", foot_labels,
-                output_dir, pickle_dir,
-                subfolder=subdir,
-                FIGSIZE=FIGSIZE
-            )
+            if axis_label == "Z": # Does not make any sense for x and y and causes very long running plots due to small bin size and large amount of bins
+                submit_timed_job(
+                    executor, futures_map, f"Foot position histogram (grid): {axis_label} (contact_frame)",
+                    _plot_hist_metric_grid, job_timeout_seconds,
+                    metric_dict,
+                    f"Histogram of Foot {axis_label} Position (contact frame, toe tip)",
+                    f"{axis_label} (m)", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+                submit_timed_job(
+                    executor, futures_map, f"Foot position histogram (overview): {axis_label} (contact_frame)",
+                    _plot_hist_metric_overview, job_timeout_seconds,
+                    metric_dict,
+                    f"Histogram of Foot {axis_label} Position (contact frame, toe tip) overview",
+                    f"{axis_label} (m)", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
+                submit_timed_job(
+                    executor, futures_map, f"Foot position box plot (overview): {axis_label} (contact_frame)",
+                    _plot_box_metric_overview, job_timeout_seconds,
+                    metric_dict,
+                    f"Box Plot of Foot {axis_label} Position (contact frame, toe tip) overview",
+                    f"{axis_label} (m)", foot_labels,
+                    output_dir, pickle_dir,
+                    subfolder=subdir,
+                    FIGSIZE=FIGSIZE
+                )
 
         # ---------------- Max step-height ----------------
         submit_timed_job(
             executor, futures_map, "Step height histogram (grid)",
-            _plot_hist_metric_grid,
+            _plot_hist_metric_grid, job_timeout_seconds,
             step_heights,
             "Histogram of Step Height (contact frame)",
             r"Height ($\text{m}$)", foot_labels,
@@ -2990,7 +3026,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         )
         submit_timed_job(
             executor, futures_map, "Step height histogram (overview)",
-            _plot_hist_metric_overview,
+            _plot_hist_metric_overview, job_timeout_seconds,
             step_heights,
             "Histogram of Step Height (overview)",
             r"Height ($\text{m}$)", foot_labels,
@@ -2999,7 +3035,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         )
         submit_timed_job(
             executor, futures_map, "Step height box plot (overview)",
-            _plot_box_metric_overview,
+            _plot_box_metric_overview, job_timeout_seconds,
             step_heights,
             "Box Plot of Step Height (overview)",
             r"Height ($\text{m}$)", foot_labels,
@@ -3010,7 +3046,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         # ---------------- Step length ----------------
         submit_timed_job(
             executor, futures_map, "Step length histogram (grid)",
-            _plot_hist_metric_grid,
+            _plot_hist_metric_grid, job_timeout_seconds,
             step_lengths,
             "Histogram of Step Length",
             r"Step Length ($\text{m}$)", foot_labels,
@@ -3019,7 +3055,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         )
         submit_timed_job(
             executor, futures_map, "Step length histogram (overview)",
-            _plot_hist_metric_overview,
+            _plot_hist_metric_overview, job_timeout_seconds,
             step_lengths,
             "Histogram of Step Length (overview)",
             r"Step Length ($\text{m}$)", foot_labels,
@@ -3028,7 +3064,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         )
         submit_timed_job(
             executor, futures_map, "Step length box plot (overview)",
-            _plot_box_metric_overview,
+            _plot_box_metric_overview, job_timeout_seconds,
             step_lengths,
             "Box Plot of Step Length (overview)",
             r"Step Length ($\text{m}$)", foot_labels,
@@ -3046,7 +3082,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
 
             submit_timed_job(
                 executor, futures_map, f"Foot velocity time series: {axis_label} (world_frame)",
-                _plot_foot_velocity_time_series,
+                _plot_foot_velocity_time_series, job_timeout_seconds,
                 velocities_axis, axis_label, 'world_frame',
                 sim_times, foot_labels, contact_state_array, reset_times,
                 output_dir, pickle_dir, FIGSIZE, subdir
@@ -3054,7 +3090,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
 
             submit_timed_job(
                 executor, futures_map, f"Foot velocity histogram (grid): {axis_label} (world_frame)",
-                _plot_hist_metric_grid,
+                _plot_hist_metric_grid, job_timeout_seconds,
                 metric_dict,
                 f"Histogram of Foot {axis_label} Velocity (world frame)",
                 f"Velocity {axis_label} (m/s)", foot_labels,
@@ -3064,7 +3100,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             )
             submit_timed_job(
                 executor, futures_map, f"Foot velocity histogram (overview): {axis_label} (world_frame)",
-                _plot_hist_metric_overview,
+                _plot_hist_metric_overview, job_timeout_seconds,
                 metric_dict,
                 f"Histogram of Foot {axis_label} Velocity (world frame) overview",
                 f"Velocity {axis_label} (m/s)", foot_labels,
@@ -3075,7 +3111,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
 
             submit_timed_job(
                 executor, futures_map, f"Foot velocity box plot (overview): {axis_label} (world_frame)",
-                _plot_box_metric_overview,
+                _plot_box_metric_overview, job_timeout_seconds,
                 metric_dict,
                 f"Box Plot of Foot {axis_label} Velocity (world frame) overview",
                 f"Velocity {axis_label} (m/s)", foot_labels,
@@ -3092,7 +3128,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
 
             submit_timed_job(
                 executor, futures_map, f"Foot velocity time series: {axis_label} (body_frame)",
-                _plot_foot_velocity_time_series,
+                _plot_foot_velocity_time_series, job_timeout_seconds,
                 velocities_axis, axis_label, 'body_frame',
                 sim_times, foot_labels, contact_state_array, reset_times,
                 output_dir, pickle_dir, FIGSIZE, subdir
@@ -3100,7 +3136,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
 
             submit_timed_job(
                 executor, futures_map, f"Foot velocity histogram (grid): {axis_label} (body_frame)",
-                _plot_hist_metric_grid,
+                _plot_hist_metric_grid, job_timeout_seconds,
                 metric_dict,
                 f"Histogram of Foot {axis_label} Velocity (body frame)",
                 f"Velocity {axis_label} (m/s)", foot_labels,
@@ -3110,7 +3146,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             )
             submit_timed_job(
                 executor, futures_map, f"Foot velocity histogram (overview): {axis_label} (body_frame)",
-                _plot_hist_metric_overview,
+                _plot_hist_metric_overview, job_timeout_seconds,
                 metric_dict,
                 f"Histogram of Foot {axis_label} Velocity (body frame) overview",
                 f"Velocity {axis_label} (m/s)", foot_labels,
@@ -3118,10 +3154,9 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
                 subfolder=subdir,
                 FIGSIZE=FIGSIZE
             )
-
             submit_timed_job(
                 executor, futures_map, f"Foot velocity box plot (overview): {axis_label} (body_frame)",
-                _plot_box_metric_overview,
+                _plot_box_metric_overview, job_timeout_seconds,
                 metric_dict,
                 f"Box Plot of Foot {axis_label} Velocity (body frame) overview",
                 f"Velocity {axis_label} (m/s)", foot_labels,
@@ -3135,36 +3170,36 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         subdir_world_mag = os.path.join("foot_velocities_world_frame", "magnitude")
         submit_timed_job(
             executor, futures_map, "Foot velocity magnitude time series (world_frame)",
-            _plot_foot_velocity_magnitude_time_series,
+            _plot_foot_velocity_magnitude_time_series, job_timeout_seconds,
             foot_velocities_world_magnitude, 'world_frame',
             sim_times, foot_labels, contact_state_array, reset_times,
             output_dir, pickle_dir, FIGSIZE, subdir_world_mag
         )
         metric_dict_world_mag = _array_to_metric_dict(foot_velocities_world_magnitude, foot_labels)
-        submit_timed_job(executor, futures_map, "Foot velocity magnitude histogram (grid, world_frame)", _plot_hist_metric_grid, metric_dict_world_mag, "Histogram of Foot Velocity Magnitude (world frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE)
-        submit_timed_job(executor, futures_map, "Foot velocity magnitude histogram (overview, world_frame)", _plot_hist_metric_overview, metric_dict_world_mag, "Histogram of Foot Velocity Magnitude (world frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE)
-        submit_timed_job(executor, futures_map, "Foot velocity magnitude box plot (overview, world_frame)", _plot_box_metric_overview, metric_dict_world_mag, "Box Plot of Foot Velocity Magnitude (world frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE)
+        submit_timed_job(executor, futures_map, "Foot velocity magnitude histogram (grid, world_frame)", _plot_hist_metric_grid, job_timeout_seconds, metric_dict_world_mag, "Histogram of Foot Velocity Magnitude (world frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE)
+        submit_timed_job(executor, futures_map, "Foot velocity magnitude histogram (overview, world_frame)", _plot_hist_metric_overview, job_timeout_seconds, metric_dict_world_mag, "Histogram of Foot Velocity Magnitude (world frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE)
+        submit_timed_job(executor, futures_map, "Foot velocity magnitude box plot (overview, world_frame)", _plot_box_metric_overview, job_timeout_seconds, metric_dict_world_mag, "Box Plot of Foot Velocity Magnitude (world frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_world_mag, FIGSIZE)
 
         # Body frame magnitude
         subdir_body_mag = os.path.join("foot_velocities_body_frame", "magnitude")
         submit_timed_job(
             executor, futures_map, "Foot velocity magnitude time series (body_frame)",
-            _plot_foot_velocity_magnitude_time_series,
+            _plot_foot_velocity_magnitude_time_series, job_timeout_seconds,
             foot_velocities_body_magnitude, 'body_frame',
             sim_times, foot_labels, contact_state_array, reset_times,
             output_dir, pickle_dir, FIGSIZE, subdir_body_mag
         )
         metric_dict_body_mag = _array_to_metric_dict(foot_velocities_body_magnitude, foot_labels)
-        submit_timed_job(executor, futures_map, "Foot velocity magnitude histogram (grid, body_frame)", _plot_hist_metric_grid, metric_dict_body_mag, "Histogram of Foot Velocity Magnitude (body frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE)
-        submit_timed_job(executor, futures_map, "Foot velocity magnitude histogram (overview, body_frame)", _plot_hist_metric_overview, metric_dict_body_mag, "Histogram of Foot Velocity Magnitude (body frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE)
-        submit_timed_job(executor, futures_map, "Foot velocity magnitude box plot (overview, body_frame)", _plot_box_metric_overview, metric_dict_body_mag, "Box Plot of Foot Velocity Magnitude (body frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE)
+        submit_timed_job(executor, futures_map, "Foot velocity magnitude histogram (grid, body_frame)", _plot_hist_metric_grid, job_timeout_seconds, metric_dict_body_mag, "Histogram of Foot Velocity Magnitude (body frame)", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE)
+        submit_timed_job(executor, futures_map, "Foot velocity magnitude histogram (overview, body_frame)", _plot_hist_metric_overview, job_timeout_seconds, metric_dict_body_mag, "Histogram of Foot Velocity Magnitude (body frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE)
+        submit_timed_job(executor, futures_map, "Foot velocity magnitude box plot (overview, body_frame)", _plot_box_metric_overview, job_timeout_seconds, metric_dict_body_mag, "Box Plot of Foot Velocity Magnitude (body frame) overview", r"Velocity Magnitude ($\text{m} \cdot \text{s}^{-1}$)", foot_labels, output_dir, pickle_dir, subdir_body_mag, FIGSIZE)
 
 
         foot_heatmap_gridsize = 50 # 2.5cmx2.5cm
 
         submit_timed_job(
             executor, futures_map, "Foot position heatmap (grid, body frame)",
-            _plot_body_frame_foot_position_heatmap_grid,
+            _plot_body_frame_foot_position_heatmap_grid, job_timeout_seconds,
             foot_positions_body_frame,
             foot_labels,
             output_dir,
@@ -3175,7 +3210,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
 
         submit_timed_job(
             executor, futures_map, "Foot position heatmap (overview, body frame)",
-            _plot_body_frame_foot_position_heatmap,
+            _plot_body_frame_foot_position_heatmap, job_timeout_seconds,
             foot_positions_body_frame,
             output_dir,
             pickle_dir,
@@ -3186,7 +3221,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         # Foot XY trajectory plots
         submit_timed_job(
             executor, futures_map, "Foot XY trajectory (grid, body frame)",
-            _plot_body_frame_foot_position_xy_grid,
+            _plot_body_frame_foot_position_xy_grid, job_timeout_seconds,
             foot_positions_body_frame,
             foot_labels,
             contact_state_array,
@@ -3197,7 +3232,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
 
         submit_timed_job(
             executor, futures_map, "Foot XY trajectory (overview, body frame)",
-            _plot_body_frame_foot_position_xy_overview,
+            _plot_body_frame_foot_position_xy_overview, job_timeout_seconds,
             foot_positions_body_frame,
             foot_labels,
             output_dir,
@@ -3208,7 +3243,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         # Foot Velocity vs Height plots
         submit_timed_job(
             executor, futures_map, "Foot velocity vs. height (grid)",
-            _plot_foot_velocity_vs_height_grid,
+            _plot_foot_velocity_vs_height_grid, job_timeout_seconds,
             foot_velocities_world_frame,
             foot_positions_contact_frame,
             foot_labels,
@@ -3219,7 +3254,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         )
         submit_timed_job(
             executor, futures_map, "Foot velocity vs. height (overview)",
-            _plot_foot_velocity_vs_height_overview,
+            _plot_foot_velocity_vs_height_overview, job_timeout_seconds,
             foot_velocities_world_frame,
             foot_positions_contact_frame,
             foot_labels,
@@ -3265,13 +3300,13 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             # --- Submit Line Plot Jobs ---
             submit_timed_job(
                 executor, futures_map, f"Joint phase plot (line, overview): {title_prefix}",
-                _plot_joint_phase_line_overview,
+                _plot_joint_phase_line_overview, job_timeout_seconds,
                 data_x, data_y, foot_labels, xlabel, ylabel, f"{title_prefix} (All Feet, Line)",
                 line_output_dir, line_pickle_dir, FIGSIZE=(20, 20)
             )
             submit_timed_job(
                 executor, futures_map, f"Joint phase plot (line, grid): {title_prefix}",
-                _plot_joint_phase_line_grid,
+                _plot_joint_phase_line_grid, job_timeout_seconds,
                 data_x, data_y, foot_labels, xlabel, ylabel, f"{title_prefix} (Line)",
                 line_output_dir, line_pickle_dir, FIGSIZE=(24, 24)
             )
@@ -3290,14 +3325,14 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         
         submit_timed_job(
             executor, futures_map, "Joint angle vs. ang. velocity (line, grid)",
-            _plot_joint_phase_line_grid_4x3,
+            _plot_joint_phase_line_grid_4x3, job_timeout_seconds,
             joint_positions, joint_velocities, joint_names, leg_row, leg_col,
             av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity (Line)",
             av_line_output_dir, av_line_pickle_dir
         )
         submit_timed_job(
             executor, futures_map, "Joint angle vs. ang. velocity (line, overview)",
-            _plot_joint_phase_line_overview,
+            _plot_joint_phase_line_overview, job_timeout_seconds,
             joint_positions, joint_velocities, joint_names,
             av_xlabel, av_ylabel, "Joint Angle vs. Angular Velocity (All Joints, Line)",
             av_line_output_dir, av_line_pickle_dir
@@ -3325,7 +3360,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             # 1. Line plots (stance-focused)
             submit_timed_job(
                 executor, futures_map, f"Stance-focused foot velocity: {comp_label} (world_frame)",
-                _plot_foot_velocity_time_series_stance_focused, # This function will create its own subfolder using component_label
+                _plot_foot_velocity_time_series_stance_focused, job_timeout_seconds, # This function will create its own subfolder using component_label
                 sim_times, current_velocity_component_data, comp_label, 'world_frame',
                 foot_labels, contact_state_array, reset_times,
                 output_dir, pickle_dir, FIGSIZE, stance_plot_parent_dir, padding_for_stance_lineplots
@@ -3340,13 +3375,13 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             hist_title = f"Histogram of Stance Foot {comp_label} Velocity (World Frame)"
             hist_xlabel = f"Velocity {comp_label} (m/s)"
             # Pass component_specific_plot_dir as the 'subfolder' argument
-            submit_timed_job(executor, futures_map, f"Stance foot velocity histogram (grid): {comp_label} (world_frame)", _plot_hist_metric_grid, stance_only_data_dict, hist_title, hist_xlabel, foot_labels, output_dir, pickle_dir, component_specific_plot_dir, FIGSIZE)
-            submit_timed_job(executor, futures_map, f"Stance foot velocity histogram (overview): {comp_label} (world_frame)", _plot_hist_metric_overview, stance_only_data_dict, f"{hist_title} Overview", hist_xlabel, foot_labels, output_dir, pickle_dir, component_specific_plot_dir, FIGSIZE)
+            submit_timed_job(executor, futures_map, f"Stance foot velocity histogram (grid): {comp_label} (world_frame)", _plot_hist_metric_grid, job_timeout_seconds, stance_only_data_dict, hist_title, hist_xlabel, foot_labels, output_dir, pickle_dir, component_specific_plot_dir, FIGSIZE)
+            submit_timed_job(executor, futures_map, f"Stance foot velocity histogram (overview): {comp_label} (world_frame)", _plot_hist_metric_overview, job_timeout_seconds, stance_only_data_dict, f"{hist_title} Overview", hist_xlabel, foot_labels, output_dir, pickle_dir, component_specific_plot_dir, FIGSIZE)
 
             # Box plots
             box_title = f"Box Plot of Stance Foot {comp_label} Velocity (World Frame)"
             box_ylabel = f"Velocity {comp_label} (m/s)" # For overview, xlabel is "Foot"
-            submit_timed_job(executor, futures_map, f"Stance foot velocity box plot (overview): {comp_label} (world_frame)", _plot_box_metric_overview, stance_only_data_dict, f"{box_title} Overview", box_ylabel, foot_labels, output_dir, pickle_dir, component_specific_plot_dir, FIGSIZE)
+            submit_timed_job(executor, futures_map, f"Stance foot velocity box plot (overview): {comp_label} (world_frame)", _plot_box_metric_overview, job_timeout_seconds, stance_only_data_dict, f"{box_title} Overview", box_ylabel, foot_labels, output_dir, pickle_dir, component_specific_plot_dir, FIGSIZE)
 
         # Velocity Magnitude
         comp_label_mag = "Magnitude"
@@ -3355,7 +3390,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         # 1. Line plots (stance-focused) for Magnitude
         submit_timed_job(
             executor, futures_map, "Stance-focused foot velocity: Magnitude (world_frame)",
-            _plot_foot_velocity_time_series_stance_focused, # This function will create its own subfolder using component_label
+            _plot_foot_velocity_time_series_stance_focused, job_timeout_seconds, # This function will create its own subfolder using component_label
             sim_times, foot_velocities_world_magnitude, comp_label_mag, 'world_frame',
             foot_labels, contact_state_array, reset_times,
             output_dir, pickle_dir, FIGSIZE, stance_plot_parent_dir, padding_for_stance_lineplots
@@ -3369,24 +3404,28 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         # Histograms for Magnitude
         hist_mag_title = f"Histogram of Stance Foot {comp_label_mag} Velocity (World Frame)"
         hist_mag_xlabel = f"Velocity {comp_label_mag} (m/s)"
-        submit_timed_job(executor, futures_map, "Stance foot velocity magnitude histogram (grid, world_frame)", _plot_hist_metric_grid, stance_only_mag_data_dict, hist_mag_title, hist_mag_xlabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE)
-        submit_timed_job(executor, futures_map, "Stance foot velocity magnitude histogram (overview, world_frame)", _plot_hist_metric_overview, stance_only_mag_data_dict, f"{hist_mag_title} Overview", hist_mag_xlabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE)
+        submit_timed_job(executor, futures_map, "Stance foot velocity magnitude histogram (grid, world_frame)", _plot_hist_metric_grid, job_timeout_seconds, stance_only_mag_data_dict, hist_mag_title, hist_mag_xlabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE)
+        submit_timed_job(executor, futures_map, "Stance foot velocity magnitude histogram (overview, world_frame)", _plot_hist_metric_overview, job_timeout_seconds, stance_only_mag_data_dict, f"{hist_mag_title} Overview", hist_mag_xlabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE)
 
         # Box plots for Magnitude
         box_mag_title = f"Box Plot of Stance Foot {comp_label_mag} Velocity (World Frame)"
         box_mag_ylabel = f"Velocity {comp_label_mag} (m/s)"
-        submit_timed_job(executor, futures_map, "Stance foot velocity magnitude box plot (overview, world_frame)", _plot_box_metric_overview, stance_only_mag_data_dict, f"{box_mag_title} Overview", box_mag_ylabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE)
+        submit_timed_job(executor, futures_map, "Stance foot velocity magnitude box plot (overview, world_frame)", _plot_box_metric_overview, job_timeout_seconds, stance_only_mag_data_dict, f"{box_mag_title} Overview", box_mag_ylabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE)
 
         # Process futures as they complete
         with tqdm(total=len(futures_map), desc="Generating plots") as pbar:
             for future in as_completed(futures_map):
                 plot_name = futures_map[future]
-                pbar.set_description(f"Running: {plot_name}")
+                pbar.set_description(f"Processing: {plot_name}")
                 try:
-                    future.result(timeout=900) # 15 minute timeout per plot
-                    pbar.update(1)
+                    future.result()  # We now raise exceptions from the wrapper
                 except Exception as e:
-                    print(f"✗ ERROR generating {plot_name}: {e}")
+                    # The error is already printed by the wrapper, but we can log it again here if needed.
+                    # The main purpose of this block is to ensure the loop continues.
+                    print(f"✗ Main loop caught error for '{plot_name}': {type(e).__name__}")
+                finally:
+                    # CRITICAL: Update the progress bar regardless of success or failure
+                    pbar.update(1)
 
     end_time = time.time()
     print(f"Plot generation took {(end_time-start_time):.4f} seconds.")
@@ -3418,6 +3457,8 @@ def main():
                     help="(Optional) last step to include, inclusive")
     parser.add_argument("--foot_vel_height_threshold", type=float, default=0.1,
                         help="Maximum foot height to include in the foot-velocity-vs-height plot.")
+    parser.add_argument("--job_timeout", type=int, default=300,
+                        help="Timeout in seconds for each individual plotting job.")
     args = parser.parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -3435,7 +3476,13 @@ def main():
         data["reset_times"] = full_resets[in_window]
         print(data["reset_times"])
         
-    generate_plots(data, args.output_dir, interactive=args.interactive, foot_vel_height_threshold=args.foot_vel_height_threshold)
+    generate_plots(
+        data,
+        args.output_dir,
+        interactive=args.interactive,
+        foot_vel_height_threshold=args.foot_vel_height_threshold,
+        job_timeout_seconds=args.job_timeout
+    )
 
 if __name__ == "__main__":
     main()
