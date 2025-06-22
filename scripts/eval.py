@@ -56,6 +56,10 @@ def parse_arguments():
                         help="Name of the task/environment.")
     parser.add_argument("--foot_vel_height_threshold", type=float, default=0.02,
                         help="Maximum foot height to include in the foot-velocity-vs-height plot.")
+    parser.add_argument("--num_plot_jobs_in_parallel", type=int, default=2,
+                        help="Number of plot generation jobs to run in parallel.")
+    parser.add_argument("--plot_job_stagger_delay", type=int, default=15,
+                        help="Delay in seconds between starting each plot generation job in a parallel batch.")
     # Good seeds for eval: 44, 46, 49
     # DEPRECATED: Hardcoded seed in env config is used
     # parser.add_argument("--seed", type=int, required=False, default=46, help="Seed for numpy, torch, env, terrain, terrain generator etc.. Good seeds for eval are 44, 46, 49")
@@ -177,34 +181,59 @@ def _find_self_cgroup_path() -> str:
                 return line[3:].strip()
     raise RuntimeError("Could not determine own cgroup path")
 
-def run_generate_plots(start_step: int, end_step: int, subdir: str, plots_directory: str, sim_data_file_path: str, foot_vel_height_threshold: float, memory_limit_gb: Optional[float] = 40) -> int:
+def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory: str, sim_data_file_path: str, foot_vel_height_threshold: float, num_parallel: int, stagger_delay: int):
     """
-    Launch generate_plots.py for [start_step, end_step) and block until it finishes. Return the subprocess' return-code.
-    NOTE: MEMORY LIMIT IS DEPRECATED AND IGNORED; JUSTFILE USES systemd-run --scope --user -p MemoryMax=40G instead!
+    Launch generate_plots.py for all jobs in plot_jobs.
+    It runs them in batches of `num_parallel`, with a `stagger_delay` between each launch.
+    It then waits for all jobs to complete, providing status updates.
     """
-    output_dir = os.path.join(plots_directory, subdir)
-    os.makedirs(output_dir, exist_ok=True)
     generate_plots_script_path = os.path.join(eval_script_path, "generate_plots.py")
+    running_procs = []  # List of (proc, subdir, log_file_handle)
+    return_codes = {}  # subdir -> rc
+    job_queue = plot_jobs[:]
 
-    log_path = os.path.join(plots_directory, f"generate_plots_{subdir}.log")
-    cmd = [
-        "python",
-        generate_plots_script_path,
-        "--data_file", sim_data_file_path,
-        "--output_dir", output_dir,
-        "--start_step", str(start_step),
-        "--end_step", str(end_step),
-        "--foot_vel_height_threshold", str(foot_vel_height_threshold),
-        # "--interactive",
-    ]
+    while job_queue or running_procs:
+        # Start new jobs if there's capacity
+        while job_queue and len(running_procs) < num_parallel:
+            job_params = job_queue.pop(0)
+            subdir = job_params["subdir"]
+            output_dir = os.path.join(plots_directory, subdir)
+            os.makedirs(output_dir, exist_ok=True)
+            log_path = os.path.join(plots_directory, f"generate_plots_{subdir}.log")
+            cmd = [
+                "python", generate_plots_script_path,
+                "--data_file", sim_data_file_path,
+                "--output_dir", output_dir,
+                "--start_step", str(job_params["start_step"]),
+                "--end_step", str(job_params["end_step"]),
+                "--foot_vel_height_threshold", str(foot_vel_height_threshold),
+            ]
+            print(f"[INFO] Spawning plot generation for '{subdir}' (log → {log_path})")
+            log_file = open(log_path, "w")
+            proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
+            running_procs.append((proc, subdir, log_file))
 
-    print(f"[INFO] Spawning {' '.join(cmd)} (log → {log_path})")
-    with open(log_path, "w") as lf:
-        proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT)
-        code = proc.wait()
+            if job_queue:
+                print(f"[INFO] Waiting {stagger_delay} seconds before starting next job...")
+                time.sleep(stagger_delay)
 
-    print(f"[INFO] Exited with {code}")
-    return code
+        # Check for completed processes
+        for i in range(len(running_procs) - 1, -1, -1):
+            proc, subdir, log_file = running_procs[i]
+            rc = proc.poll()
+            if rc is not None:
+                print(f"[INFO] Plot generation for '{subdir}' finished with exit code {rc}.")
+                log_file.close()
+                return_codes[subdir] = rc
+                running_procs.pop(i)
+        
+        if running_procs:
+            time.sleep(1)  # Poll every second if there are still running processes
+
+    print("[INFO] All plot generation jobs finished.")
+
+    if any(rc != 0 for rc in return_codes.values()):
+        print("[WARN] At least one generate_plots.py run returned a non-zero exit code.")
 
 def main():
     args = parse_arguments()
@@ -645,16 +674,24 @@ def main():
     ffmpeg_process.stdin.close()
     ffmpeg_process.wait()
 
+    plot_jobs = []
     for k, (scenario_tag, *_rest) in enumerate(fixed_command_scenarios):
         start = args.random_sim_step_length + k * fixed_command_sim_steps
-        end = start + fixed_command_sim_steps # End is exclusive
+        end = start + fixed_command_sim_steps
         subdir = f"scenario_{scenario_tag}"
-        run_generate_plots(start, end, subdir, plots_directory=plots_directory, sim_data_file_path=np_data_file, foot_vel_height_threshold=args.foot_vel_height_threshold)
-    random_rc = run_generate_plots(start_step=0, end_step=args.random_sim_step_length, subdir="random_simulation_steps", plots_directory=plots_directory, sim_data_file_path=np_data_file, foot_vel_height_threshold=args.foot_vel_height_threshold)
-    overall_rc = run_generate_plots(start_step=0, end_step=total_sim_steps, subdir="overall", plots_directory=plots_directory, sim_data_file_path=np_data_file, foot_vel_height_threshold=args.foot_vel_height_threshold)
+        plot_jobs.append({"start_step": start, "end_step": end, "subdir": subdir})
 
-    if any(rc != 0 for rc in (overall_rc, random_rc)):
-        print("[WARN] At least one generate_plots.py run returned a non-zero exit code.")
+    plot_jobs.append({"start_step": 0, "end_step": args.random_sim_step_length, "subdir": "random_simulation_steps"})
+    plot_jobs.append({"start_step": 0, "end_step": total_sim_steps, "subdir": "overall"})
+
+    run_generate_plots_parallel(
+        plot_jobs=plot_jobs,
+        plots_directory=plots_directory,
+        sim_data_file_path=np_data_file,
+        foot_vel_height_threshold=args.foot_vel_height_threshold,
+        num_parallel=args.num_plot_jobs_in_parallel,
+        stagger_delay=args.plot_job_stagger_delay
+    )
 
     env.close()
     simulation_app.close()
