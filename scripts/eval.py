@@ -12,8 +12,6 @@ sys.stdout.reconfigure(line_buffering=True)
 print = partial(print, flush=True) # For cluster runs
 import gymnasium as gym
 from isaaclab.app import AppLauncher
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 from tqdm import tqdm
 import fcntl
 from queue import Queue
@@ -161,25 +159,6 @@ def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[fl
             bounds[term] = (-limit, limit)
 
     return bounds
-
-def _find_cgroup2_mountpoint() -> str:
-    """Return the mountpoint of the cgroup v2 unified hierarchy."""
-    with open("/proc/self/mountinfo") as mi:
-        for line in mi:
-            parts = line.split()
-            # field 9 is filesystem type, field 5 is mount_point
-            if parts[8] == "cgroup2":
-                return parts[4]
-    raise RuntimeError("cgroup v2 unified mount not found")
-
-def _find_self_cgroup_path() -> str:
-    """Return the current process's cgroup path (the '0::/…' suffix)."""
-    with open("/proc/self/cgroup") as cg:
-        for line in cg:
-            if line.startswith("0::"):
-                # strip "0::" and trailing newline
-                return line[3:].strip()
-    raise RuntimeError("Could not determine own cgroup path")
 
 def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory: str, sim_data_file_path: str, foot_vel_height_threshold: float, num_parallel: int, stagger_delay: int):
     """
