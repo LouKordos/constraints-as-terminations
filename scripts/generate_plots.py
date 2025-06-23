@@ -3520,6 +3520,8 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         plt.show()
 
     import sys
+    if exit_code != 0:
+        print("Tip: To install the minimal tex required for this plot generation, use scripts/check_and_install_tinytex_for_plots.sh")
     sys.exit(exit_code)
 
 def main():

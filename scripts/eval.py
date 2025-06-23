@@ -215,6 +215,15 @@ def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory
     if any(rc != 0 for rc in return_codes.values()):
         print("[WARN] At least one generate_plots.py run returned a non-zero exit code.")
 
+def ensure_tex_env():
+    script_path = os.path.join(os.path.dirname(__file__), "check_and_install_tinytex_for_plots.sh")
+    try:
+        # Runs with bash — will print status to stdout/stderr
+        subprocess.run(["bash", script_path], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"ERROR: TeX environment setup failed (exit code {e.returncode})", file=sys.stderr)
+        sys.exit(e.returncode)
+
 def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
@@ -223,6 +232,8 @@ def main():
         input("\n\n-------------------------------------------------------------------\n\
               Keyword 'Play' not found in task name, are you sure you are using the correct task/environment?\n" \
               "-------------------------------------------------------------------\n\n")
+
+    ensure_tex_env() # Used later for generate_plots.py
 
     if args.eval_checkpoint is None:
         checkpoint_path = get_latest_checkpoint(args.run_dir)
