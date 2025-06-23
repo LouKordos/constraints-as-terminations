@@ -1,37 +1,63 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# List of required TeX Live packages
-required_pkgs=(
-  dvipng
-  cm-super
-  fix-cm
-  collection-latexextra
-  collection-fontsrecommended
+# Required TeX packages (tlmgr names) and their Debian metapackage equivalents
+declare -A PKG_MAP=(
+  [dvipng]=dvipng
+  [cm-super]=fonts-cm-super
+  [fix-cm]=texlive-latex-base
+  [collection-latexextra]=texlive-latex-extra
+  [collection-fontsrecommended]=texlive-fonts-recommended
 )
 
-# 1) Do we already have a TeX installation? Prefer tlmgr if present.
-if ! command -v tlmgr >/dev/null 2>&1; then
-  echo "✗ tlmgr not found. Installing TinyTeX…"
-  wget -qO- "https://yihui.org/tinytex/install-bin-unix.sh" | sh
-  # Ensure tlmgr is now on our PATH
-  export PATH="$HOME/.TinyTeX/bin/$(uname -m)-*-linux:$PATH"
+# Helper: which distro
+is_debian() {
+  [[ -r /etc/debian_version ]]
+}
+
+# 1) Do we have a working tlmgr?
+if command -v tlmgr >/dev/null 2>&1; then
+  # Test if tlmgr can install without error
+  if ! echo > /dev/null 2>&1 <<<"tlmgr info" | tlmgr info 2>&1 | grep -q 'user mode not initialized'; then
+    USE_TLMGR=1
+  else
+    USE_TLMGR=0
+  fi
+else
+  USE_TLMGR=0
 fi
 
-# 2) Check for missing packages
-missing=()
-for pkg in "${required_pkgs[@]}"; do
-  # `installed: Yes` only if already present
-  if ! tlmgr info "$pkg" | grep -q "installed: Yes"; then
-    missing+=("$pkg")
-  fi
-done
+if (( USE_TLMGR )); then
+  echo "✓ Using tlmgr to manage TeX Live packages."
+  missing=()
+  for pkg in "${!PKG_MAP[@]}"; do
+    if ! tlmgr info "$pkg" | grep -q "installed: Yes"; then
+      missing+=("$pkg")
+    fi
+  done
 
-# 3) Install any that weren’t found
-if [ "${#missing[@]}" -gt 0 ]; then
-  echo "Missing TeX packages: ${missing[*]}"
-  echo "Installing missing packages via tlmgr..."
-  tlmgr install "${missing[@]}"
+  if (( ${#missing[@]} )); then
+    echo "→ Installing missing tlmgr packages: ${missing[*]}"
+    tlmgr install "${missing[@]}"
+  else
+    echo "✓ All tlmgr-managed TeX packages are already installed."
+  fi
+
 else
-  echo "All required TeX packages are already installed."
+  echo "⚠️  tlmgr unavailable or disabled (Debian/Ubuntu style). Falling back to apt-get."
+
+  # Build list of Debian metapackages to install
+  install_list=()
+  for pkg in "${!PKG_MAP[@]}"; do
+    # We treat the Debian package as “installed” if dpkg knows about it
+    dpkg -s "${PKG_MAP[$pkg]}" &>/dev/null || install_list+=("${PKG_MAP[$pkg]}")
+  done
+
+  if (( ${#install_list[@]} )); then
+    echo "→ Installing via apt: ${install_list[*]}"
+    sudo apt-get update
+    sudo apt-get install -y "${install_list[@]}"
+  else
+    echo "✓ All Debian-packaged TeX dependencies are already installed."
+  fi
 fi
