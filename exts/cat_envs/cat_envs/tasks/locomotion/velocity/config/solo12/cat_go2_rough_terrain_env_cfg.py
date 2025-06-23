@@ -653,31 +653,16 @@ class CurriculumCfg:
     )
     '''
 
-    # As a hack, increase weight at interval, don't want to waste time on linear ramp up function
-    power_1 = CurrTerm(
-        func=isaac_curriculums.modify_reward_weight,
-        params={
-            "term_name": "minimize_power",
-            "num_steps": 4 * MAX_CURRICULUM_ITERATIONS,
-            "weight": 0.02
-        }
-    )
-    power_2 = CurrTerm(
-        func=isaac_curriculums.modify_reward_weight,
-        params={
-            "term_name": "minimize_power",
-            "num_steps": 12 * MAX_CURRICULUM_ITERATIONS,
-            "weight": 0.05
-        }
-    )
-    power_3 = CurrTerm(
-        func=isaac_curriculums.modify_reward_weight,
-        params={
-            "term_name": "minimize_power",
-            "num_steps": 20 * MAX_CURRICULUM_ITERATIONS,
-            "weight": 0.1
-        }
-    )
+    # power = CurrTerm(
+    #     func=curriculums.update_reward_weight_linear,
+    #     params={
+    #         "term_name": "minimize_power",
+    #         "num_steps_from_start_step": 24 * MAX_CURRICULUM_ITERATIONS * 0.6,
+    #         "start_at_step": 24 * MAX_CURRICULUM_ITERATIONS,
+    #         "start_weight": 0.0,
+    #         "end_weight": 0.2
+    #     }
+    # )
 
     terrain_levels = CurrTerm(func=terrain_levels_with_ray_caster_refresh)
     # terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
