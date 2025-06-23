@@ -3338,7 +3338,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         )
         
         # --- New Stance-Only Velocity Plots (World Frame) ---
-        padding_for_stance_lineplots = -1#Number of sim steps for padding
+        padding_for_stance_lineplots = -1 #Number of sim steps for padding
         # Consolidated parent directory for all stance-only world frame velocity plots
         stance_plot_parent_dir = "foot_velocities_world_frame_stance_only"
 
@@ -3412,6 +3412,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
         submit_timed_job(executor, futures_map, "Stance foot velocity magnitude box plot (overview, world_frame)", _plot_box_metric_overview, job_timeout_seconds, stance_only_mag_data_dict, f"{box_mag_title} Overview", box_mag_ylabel, foot_labels, output_dir, pickle_dir, magnitude_specific_plot_dir, FIGSIZE)
 
         console = Console()
+        exit_code = 0
         if console.is_terminal:
             # --- Rich-based concurrent progress tracking for interactive terminals ---
             overall_progress = Progress(TextColumn("[bold blue]Generating plots"), BarColumn(), MofNCompleteColumn(), console=console)
@@ -3467,6 +3468,9 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             for result in sorted(job_results, key=lambda x: x['duration'], reverse=True)[:10]:
                  console.print(f"• {result['duration']:.2f}s - [bold]{result['name']}[/bold]")
 
+            if any(r["error"] for r in job_results):
+                exit_code = 1
+
         else:
             # --- Simple print-based logging for non-interactive environments (e.g., log files) ---
             # Create a console specifically for file/non-TTY logging
@@ -3504,6 +3508,9 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             for result in sorted(results, key=lambda x: x['duration'], reverse=True)[:10]:
                 file_logger_console.log(f"{result['duration']:.2f}s - {result['name']}")
 
+            if any(r.get("status") != "DONE" for r in results):
+                exit_code = 1
+
     end_time = time.time()
     print(f"Plot generation took {(end_time-start_time):.4f} seconds.")
 
@@ -3511,6 +3518,9 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
     if interactive:
         plt.ion()
         plt.show()
+
+    import sys
+    sys.exit(exit_code)
 
 def main():
     # Set the multiprocessing start method to 'spawn' for cleaner process creation,
