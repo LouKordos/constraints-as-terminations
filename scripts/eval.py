@@ -165,6 +165,7 @@ def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory
     Launch generate_plots.py for all jobs in plot_jobs.
     It runs them in batches of `num_parallel`, with a `stagger_delay` between each launch.
     It then waits for all jobs to complete, providing status updates.
+    NOTE: MEMORY LIMIT IS DEPRECATED AND DIRECTLY CONTROLLED IN JUSTFILE USING systemd-run
     """
     generate_plots_script_path = os.path.join(eval_script_path, "generate_plots.py")
     running_procs = []  # List of (proc, subdir, log_file_handle)
@@ -178,7 +179,7 @@ def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory
             subdir = job_params["subdir"]
             output_dir = os.path.join(plots_directory, subdir)
             os.makedirs(output_dir, exist_ok=True)
-            log_path = os.path.join(plots_directory, f"generate_plots_{subdir}.log")
+            log_path = os.path.join(output_dir, f"generate_plots_{subdir}.log")
             cmd = [
                 "python", generate_plots_script_path,
                 "--data_file", sim_data_file_path,
@@ -187,7 +188,7 @@ def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory
                 "--end_step", str(job_params["end_step"]),
                 "--foot_vel_height_threshold", str(foot_vel_height_threshold),
             ]
-            print(f"[INFO] Spawning plot generation for '{subdir}' (log → {log_path}), command={cmd}")
+            print(f"[INFO] Spawning plot generation for '{subdir}' (log → {log_path}), command={' '.join(cmd)}")
             log_file = open(log_path, "w")
             proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
             running_procs.append((proc, subdir, log_file))
