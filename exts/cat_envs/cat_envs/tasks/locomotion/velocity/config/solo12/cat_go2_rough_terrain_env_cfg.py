@@ -242,7 +242,6 @@ class ActionsCfg:
         preserve_order=True,
     )
 
-
 @configclass
 class ObservationsCfg:
     """Observation specifications for the MDP."""
