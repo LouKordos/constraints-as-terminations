@@ -320,6 +320,171 @@ class ObservationsCfg:
     # observation groups
     policy: PolicyCfg = PolicyCfg()
 
+@configclass
+class ObservationsCfgJointStateHistory(ObservationsCfg): # Inherit but redefine all terms to ensure correct order
+    @configclass
+    class PolicyCfg(ObsGroup):
+        base_ang_vel = ObsTerm(
+            func=mdp.base_ang_vel, noise=Unoise(n_min=-0.001, n_max=0.001), scale=0.25
+        )
+        velocity_commands = ObsTerm(
+            func=mdp.generated_commands,
+            params={"command_name": "base_velocity"},
+            scale=(2.0, 2.0, 0.25),
+        )
+        projected_gravity = ObsTerm(
+            func=mdp.projected_gravity, noise=Unoise(n_min=-0.05, n_max=0.05), scale=0.1
+        )
+        joint_pos_history = ObsTerm(
+            func=observations.joint_state_history,
+            params={
+                "names": [
+                    "FL_hip_joint",
+                    "FR_hip_joint",
+                    "RL_hip_joint",
+                    "RR_hip_joint",
+                    "FL_thigh_joint",
+                    "FR_thigh_joint",
+                    "RL_thigh_joint",
+                    "RR_thigh_joint",
+                    "FL_calf_joint",
+                    "FR_calf_joint",
+                    "RL_calf_joint",
+                    "RR_calf_joint",
+                ],
+                "history_len": 3,
+                "mode": "pos"
+            },
+            noise=Unoise(n_min=-0.01, n_max=0.01),
+            scale=1.0,
+        )
+        joint_vel_history = ObsTerm(
+            func=observations.joint_state_history,
+            params={
+                "names": [
+                    "FL_hip_joint",
+                    "FR_hip_joint",
+                    "RL_hip_joint",
+                    "RR_hip_joint",
+                    "FL_thigh_joint",
+                    "FR_thigh_joint",
+                    "RL_thigh_joint",
+                    "RR_thigh_joint",
+                    "FL_calf_joint",
+                    "FR_calf_joint",
+                    "RL_calf_joint",
+                    "RR_calf_joint",
+                ],
+                "history_len": 3,
+                "mode": "vel"
+            },
+            noise=Unoise(n_min=-0.2, n_max=0.2),
+            scale=0.05,
+        )
+        actions = ObsTerm(func=mdp.last_action, scale=1.0)
+        
+        height_map = ObsTerm(
+            func=height_map_grid,
+            params={"asset_cfg": SceneEntityCfg("ray_caster")},
+            noise=Unoise(n_min=-0.01, n_max=0.01),
+            scale=1.0,
+        )
+
+        def __post_init__(self):
+            self.enable_corruption = True
+            self.concatenate_terms = True
+
+    # observation groups
+    policy: PolicyCfg = PolicyCfg()
+
+@configclass
+class ObservationsCfgFullStateHistory(ObservationsCfg): # Inherit but redefine all terms to ensure correct order
+    @configclass
+    class PolicyCfg(ObsGroup):
+        """Observations for policy group."""
+        # observation terms (order preserved)
+        base_ang_vel_hist = ObsTerm(
+            func=observations.base_ang_vel_history,
+            params={"history_len": 3},
+            noise=Unoise(n_min=-0.001, n_max=0.001),
+            scale=0.25,
+        )
+        velocity_commands = ObsTerm(
+            func=mdp.generated_commands,
+            params={"command_name": "base_velocity"},
+            scale=(2.0, 2.0, 0.25),
+        )
+        projected_gravity_hist = ObsTerm(
+            func=observations.projected_gravity_history,
+            params={"history_len": 3},
+            noise=Unoise(n_min=-0.05, n_max=0.05),
+            scale=0.1,
+        ) 
+        joint_pos_history = ObsTerm(
+            func=observations.joint_state_history,
+            params={
+                "names": [
+                    "FL_hip_joint",
+                    "FR_hip_joint",
+                    "RL_hip_joint",
+                    "RR_hip_joint",
+                    "FL_thigh_joint",
+                    "FR_thigh_joint",
+                    "RL_thigh_joint",
+                    "RR_thigh_joint",
+                    "FL_calf_joint",
+                    "FR_calf_joint",
+                    "RL_calf_joint",
+                    "RR_calf_joint",
+                ],
+                "history_len": 3,
+                "mode": "pos"
+            },
+            noise=Unoise(n_min=-0.01, n_max=0.01),
+            scale=1.0,
+        )
+        joint_vel_history = ObsTerm(
+            func=observations.joint_state_history,
+            params={
+                "names": [
+                    "FL_hip_joint",
+                    "FR_hip_joint",
+                    "RL_hip_joint",
+                    "RR_hip_joint",
+                    "FL_thigh_joint",
+                    "FR_thigh_joint",
+                    "RL_thigh_joint",
+                    "RR_thigh_joint",
+                    "FL_calf_joint",
+                    "FR_calf_joint",
+                    "RL_calf_joint",
+                    "RR_calf_joint",
+                ],
+                "history_len": 3,
+                "mode": "vel"
+            },
+            noise=Unoise(n_min=-0.2, n_max=0.2),
+            scale=0.05,
+        )
+        actions_hist = ObsTerm(
+            func=observations.actions_history,
+            params={"history_len": 3},
+            scale=1.0,
+        ) 
+        height_map_hist = ObsTerm(
+            func=observations.height_map_history,
+            params={"history_len": 3, "asset_cfg": SceneEntityCfg("ray_caster")},
+            noise=Unoise(n_min=-0.01, n_max=0.01),
+            scale=1.0,
+        )    
+    
+        def __post_init__(self):
+            self.enable_corruption = True
+            self.concatenate_terms = True
+
+    # observation groups
+    policy: PolicyCfg = PolicyCfg()
+
 def force_hard_terrain(env, env_ids: torch.Tensor | None):
     ti = env.scene.terrain  # runtime TerrainImporter
     # Grab sub-terrain origins: [rows, cols, 3]
@@ -731,6 +896,13 @@ class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
 
         self.sim.physx.gpu_max_rigid_patch_count = 568462
 
+@configclass
+class Go2RoughTerrainEnvCfgJointStateHistory(Go2RoughTerrainEnvCfg):
+    observations: ObservationsCfgJointStateHistory = ObservationsCfgJointStateHistory()
+
+@configclass
+class Go2RoughTerrainEnvCfgFullStateHistory(Go2RoughTerrainEnvCfg):
+    observations: ObservationsCfgFullStateHistory = ObservationsCfgFullStateHistory()
 
 class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
     def __post_init__(self) -> None:
@@ -826,3 +998,12 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
             term = getattr(self.curriculum, field_name)
             if isinstance(term, CurrTerm) and term.params.get("term_name") == "minimize_power":
                 setattr(self.curriculum, field_name, None)
+
+@configclass
+class Go2RoughTerrainEnvCfgJointStateHistory_PLAY(Go2RoughTerrainEnvCfg_PLAY):
+    observations: ObservationsCfgJointStateHistory = ObservationsCfgJointStateHistory()
+
+@configclass
+class Go2RoughTerrainEnvCfgFullStateHistory_PLAY(Go2RoughTerrainEnvCfg_PLAY):
+    observations: ObservationsCfgFullStateHistory = ObservationsCfgFullStateHistory()
+

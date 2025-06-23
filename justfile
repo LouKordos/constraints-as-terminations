@@ -2,12 +2,12 @@ export OMNI_KIT_ACCEPT_EULA := "Y"
 export CUBLAS_WORKSPACE_CONFIG := ":4096:8"
 export PYTHONUNBUFFERED := "1"
 
-train num_envs="7500":
+train num_envs="7500" task="CaT-Go2-Rough-Terrain-v0":
     mkdir -p ./logs/clean_rl
-    python scripts/clean_rl/train.py --task=CaT-Go2-Rough-Terrain-v0 --headless --num_envs={{num_envs}} 2>&1 | tee ./logs/clean_rl/train-$(date +"%Y-%m-%d-%H:%M:%S").log
+    python scripts/clean_rl/train.py --task={{task}} --headless --num_envs={{num_envs}} 2>&1 | tee ./logs/clean_rl/train-$(date +"%Y-%m-%d-%H:%M:%S").log
 
 eval run_dir *flags:
-    systemd-run --scope --user -p MemoryMax=45G time python scripts/eval.py --task=CaT-Go2-Rough-Terrain-Play-v0 --headless --run_dir={{run_dir}} {{flags}}
+    systemd-run --scope --user -p MemoryMax=45G time python scripts/eval.py --headless --run_dir={{run_dir}} {{flags}}
 
 eval-all logs_root_dir num_parallel_jobs *flags:
     @# Check for GNU parallel

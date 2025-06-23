@@ -42,22 +42,14 @@ def infer_checkpoint_input_dimensions(state_dict: dict[str, torch.Tensor]) -> in
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Play an RL agent with detailed logging.")
-    parser.add_argument("--run_dir", type=str, required=True,
-                        help="ABSOLUTE path to directory containing model checkpoints and params.")
-    parser.add_argument("--eval_checkpoint", type=str, default=None,
-                        help="Optionally specify the model save checkpoint number instead of automatically using the last saved one.")
-    parser.add_argument("--random_sim_step_length", type=int, default=4000,
-                        help="Number of steps to run with random commands and spawn points. Standardized tests like standing and walking forward will always run.")
-    parser.add_argument("--num_envs", type=int, default=1,
-                        help="Number of environments to simulate.")
-    parser.add_argument("--task", type=str, required=True,
-                        help="Name of the task/environment.")
-    parser.add_argument("--foot_vel_height_threshold", type=float, default=0.02,
-                        help="Maximum foot height to include in the foot-velocity-vs-height plot.")
-    parser.add_argument("--num_plot_jobs_in_parallel", type=int, default=2,
-                        help="Number of plot generation jobs to run in parallel.")
-    parser.add_argument("--plot_job_stagger_delay", type=int, default=10,
-                        help="Delay in seconds between starting each plot generation job in a parallel batch.")
+    parser.add_argument("--run_dir", type=str, required=True, help="ABSOLUTE path to directory containing model checkpoints and params.")
+    parser.add_argument("--eval_checkpoint", type=str, default=None, help="Optionally specify the model save checkpoint number instead of automatically using the last saved one.")
+    parser.add_argument("--random_sim_step_length", type=int, default=4000, help="Number of steps to run with random commands and spawn points. Standardized tests like standing and walking forward will always run.")
+    parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate. If you change this, hell will break loose")
+    parser.add_argument("--task", type=str, default="CaT-Go2-Rough-Terrain-Play-v0", help="Name of the task/environment.")
+    parser.add_argument("--foot_vel_height_threshold", type=float, default=0.02, help="Maximum foot height to include in the foot-velocity-vs-height plot.")
+    parser.add_argument("--num_plot_jobs_in_parallel", type=int, default=2, help="Number of plot generation jobs to run in parallel.")
+    parser.add_argument("--plot_job_stagger_delay", type=int, default=10, help="Delay in seconds between starting each plot generation job in a parallel batch.")
     # Good seeds for eval: 44, 46, 49
     # DEPRECATED: Hardcoded seed in env config is used
     # parser.add_argument("--seed", type=int, required=False, default=46, help="Seed for numpy, torch, env, terrain, terrain generator etc.. Good seeds for eval are 44, 46, 49")
@@ -228,12 +220,7 @@ def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
 
-    if not "play" in args.task.lower():
-        input("\n\n-------------------------------------------------------------------\n\
-              Keyword 'Play' not found in task name, are you sure you are using the correct task/environment?\n" \
-              "-------------------------------------------------------------------\n\n")
-
-    ensure_tex_env() # Used later for generate_plots.py
+    #ensure_tex_env() # Used later for generate_plots.py
 
     if args.eval_checkpoint is None:
         checkpoint_path = get_latest_checkpoint(args.run_dir)
@@ -245,6 +232,16 @@ def main():
 
     print(f"[INFO] Loading model from: {checkpoint_path}")
     model_state = torch.load(checkpoint_path, weights_only=True)
+
+    observation_dim = infer_checkpoint_input_dimensions(model_state)
+    if observation_dim == 236:
+        args.task = "CaT-Go2-Rough-Terrain-Joint-State-History-Play-v0"
+    elif observation_dim == 558:
+        args.task = "CaT-Go2-Rough-Terrain-Full-State-History-Play-v0" 
+    print(f"Observation dimension={observation_dim}, selected task={args.task}")
+
+    if not "play" in args.task.lower():
+        input("\n\n-------------------------------------------------------------------\nKeyword 'Play' not found in task name, are you sure you are using the correct task/environment?\n-------------------------------------------------------------------\n\n")
 
     # Launch Isaac Lab environment
     args.device = "cuda" # Using CPU Increases iterations/sec in some cases and reduces VRAM usage which allows parallel runs. Replace with "cuda" if you want pure GPU, because on more recent GPUs this might be faster depending on your hardware
