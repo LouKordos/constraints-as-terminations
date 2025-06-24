@@ -110,14 +110,13 @@ def summarize_metric(values: list[float]) -> dict[str, float]:
     arr = np.asarray(values, dtype=float)
     return {
         "mean":             float(arr.mean()),
+        "mean_of_abs":      float(np.sum(np.abs(arr))) / float(len(values)),
         "min":              float(arr.min()),
         "max":              float(arr.max()),
         "median":           float(np.median(arr)),
         "90th_percentile":  float(np.percentile(arr, 90)),
         "99th_percentile":  float(np.percentile(arr, 99)),
         "stddev":           float(arr.std()),
-        "sum_signed_divided_by_num_steps":       float(np.sum(arr)) / float(len(values)),
-        "sum_abs_divided_by_num_steps":          float(np.sum(np.abs(arr))) / float(len(values))
     }
 
 def compute_swing_durations(contact_state: np.ndarray, sim_env_step_dt: float, foot_labels: list[str]) -> dict[str, list[float]]:
@@ -216,6 +215,7 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
     foot_positions_contact_frame = data_arrays["foot_positions_contact_frame"][mask]
     reward = data_arrays["reward"][mask]
 
+    # TODO: Replace with compute_energy_arrays
     power_array = joint_torques * joint_velocities
     instantaneous_speed = np.linalg.norm(base_linear_velocity[:, :2], axis=1)
     # Fix transitions between resets, instantaneous speed and power might be invalid during those time steps
@@ -339,6 +339,7 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
         "foot_velocity_world_frame_summary"                   : foot_velocity_world_frame_summary,
         "energy_consumption_per_joint"                        : {jn: float(energy_per_joint[-1, j]) for j, jn in enumerate(joint_names)},
         "total_energy_consumption"                            : float(combined_energy[-1]),
+        "cumulative_power"                                    : summarize_metric(np.abs(power_array).sum(axis=1).tolist()),
         "mean_cost_of_transport"                              : mean_cost_of_transport,
         "constraint_violations_percent"                       : violations,
         "gait_symmetry_tvd_by_joint"                          : gait_symmetry_summary_per_dof,

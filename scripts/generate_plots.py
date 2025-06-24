@@ -1488,6 +1488,36 @@ def _plot_hist_air_time_per_foot_single(label, durations, output_dir, pickle_dir
         with open(os.path.join(pickle_dir, f"hist_air_time_{safe_label}.pickle"), 'wb') as f:
             pickle.dump(fig, f)
 
+def _plot_cumulative_power_abs(sim_times, cumulative_power, reset_times, output_dir, pickle_dir, FIGSIZE):
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.plot(sim_times, np.abs(cumulative_power), label='Absolute cumulative power')
+    draw_resets(ax, reset_times)
+    ax.set_xlabel(r'Time ($\text{s}$)')
+    ax.set_ylabel(r'Power ($\text{W}$)')
+    ax.set_title('Instantaneous cumulative power (unsigned)', fontsize=20)
+    ax.legend()
+    pdf = os.path.join(output_dir, "aggregates", 'cumulative_power_absolute.pdf')
+    os.makedirs(os.path.dirname(pdf), exist_ok=True)
+    fig.savefig(pdf, dpi=600)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'cumulative_power_absolute.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
+
+def _plot_cumulative_power_signed(sim_times, cumulative_power, reset_times, output_dir, pickle_dir, FIGSIZE):
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.plot(sim_times, cumulative_power, label='Cumulative power')
+    draw_resets(ax, reset_times)
+    ax.set_xlabel(r'Time ($\text{s}$)')
+    ax.set_ylabel(r'Power ($\text{W}$)')
+    ax.set_title('Instantaneous Cumulative Power (signed)', fontsize=20)
+    ax.legend()
+    pdf = os.path.join(output_dir, "aggregates", 'cumulative_power_signed.pdf')
+    os.makedirs(os.path.dirname(pdf), exist_ok=True)
+    fig.savefig(pdf, dpi=600)
+    if pickle_dir != "":
+        with open(os.path.join(pickle_dir, 'cumulative_power_signed.pickle'), 'wb') as f:
+            pickle.dump(fig, f)
+
 def _plot_combined_energy(sim_times, combined_energy, reset_times, output_dir, pickle_dir, FIGSIZE):
     fig, ax = plt.subplots(figsize=FIGSIZE)
     ax.plot(sim_times, combined_energy, label='total_energy')
@@ -2615,6 +2645,7 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
     joint_names = list(data['joint_names'])
     total_robot_mass = data['total_robot_mass']
     power_array = data["power_array"]
+    cumulative_power_array = power_array.sum(axis=1)
     reward_array = data["reward_array"]
     joint_positions = data['joint_positions_array']
     joint_velocities = data['joint_velocities_array']
@@ -2815,6 +2846,20 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             output_dir, pickle_dir, FIGSIZE
         )
 
+        submit_timed_job(
+            executor, futures_map, "Instantaneous cumulative power (signed)",
+            _plot_cumulative_power_signed, job_timeout_seconds,
+            sim_times, cumulative_power_array, reset_times,
+            output_dir, pickle_dir, FIGSIZE
+        )
+
+        submit_timed_job(
+            executor, futures_map, "Instantaneous cumulative power (absolute)",
+            _plot_cumulative_power_abs, job_timeout_seconds,
+            sim_times, cumulative_power_array, reset_times,
+            output_dir, pickle_dir, FIGSIZE
+        )
+        
         submit_timed_job(
             executor, futures_map, "Reward time series",
             _plot_reward_time_series, job_timeout_seconds,
