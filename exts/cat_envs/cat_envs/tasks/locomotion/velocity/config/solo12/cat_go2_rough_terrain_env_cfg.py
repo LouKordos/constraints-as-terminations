@@ -821,10 +821,10 @@ class CurriculumCfg:
     #     func=curriculums.update_reward_weight_linear,
     #     params={
     #         "term_name": "minimize_power",
-    #         "num_steps_from_start_step": 24 * MAX_CURRICULUM_ITERATIONS * 0.6,
-    #         "start_at_step": 24 * MAX_CURRICULUM_ITERATIONS,
+    #         "num_steps_from_start_step": 3000,
+    #         "start_at_step": 15000 * 10,
     #         "start_weight": 0.0,
-    #         "end_weight": 0.2
+    #         "end_weight": 0.4
     #     }
     # )
 
