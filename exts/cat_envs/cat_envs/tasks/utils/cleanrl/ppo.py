@@ -222,8 +222,26 @@ def PPO(envs, ppo_cfg, run_path):
     next_done = torch.zeros(NUM_ENVS, dtype=torch.float).to(device)
     next_true_done = torch.zeros(NUM_ENVS, dtype=torch.float).to(device)
 
-    print(f"Starting training for {NUM_ITERATIONS} steps")
+    # Algo 1: https://arxiv.org/abs/2309.02976
+    # Implementation: https://github.com/martius-lab/depRL/blob/790df8652f7ce7bae432435e44e509a5b427433e/deprl/custom_replay_buffers/action_cost_replay.py#L62
+    mean_threshold_metric_polyak = 0.0
+    curr_beta = 0.8 # polyak averaging
+    curr_lambda = 0.97 # decay term
+    curr_reward_performance_threshold = 2.9
+    c_target = 0.0
+    c_polyak = 0.0
+    curr_beta_c_polyak = 0.9
+    delta_adaptation_rate = 3e-6
+    delta_alpha_simple_algo = 9e-5
+    curr_energy_weight = 0.0 
 
+    energy_reward_term_name = "minimize_power"
+    # Just to make sure there are no other scaling factors at play
+    term = envs.unwrapped.reward_manager.get_term_cfg(energy_reward_term_name)
+    term.params["scaling_factor"] = 1.0
+    envs.unwrapped.reward_manager.set_term_cfg(energy_reward_term_name, term)
+
+    print(f"Starting training for {NUM_ITERATIONS} steps")
     for iteration in range(1, NUM_ITERATIONS + 1):
         ep_infos = []
 
@@ -276,7 +294,6 @@ def PPO(envs, ppo_cfg, run_path):
 
             if torch.any(torch.isnan(next_obs)):
                 print("NAN IN OBSERVATION")
-
             if "episode" in info:
                 ep_infos.append(info["episode"])
             elif "log" in info:
@@ -295,6 +312,59 @@ def PPO(envs, ppo_cfg, run_path):
                     print("time outs", info["time_outs"].sum())
                     exit(0)
 
+        # Keep in mind that the raw reward functions are multiplied by dt as well as max episode lenght, then scaled by reward weight!
+        # Even though the Episode_Reward key is returned every time step, it only contains the envs that reset at this specific time step.
+        threshold_metric_name = "Curriculum/terrain_levels"
+        threshold_metric_per_timestep = [info[threshold_metric_name] if type(info[threshold_metric_name]) == float else info[threshold_metric_name].cpu().item() for info in ep_infos]
+        mean_threshold_metric = np.mean(threshold_metric_per_timestep).item()
+        mean_threshold_metric_polyak = mean_threshold_metric_polyak * curr_beta + mean_threshold_metric * (1-curr_beta)
+        # To determine how many samples the threshold metric has on average, check the Episode_Termination category in wandb.
+        total_resets_over_rollout = sum(sum(done_count for (key, done_count) in info.items() if key.startswith("Episode_Termination/")) for info in ep_infos)
+
+        USE_SIMPLE_ADAPTIVE_CURR_ALGORITHM = False
+        if USE_SIMPLE_ADAPTIVE_CURR_ALGORITHM:
+            simple_curr_lambda = 0.97
+            delta_alpha_init_simple_algo = 9e-5
+            delta_decrease_rate = delta_alpha_init_simple_algo
+
+            # Performance above threshold: increase effort penalty and slow future increases
+            if mean_threshold_metric_polyak > curr_reward_performance_threshold:
+                curr_energy_weight += delta_alpha_simple_algo
+                delta_alpha_simple_algo *= simple_curr_lambda
+            # Performance below threshold: decrease effort penalty by *fixed* decrement and reset adaptation rate
+            else:
+                curr_energy_weight = max(0, curr_energy_weight - delta_decrease_rate)
+                delta_alpha_simple_algo = delta_alpha_init_simple_algo
+
+        else:
+            # Algo 1: https://arxiv.org/abs/2309.02976
+            # See also: https://github.com/martius-lab/depRL/blob/790df8652f7ce7bae432435e44e509a5b427433e/deprl/custom_replay_buffers/action_cost_replay.py#L62
+            if mean_threshold_metric_polyak > curr_reward_performance_threshold and c_polyak < 0.5: # Oscillations around optimum
+                delta_adaptation_rate *= curr_lambda
+                curr_energy_weight += delta_adaptation_rate
+            elif mean_threshold_metric_polyak > curr_reward_performance_threshold and c_polyak > 0.5:
+                curr_energy_weight += delta_adaptation_rate
+            else:
+                curr_energy_weight -= delta_adaptation_rate
+
+        curr_energy_weight = max(0, curr_energy_weight) # Prevent rewarding instead of penalizing power / energy consumption (raw reward term is already negative)
+        term = envs.unwrapped.reward_manager.get_term_cfg(energy_reward_term_name)
+        term.weight = curr_energy_weight
+        envs.unwrapped.reward_manager.set_term_cfg(energy_reward_term_name, term)
+
+        writer.add_scalar("Energy_Curriculum/c_target", c_target, iteration)
+        writer.add_scalar("Energy_Curriculum/c_polyak", c_polyak, iteration)
+        writer.add_scalar("Energy_Curriculum/delta_adapation_rate", delta_adaptation_rate, iteration)
+        writer.add_scalar("Energy_Curriculum/mean_threshold_metric", mean_threshold_metric, iteration) # Duplicated for easier comparison in UI
+        writer.add_scalar("Energy_Curriculum/mean_threshold_metric_polyak", mean_threshold_metric_polyak, iteration)
+        writer.add_scalar("Energy_Curriculum/curr_energy_weight", curr_energy_weight, iteration)
+        writer.add_scalar("Episode_Termination/total_resets_over_rollout", total_resets_over_rollout, iteration)
+        writer.add_scalar("Episode_Reward/mean_threshold_metric", mean_threshold_metric, iteration)
+
+        # Update after logging since it's for next iteration
+        c_target = float(mean_threshold_metric_polyak > curr_reward_performance_threshold)
+        c_polyak = curr_beta_c_polyak * c_polyak + (1-curr_beta_c_polyak) * c_target
+        
         # Logging/Analytics, adapted from rslrl
         for key in ep_infos[0]: # Get keys to iterate over
             infotensor = torch.tensor([], device=device)
