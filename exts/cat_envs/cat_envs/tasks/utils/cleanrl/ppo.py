@@ -189,6 +189,17 @@ def PPO(envs, ppo_cfg, run_path):
         zroot.attrs["append_interval"] = tensor_zarr_append_interval
 
     agent = Agent(envs).to(device)
+
+    LOAD_CHECKPOINT = False
+    #checkpoint_path = "/home/kordos/mamba_env_data/env_id_68_performance_based_energy_curr/constraints-as-terminations/logs/clean_rl/env_id_68_performance_based_energy_curr/2025-06-13-18-30-24/model_4299.pt"
+    checkpoint_path = "/home/kordos/mamba_env_data/env_id_68_performance_based_energy_curr/constraints-as-terminations/logs/clean_rl/env_id_68_performance_based_energy_curr/2025-06-15-11-15-38/model_13899.pt"
+    if LOAD_CHECKPOINT:
+        print(f"[INFO] Loading model from: {checkpoint_path}")
+        print("Loading from model currently assumes constraints curriculum progress = 1.0 i.e. fully enforced and resets the learning rate annealing!")
+        model_state = torch.load(checkpoint_path, weights_only=True)
+        agent.load_state_dict(model_state)
+        envs.unwrapped.curriculum_manager.constraints_curriculum = 1.0
+    
     optimizer = optim.Adam(agent.parameters(), lr=LEARNING_RATE, eps=1e-5)
 
     obs = torch.zeros((NUM_STEPS, NUM_ENVS) + SINGLE_OBSERVATION_SPACE, dtype=torch.float).to(device)
