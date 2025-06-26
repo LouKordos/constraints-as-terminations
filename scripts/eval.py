@@ -378,6 +378,7 @@ def main():
 
     reward_buffer = []
     reset_steps = []
+    inference_durations = []
 
     observations, info = env.reset()
     policy_observation = observations['policy']
@@ -405,7 +406,12 @@ def main():
             policy_observation = obs["policy"]
 
         with torch.no_grad():
+            inference_start = time.perf_counter_ns()
             action, _, _, _, _ = policy_agent.get_action_and_value(policy_agent.obs_rms(policy_observation, update=False), use_deterministic_policy=True)
+            inference_end = time.perf_counter_ns()
+            inference_duration_us = (inference_end - inference_start) / 1e+3
+            inference_durations.append(inference_duration_us)
+            # print(f"Inference took {inference_duration_us:.4f}us")
         step_tuple = env.step(action)
         # print(step_tuple)
         next_observation, reward, terminated, truncated, info = step_tuple
@@ -531,6 +537,7 @@ def main():
     reset_times = [i * step_dt for i in reset_steps]
     print("Reset times: ", reset_times)
     reward_array = np.array(reward_buffer)
+    inference_durations_us_array = np.array(inference_durations)
     joint_positions_array = np.vstack(joint_positions_buffer)
     joint_velocities_array = np.vstack(joint_velocities_buffer)
     joint_torques_array = np.vstack(joint_torques_buffer)
@@ -562,6 +569,8 @@ def main():
         sim_times=sim_times,
         reset_times=np.array(reset_times),
         reward_array=reward_array,
+        inference_durations_us_array=inference_durations_us_array,
+        inference_device=args.device,
         joint_positions_array=joint_positions_array,
         joint_velocities_array=joint_velocities_array,
         joint_torques_array=joint_torques_array,
