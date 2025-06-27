@@ -29,22 +29,25 @@ else
     echo "[INFO] uv is already installed."
 fi
 
-# Install Python version (if missing) and create project directory
-uv python install $PYTHON_VERSION  # ([docs.astral.sh](https://docs.astral.sh/uv/guides/install-python/?utm_source=chatgpt.com))
 
 # Prepare project directory
 mkdir -p "$PROJECT_ROOT"
 cd "$PROJECT_ROOT"
 
 # Initialize uv project (pyproject.toml, .venv, uv.lock)
-uv init .  # ([docs.astral.sh](https://docs.astral.sh/uv/guides/projects/?utm_source=chatgpt.com))
+uv init . --bare
 # Pin Python version
-echo "$PYTHON_VERSION" > .python-version  # ([docs.astral.sh](https://docs.astral.sh/uv/guides/projects/?utm_source=chatgpt.com))
-uv venv
-# Install Python dependencies via uv pip (10–100× faster than pip)
-uv pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121  # ([github.com](https://github.com/astral-sh/uv?utm_source=chatgpt.com), [pypi.org](https://pypi.org/project/uv/?utm_source=chatgpt.com))
-uv pip install --upgrade pip  # ([andreagrandi.it](https://www.andreagrandi.it/posts/using-uv-to-install-python-create-virtualenv/?utm_source=chatgpt.com))
-uv pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com  # ([docs.astral.sh](https://docs.astral.sh/uv/pip/environments/?utm_source=chatgpt.com))
+echo "$PYTHON_VERSION" > .python-version
+sed -i -E "s/requires-python = .*/requires-python = '==3.10'/" pyproject.toml
+uv venv --python $PYTHON_VERSION
+# Install Python version (if missing) and create project directory
+uv python install $PYTHON_VERSION  
+uv python pin 3.10
+
+# Install Python dependencies via uv pip 
+uv pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121  
+uv pip install --upgrade pip 
+uv pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com  
 uv tool install rust-just==1.40.0
 uv tool update-shell
 
