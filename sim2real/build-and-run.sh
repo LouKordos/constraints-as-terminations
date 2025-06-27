@@ -5,6 +5,8 @@ set -exo pipefail
 BUILD_TYPE="Release"
 BUILD_DIR="/app/build"
 LOG_FILE="/app/build.log"
+CONTAINER_NAME="sim2real-cat_sim2real-1"
+BINARY_NAME="run_policy"
 export CLICOLOR=1
 export CLICOLOR_FORCE=1
 
@@ -30,7 +32,7 @@ if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
     echo "Host (no docker) detected."
     docker compose --progress plain up -d
     echo "Docker container is now running, starting interactive shell. Run /app/build-and-run.sh inside the shell to proceed."
-    docker exec -it force-controlled-switch-assembly-force-controlled-switch-assembly-1 /bin/bash
+    docker exec -it $CONTAINER_NAME /bin/bash
 else
     echo "Docker detected."
     cd /app
@@ -62,8 +64,8 @@ else
     fi
 
     if [[ "${BUILD_TYPE}" = "Debug" ]]; then
-        gdb ${BUILD_DIR}/src/pick_and_place
+        gdb ${BUILD_DIR}/src/$BINARY_NAME
     else
-        ${BUILD_DIR}/src/pick_and_place
+        ${BUILD_DIR}/src/$BINARY_NAME
     fi
 fi

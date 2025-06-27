@@ -32,4 +32,5 @@ FetchContent_Declare (
 FetchContent_MakeAvailable(spdlog)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(pick_and_place PUBLIC spdlog::spdlog TracyClient atomic)
+add_executable(sim2real_policy)
+target_link_libraries(sim2real_policy PUBLIC spdlog::spdlog TracyClient atomic)
