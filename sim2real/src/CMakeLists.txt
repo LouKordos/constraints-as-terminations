@@ -31,6 +31,14 @@ FetchContent_Declare (
 )
 FetchContent_MakeAvailable(spdlog)
 
+find_package(Threads REQUIRED)
+
+find_package(unitree_sdk2 REQUIRED)
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-add_executable(sim2real_policy)
-target_link_libraries(sim2real_policy PUBLIC spdlog::spdlog TracyClient atomic)
+
+add_executable(run_policy run_policy.cpp)
+target_link_libraries(run_policy PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 Threads::Threads)
+
+add_executable(read_observations read_observations.cpp)
+target_link_libraries(read_observations PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 Threads::Threads)
