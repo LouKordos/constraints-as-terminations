@@ -17,7 +17,7 @@ include(FetchContent)
 FetchContent_Declare (
   tracy
   GIT_REPOSITORY https://github.com/wolfpld/tracy.git
-  GIT_TAG 759b4c3bfe207ab382c01080f0417aca5af4411a
+  GIT_TAG 7f6efe3bd4a06d6e460465c6f0f47f32df25685d
   GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(tracy)
@@ -26,7 +26,7 @@ option(TRACY_ENABLE "" ON)
 FetchContent_Declare (
   spdlog
   GIT_REPOSITORY https://github.com/gabime/spdlog
-  GIT_TAG 15f539685bbb21b3bb01475ac89c6d8d53b5b60f
+  GIT_TAG 15f539685bbb21b3bb01475ac89c6d8d53b5b60f 
   GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(spdlog)
