@@ -10,6 +10,8 @@
 #include <unitree/common/thread/thread.hpp>
 #include <thread>
 #include <chrono>
+#include <cmath>
+#include <algorithm>
 
 using namespace unitree::common;
 using namespace unitree::robot;
@@ -128,12 +130,58 @@ void Custom::InitLowCmd()
     }
 }
 
+std::array<double, 3> quat_to_projected_gravity(const std::array<float, 4> &quat_wxyz_body_to_world)
+{
+    double gravity_scale = 9.81; // Positive sign because conversion below already assumes (0,0,-1) gravity vector
+
+    // Invert / conjugate because orientation coming from go2 SDK is body => world
+    double quat_w_world_to_body = quat_wxyz_body_to_world[0];
+    double quat_x_world_to_body = -quat_wxyz_body_to_world[1];
+    double quat_y_world_to_body = -quat_wxyz_body_to_world[2];
+    double quat_z_world_to_body = -quat_wxyz_body_to_world[3];
+
+    double gravity_x_body = 2.0 * (quat_w_world_to_body * quat_x_world_to_body + quat_y_world_to_body * quat_z_world_to_body) * gravity_scale;
+    double gravity_y_body = 2.0 * (quat_w_world_to_body * quat_y_world_to_body - quat_x_world_to_body * quat_z_world_to_body) * gravity_scale;
+    double gravity_z_body = (quat_w_world_to_body * quat_w_world_to_body - quat_x_world_to_body * quat_x_world_to_body - quat_y_world_to_body * quat_y_world_to_body + quat_z_world_to_body * quat_z_world_to_body) * gravity_scale;
+
+    return {gravity_x_body, gravity_y_body, gravity_z_body};
+}
+
+std::array<float, 3> quaternion_to_euler_xyz(const std::array<float, 4> &quat_wxyz)
+{
+    const float w = quat_wxyz[0];
+    const float x = quat_wxyz[1];
+    const float y = quat_wxyz[2];
+    const float z = quat_wxyz[3];
+
+    // Roll (x‐axis rotation)
+    const float sinr_cosp = 2.0f * (w * x + y * z);
+    const float cosr_cosp = 1.0f - 2.0f * (x * x + y * y);
+    const float roll = std::atan2(sinr_cosp, cosr_cosp);
+
+    // Pitch (y‐axis rotation)
+    const float sinp = 2.0f * (w * y - z * x);
+    // clamp to [-1, +1] to avoid nan from asin
+    const float pitch = std::asin(std::clamp(sinp, -1.0f, 1.0f));
+
+    // Yaw (z‐axis rotation)
+    const float siny_cosp = 2.0f * (w * z + x * y);
+    const float cosy_cosp = 1.0f - 2.0f * (y * y + z * z);
+    const float yaw = std::atan2(siny_cosp, cosy_cosp);
+
+    return {roll, pitch, yaw};
+}
+
 void Custom::LowStateMessageHandler(const void *message)
 {
     low_state = *(unitree_go::msg::dds_::LowState_ *)message;
     std::cout << "force=" << low_state.foot_force()[0] << "," << low_state.foot_force()[1] << "," << low_state.foot_force()[2] << "," << low_state.foot_force()[3];
-    std::cout << "\t\timu: roll,pitch,yaw=" << low_state.imu_state().rpy()[0] << "," << low_state.imu_state().rpy()[1] << "," << low_state.imu_state().rpy()[2];
-    std::cout << "\t\timu angular vel x,y,z=" << low_state.imu_state().gyroscope()[0] << "," << low_state.imu_state().gyroscope()[1] << "," << low_state.imu_state().gyroscope()[2];
+    std::cout << "\t\tIMU: roll,pitch,yaw=" << low_state.imu_state().rpy()[0] << "," << low_state.imu_state().rpy()[1] << "," << low_state.imu_state().rpy()[2];
+    auto euler_from_quat = quaternion_to_euler_xyz(low_state.imu_state().quaternion());
+    std::cout << "\t\t quat_from_euler roll,pitch,yaw=" << euler_from_quat[0] << "," << euler_from_quat[1] << "," << euler_from_quat[2];
+    auto projected_gravity = quat_to_projected_gravity(low_state.imu_state().quaternion());
+    std::cout << "\t\tIMU projected gravity x,y,z=" << projected_gravity[0] << "," << projected_gravity[1] << "," << projected_gravity[2];
+    std::cout << "\t\tIMU angular vel x,y,z=" << low_state.imu_state().gyroscope()[0] << "," << low_state.imu_state().gyroscope()[1] << "," << low_state.imu_state().gyroscope()[2];
     std::cout << "\t\tjoint angles=";
     for (int i = 0; i < 12; i++)
     {
