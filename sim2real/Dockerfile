@@ -1,6 +1,6 @@
 FROM ubuntu:24.04
 
-RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl vim libtbb-dev dbus
+RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl vim libtbb-dev dbus libeigen3-dev sudo iputils-ping
 
 # For color test on shell startup
 RUN echo 'function color_test() {' >> ~/.bashrc && \
@@ -22,7 +22,7 @@ RUN git clone https://github.com/unitreerobotics/unitree_sdk2.git
 WORKDIR /go2_sdk/unitree_sdk2/build
 RUN cmake ..
 RUN make -j
-RUN sudo make install
+RUN make install
 
 # RUN AFTER ALL DEPENDENCY INSTALLATIONS!
 RUN ldconfig
