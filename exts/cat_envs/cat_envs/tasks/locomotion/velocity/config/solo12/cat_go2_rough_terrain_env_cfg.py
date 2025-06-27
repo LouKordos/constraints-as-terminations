@@ -21,6 +21,7 @@ from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
+import isaaclab.envs.mdp.curriculums as isaac_curriculums
 from cat_envs.tasks.utils.cat.manager_constraint_cfg import (
     ConstraintTermCfg as ConstraintTerm,
 )
@@ -34,6 +35,7 @@ from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 from isaaclab.sensors.ray_caster import RayCasterCfg, patterns
+from isaaclab.sensors.frame_transformer import FrameTransformerCfg
 
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 import cat_envs.tasks.utils.cat.constraints as constraints
@@ -43,6 +45,7 @@ import cat_envs.tasks.utils.mdp.observations as observations
 import cat_envs.tasks.utils.mdp.terminations as terminations
 import cat_envs.tasks.utils.mdp.events as events
 import cat_envs.tasks.utils.mdp.commands as commands
+import cat_envs.tasks.utils.mdp.rewards as rewards
 from functools import partial
 print = partial(print, flush=True) # For cluster runs
 
@@ -86,6 +89,8 @@ def height_map_grid(env, asset_cfg: SceneEntityCfg):
     # 4) compute local coordinates, then the height = z_hit - z_base
     local = hits_clean - base_expanded_to_match_shape_world_frame # [E, R, 3]
     height = local[..., 2] # [E, R]
+    #test_offset = torch.ones_like(height) * 0.03
+    #height += test_offset
     # height = torch.zeros_like(height)
 
     return height
@@ -135,7 +140,7 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="/World/ground",
         terrain_type="generator",
         terrain_generator=seeded_rough_cfg,
-        max_init_terrain_level=5,
+        max_init_terrain_level=1,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
@@ -237,7 +242,6 @@ class ActionsCfg:
         preserve_order=True,
     )
 
-
 @configclass
 class ObservationsCfg:
     """Observation specifications for the MDP."""
@@ -245,7 +249,7 @@ class ObservationsCfg:
     @configclass
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
-
+        
         # observation terms (order preserved)
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel, noise=Unoise(n_min=-0.001, n_max=0.001), scale=0.25
@@ -309,6 +313,171 @@ class ObservationsCfg:
             scale=1.0,
         )
 
+        def __post_init__(self):
+            self.enable_corruption = True
+            self.concatenate_terms = True
+
+    # observation groups
+    policy: PolicyCfg = PolicyCfg()
+
+@configclass
+class ObservationsCfgJointStateHistory(ObservationsCfg): # Inherit but redefine all terms to ensure correct order
+    @configclass
+    class PolicyCfg(ObsGroup):
+        base_ang_vel = ObsTerm(
+            func=mdp.base_ang_vel, noise=Unoise(n_min=-0.001, n_max=0.001), scale=0.25
+        )
+        velocity_commands = ObsTerm(
+            func=mdp.generated_commands,
+            params={"command_name": "base_velocity"},
+            scale=(2.0, 2.0, 0.25),
+        )
+        projected_gravity = ObsTerm(
+            func=mdp.projected_gravity, noise=Unoise(n_min=-0.05, n_max=0.05), scale=0.1
+        )
+        joint_pos_history = ObsTerm(
+            func=observations.joint_state_history,
+            params={
+                "names": [
+                    "FL_hip_joint",
+                    "FR_hip_joint",
+                    "RL_hip_joint",
+                    "RR_hip_joint",
+                    "FL_thigh_joint",
+                    "FR_thigh_joint",
+                    "RL_thigh_joint",
+                    "RR_thigh_joint",
+                    "FL_calf_joint",
+                    "FR_calf_joint",
+                    "RL_calf_joint",
+                    "RR_calf_joint",
+                ],
+                "history_len": 3,
+                "mode": "pos"
+            },
+            noise=Unoise(n_min=-0.01, n_max=0.01),
+            scale=1.0,
+        )
+        joint_vel_history = ObsTerm(
+            func=observations.joint_state_history,
+            params={
+                "names": [
+                    "FL_hip_joint",
+                    "FR_hip_joint",
+                    "RL_hip_joint",
+                    "RR_hip_joint",
+                    "FL_thigh_joint",
+                    "FR_thigh_joint",
+                    "RL_thigh_joint",
+                    "RR_thigh_joint",
+                    "FL_calf_joint",
+                    "FR_calf_joint",
+                    "RL_calf_joint",
+                    "RR_calf_joint",
+                ],
+                "history_len": 3,
+                "mode": "vel"
+            },
+            noise=Unoise(n_min=-0.2, n_max=0.2),
+            scale=0.05,
+        )
+        actions = ObsTerm(func=mdp.last_action, scale=1.0)
+        
+        height_map = ObsTerm(
+            func=height_map_grid,
+            params={"asset_cfg": SceneEntityCfg("ray_caster")},
+            noise=Unoise(n_min=-0.01, n_max=0.01),
+            scale=1.0,
+        )
+
+        def __post_init__(self):
+            self.enable_corruption = True
+            self.concatenate_terms = True
+
+    # observation groups
+    policy: PolicyCfg = PolicyCfg()
+
+@configclass
+class ObservationsCfgFullStateHistory(ObservationsCfg): # Inherit but redefine all terms to ensure correct order
+    @configclass
+    class PolicyCfg(ObsGroup):
+        """Observations for policy group."""
+        # observation terms (order preserved)
+        base_ang_vel_hist = ObsTerm(
+            func=observations.base_ang_vel_history,
+            params={"history_len": 3},
+            noise=Unoise(n_min=-0.001, n_max=0.001),
+            scale=0.25,
+        )
+        velocity_commands = ObsTerm(
+            func=mdp.generated_commands,
+            params={"command_name": "base_velocity"},
+            scale=(2.0, 2.0, 0.25),
+        )
+        projected_gravity_hist = ObsTerm(
+            func=observations.projected_gravity_history,
+            params={"history_len": 3},
+            noise=Unoise(n_min=-0.05, n_max=0.05),
+            scale=0.1,
+        ) 
+        joint_pos_history = ObsTerm(
+            func=observations.joint_state_history,
+            params={
+                "names": [
+                    "FL_hip_joint",
+                    "FR_hip_joint",
+                    "RL_hip_joint",
+                    "RR_hip_joint",
+                    "FL_thigh_joint",
+                    "FR_thigh_joint",
+                    "RL_thigh_joint",
+                    "RR_thigh_joint",
+                    "FL_calf_joint",
+                    "FR_calf_joint",
+                    "RL_calf_joint",
+                    "RR_calf_joint",
+                ],
+                "history_len": 3,
+                "mode": "pos"
+            },
+            noise=Unoise(n_min=-0.01, n_max=0.01),
+            scale=1.0,
+        )
+        joint_vel_history = ObsTerm(
+            func=observations.joint_state_history,
+            params={
+                "names": [
+                    "FL_hip_joint",
+                    "FR_hip_joint",
+                    "RL_hip_joint",
+                    "RR_hip_joint",
+                    "FL_thigh_joint",
+                    "FR_thigh_joint",
+                    "RL_thigh_joint",
+                    "RR_thigh_joint",
+                    "FL_calf_joint",
+                    "FR_calf_joint",
+                    "RL_calf_joint",
+                    "RR_calf_joint",
+                ],
+                "history_len": 3,
+                "mode": "vel"
+            },
+            noise=Unoise(n_min=-0.2, n_max=0.2),
+            scale=0.05,
+        )
+        actions_hist = ObsTerm(
+            func=observations.actions_history,
+            params={"history_len": 3},
+            scale=1.0,
+        ) 
+        height_map_hist = ObsTerm(
+            func=observations.height_map_history,
+            params={"history_len": 3, "asset_cfg": SceneEntityCfg("ray_caster")},
+            noise=Unoise(n_min=-0.01, n_max=0.01),
+            scale=1.0,
+        )    
+    
         def __post_init__(self):
             self.enable_corruption = True
             self.concatenate_terms = True
@@ -433,6 +602,13 @@ class RewardsCfg:
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
 
+    # DO NOT RENAME; USE THIS TERM FOR ALL ENERGY MINIMIZATION RELATED TASKS
+    # BECAUSE IT IS AUTOMATICALLY DISABLED IN THE PLAY ENV
+    minimize_power = RewTerm(
+        func=rewards.joint_power,
+        weight=0.0, # Updated by curriculum
+        params={"scaling_factor": 0.02} # May be updated in ppo.py, check carefully!
+    )
 
 # Never forget to also add a curriculum term for each added constraint
 # IMPORTANT NOTE: The max_p defined here is ALWAYS overwritten by the curriculum whenever
@@ -444,22 +620,22 @@ class ConstraintsCfg:
     # Safety Soft constraints
     joint_torque = ConstraintTerm(
         func=constraints.joint_torque,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={"limit": 20.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
     joint_velocity = ConstraintTerm(
         func=constraints.joint_velocity,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={"limit": 25.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
     joint_acceleration = ConstraintTerm(
         func=constraints.joint_acceleration,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={"limit": 800.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
     action_rate = ConstraintTerm(
         func=constraints.action_rate,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={"limit": 80.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
 
@@ -487,7 +663,7 @@ class ConstraintsCfg:
     # Style constraints
     hip_position = ConstraintTerm(
         func=constraints.relative_joint_position_upper_and_lower_bound_when_moving_forward,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={"limit": 0.3, "names": [".*_hip_joint"], "velocity_deadzone": 0.1},
     )
     base_orientation = ConstraintTerm(
@@ -495,35 +671,38 @@ class ConstraintsCfg:
     )
     # Never forget to also add a curriculum term for each added constraint
     # min_relative_base_height = ConstraintTerm(func=constraints.min_base_height_relative_to_ground, max_p=0.25, params={"limit": 0.2})
-
+    '''
     air_time_lower_bound = ConstraintTerm(
         func=constraints.air_time_lower_bound,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={"limit": 0.1, "names": [".*_foot"], "velocity_deadzone": 0.1},
     )
     air_time_upper_bound = ConstraintTerm(
         func=constraints.air_time_upper_bound,
-        max_p=0.6,
+        max_p=0.6, # Overwritten by curriculum!
         params={"limit": 0.8, "names": [".*_foot"], "velocity_deadzone": 0.1},
     )
+    '''
     no_move = ConstraintTerm(
         func=constraints.no_move,
-        max_p=0.1,
+        max_p=0.1, # Overwritten by curriculum!
         params={
             "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
             "velocity_deadzone": 0.1,
             "joint_vel_limit": 4.0,
         },
     )
+    '''
     two_foot_contact = ConstraintTerm(
         func=constraints.n_foot_contact,
-        max_p=0.25,
+        max_p=0.25, # Overwritten by curriculum!
         params={
             "names": [".*_foot"],
             "number_of_desired_feet": 2,
             "min_command_value": 0.5,
         },
     )
+    '''
 
 
 @configclass
@@ -611,7 +790,7 @@ class CurriculumCfg:
         },
     )
     # min_relative_base_height = CurrTerm(func=curriculums.modify_constraint_p, params={"term_name": "min_relative_base_height", "num_steps": 24 * MAX_CURRICULUM_ITERATIONS, "init_max_p": 0.25})
-
+    '''
     air_time_lower_bound = CurrTerm(
         func=curriculums.modify_constraint_p,
         params={
@@ -636,6 +815,18 @@ class CurriculumCfg:
             "init_max_p": 0.25,
         },
     )
+    '''
+
+    # power = CurrTerm(
+    #     func=curriculums.update_reward_weight_linear,
+    #     params={
+    #         "term_name": "minimize_power",
+    #         "num_steps_from_start_step": 3000,
+    #         "start_at_step": 15000 * 10,
+    #         "start_weight": 0.0,
+    #         "end_weight": 0.4
+    #     }
+    # )
 
     terrain_levels = CurrTerm(func=terrain_levels_with_ray_caster_refresh)
     # terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
@@ -705,6 +896,13 @@ class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
 
         self.sim.physx.gpu_max_rigid_patch_count = 568462
 
+@configclass
+class Go2RoughTerrainEnvCfgJointStateHistory(Go2RoughTerrainEnvCfg):
+    observations: ObservationsCfgJointStateHistory = ObservationsCfgJointStateHistory()
+
+@configclass
+class Go2RoughTerrainEnvCfgFullStateHistory(Go2RoughTerrainEnvCfg):
+    observations: ObservationsCfgFullStateHistory = ObservationsCfgFullStateHistory()
 
 class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
     def __post_init__(self) -> None:
@@ -724,10 +922,59 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
         # Pick the hardest terrain when testing the model.
         # Technically, this is incorrect as it wlil only run after 
         # the first reset but it's good to see a baseline of it walking on flat terrain first
-        # self.events.force_hard_terrain = EventTerm(
-        #     func=force_hard_terrain,
-        #     mode="startup",  # runs once at environment startup
-        # )
+        self.events.force_hard_terrain = EventTerm(
+            func=force_hard_terrain,
+            mode="startup",  # runs once at environment startup
+        )
+
+        # Used to get foot height above terrain ("sole frame")
+        self.scene.ray_caster_FL_foot = RayCasterCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/FL_foot",
+            update_period=self.sim.dt,
+            offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)), # Starting point 1m above base, doesn't really matter
+            mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
+            attach_yaw_only=True,
+            pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
+            debug_vis=True,
+        )
+        self.scene.ray_caster_FR_foot = RayCasterCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/FR_foot",
+            update_period=self.sim.dt,
+            offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)), # Starting point 1m above base, doesn't really matter
+            mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
+            attach_yaw_only=True,
+            pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
+            debug_vis=True,
+        )
+        self.scene.ray_caster_RL_foot = RayCasterCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/RL_foot",
+            update_period=self.sim.dt,
+            offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)), # Starting point 1m above base, doesn't really matter
+            mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
+            attach_yaw_only=True,
+            pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
+            debug_vis=True,
+        )
+        self.scene.ray_caster_RR_foot = RayCasterCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/RR_foot",
+            update_period=self.sim.dt,
+            offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)), # Starting point 1m above base, doesn't really matter
+            mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
+            attach_yaw_only=True,
+            pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
+            debug_vis=True,
+        )
+
+        self.scene.foot_frame_transformer = FrameTransformerCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/base",
+            target_frames=[
+                FrameTransformerCfg.FrameCfg(prim_path="{ENV_REGEX_NS}/Robot/FL_foot"),
+                FrameTransformerCfg.FrameCfg(prim_path="{ENV_REGEX_NS}/Robot/FR_foot"),
+                FrameTransformerCfg.FrameCfg(prim_path="{ENV_REGEX_NS}/Robot/RL_foot"),
+                FrameTransformerCfg.FrameCfg(prim_path="{ENV_REGEX_NS}/Robot/RR_foot"),
+            ],
+            debug_vis=False
+        )
 
         # set velocity command
         self.commands.base_velocity.ranges.lin_vel_x = (-0.3, 1.0)
@@ -738,7 +985,7 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
         self.scene.terrain.max_init_terrain_level = 0
         # reduce the number of terrains to save memory and set lower difficulty range
         if self.scene.terrain.terrain_generator is not None:
-            self.scene.terrain.terrain_generator.difficulty_range = (0.0, 0.2)
+            self.scene.terrain.terrain_generator.difficulty_range = (0.0, 0.6)
             self.scene.terrain.terrain_generator.num_rows = 5
             self.scene.terrain.terrain_generator.num_cols = 5
             self.scene.terrain.terrain_generator.curriculum = False
@@ -751,3 +998,12 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
             term = getattr(self.curriculum, field_name)
             if isinstance(term, CurrTerm) and term.params.get("term_name") == "minimize_power":
                 setattr(self.curriculum, field_name, None)
+
+@configclass
+class Go2RoughTerrainEnvCfgJointStateHistory_PLAY(Go2RoughTerrainEnvCfg_PLAY):
+    observations: ObservationsCfgJointStateHistory = ObservationsCfgJointStateHistory()
+
+@configclass
+class Go2RoughTerrainEnvCfgFullStateHistory_PLAY(Go2RoughTerrainEnvCfg_PLAY):
+    observations: ObservationsCfgFullStateHistory = ObservationsCfgFullStateHistory()
+

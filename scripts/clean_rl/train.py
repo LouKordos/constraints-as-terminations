@@ -5,6 +5,7 @@ from datetime import datetime
 from isaaclab.app import AppLauncher
 import cli_args  # isort: skip
 from functools import partial
+sys.stdout.reconfigure(line_buffering=True)
 print = partial(print, flush=True) # For cluster runs
 
 parser = argparse.ArgumentParser(description="Train an RL agent with CleanRL.")
@@ -159,6 +160,15 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
 
     print("Terrain hash:", get_ground_hash(env))
+    if env.unwrapped.scene.terrain.cfg.terrain_type != "plane" and get_ground_hash(env) != "e3f8594b1c2755f00290cebc3d98598721063bd0":
+        print("---------------------------------------------------")
+        print("---------------------------------------------------")
+        print("---------------------------------------------------")
+        print("!!!!!!Unexpected terrain hash!!!!!!")
+        print("---------------------------------------------------")
+        print("---------------------------------------------------")
+        print("---------------------------------------------------")
+        #sys.exit(1)
 
     if args_cli.video:
         video_kwargs = {

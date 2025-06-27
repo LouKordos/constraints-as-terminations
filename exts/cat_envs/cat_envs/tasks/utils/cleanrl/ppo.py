@@ -96,15 +96,17 @@ class Agent(nn.Module):
     def get_value(self, x):
         return self.critic(x)
 
-    def get_action_and_value(self, x, action=None):
+    def get_action_and_value(self, x, action=None, use_deterministic_policy=False):
         action_mean = self.actor_mean(x)
         action_logstd = self.actor_logstd.expand_as(action_mean)
         action_std = torch.exp(action_logstd)
         probs = Normal(action_mean, action_std)
         if action is None:
-            action = probs.sample()
-            # action = action_mean
-        return (action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x),)
+            if use_deterministic_policy:
+                action = action_mean
+            else:
+                action = probs.sample()
+        return (action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x), action_std)
 
 
 def PPO(envs, ppo_cfg, run_path):
@@ -187,6 +189,17 @@ def PPO(envs, ppo_cfg, run_path):
         zroot.attrs["append_interval"] = tensor_zarr_append_interval
 
     agent = Agent(envs).to(device)
+
+    LOAD_CHECKPOINT = False
+    #checkpoint_path = "/home/kordos/mamba_env_data/env_id_68_performance_based_energy_curr/constraints-as-terminations/logs/clean_rl/env_id_68_performance_based_energy_curr/2025-06-13-18-30-24/model_4299.pt"
+    checkpoint_path = "/home/kordos/mamba_env_data/env_id_68_performance_based_energy_curr/constraints-as-terminations/logs/clean_rl/env_id_68_performance_based_energy_curr/2025-06-15-11-15-38/model_13899.pt"
+    if LOAD_CHECKPOINT:
+        print(f"[INFO] Loading model from: {checkpoint_path}")
+        print("Loading from model currently assumes constraints curriculum progress = 1.0 i.e. fully enforced and resets the learning rate annealing!")
+        model_state = torch.load(checkpoint_path, weights_only=True)
+        agent.load_state_dict(model_state)
+        envs.unwrapped.curriculum_manager.constraints_curriculum = 1.0
+    
     optimizer = optim.Adam(agent.parameters(), lr=LEARNING_RATE, eps=1e-5)
 
     obs = torch.zeros((NUM_STEPS, NUM_ENVS) + SINGLE_OBSERVATION_SPACE, dtype=torch.float).to(device)
@@ -198,6 +211,9 @@ def PPO(envs, ppo_cfg, run_path):
     values = torch.zeros((NUM_STEPS, NUM_ENVS), dtype=torch.float).to(device)
     advantages = torch.zeros_like(rewards, dtype=torch.float).to(device)
 
+    joint_names = envs.unwrapped.scene["robot"].data.joint_names
+    num_joints = len(joint_names)
+
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
@@ -206,8 +222,26 @@ def PPO(envs, ppo_cfg, run_path):
     next_done = torch.zeros(NUM_ENVS, dtype=torch.float).to(device)
     next_true_done = torch.zeros(NUM_ENVS, dtype=torch.float).to(device)
 
-    print(f"Starting training for {NUM_ITERATIONS} steps")
+    # Algo 1: https://arxiv.org/abs/2309.02976
+    # Implementation: https://github.com/martius-lab/depRL/blob/790df8652f7ce7bae432435e44e509a5b427433e/deprl/custom_replay_buffers/action_cost_replay.py#L62
+    mean_threshold_metric_polyak = 0.0
+    curr_beta = 0.8 # polyak averaging
+    curr_lambda = 0.97 # decay term
+    curr_reward_performance_threshold = 2.9
+    c_target = 0.0
+    c_polyak = 0.0
+    curr_beta_c_polyak = 0.9
+    delta_adaptation_rate = 3e-6
+    delta_alpha_simple_algo = 9e-5
+    curr_energy_weight = 0.0 
 
+    energy_reward_term_name = "minimize_power"
+    # Just to make sure there are no other scaling factors at play
+    term = envs.unwrapped.reward_manager.get_term_cfg(energy_reward_term_name)
+    term.params["scaling_factor"] = 1.0
+    envs.unwrapped.reward_manager.set_term_cfg(energy_reward_term_name, term)
+
+    print(f"Starting training for {NUM_ITERATIONS} steps")
     for iteration in range(1, NUM_ITERATIONS + 1):
         ep_infos = []
 
@@ -216,6 +250,7 @@ def PPO(envs, ppo_cfg, run_path):
             lrnow = frac * LEARNING_RATE
             optimizer.param_groups[0]["lr"] = lrnow
 
+        action_std_buffer = [] # Buffer over sim steps, then take mean across env and time steps
         # Collecting trajectories for NUM_STEPS before updating the networks
         for step in range(0, NUM_STEPS):
             global_step += NUM_ENVS
@@ -225,7 +260,8 @@ def PPO(envs, ppo_cfg, run_path):
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
-                action, logprob, _, value = agent.get_action_and_value(next_obs)
+                action, logprob, _, value, action_std = agent.get_action_and_value(next_obs)
+                action_std_buffer.append(action_std.detach().cpu().numpy())
                 values[step] = value.flatten()
             actions[step] = action
             logprobs[step] = logprob
@@ -258,7 +294,6 @@ def PPO(envs, ppo_cfg, run_path):
 
             if torch.any(torch.isnan(next_obs)):
                 print("NAN IN OBSERVATION")
-
             if "episode" in info:
                 ep_infos.append(info["episode"])
             elif "log" in info:
@@ -277,10 +312,64 @@ def PPO(envs, ppo_cfg, run_path):
                     print("time outs", info["time_outs"].sum())
                     exit(0)
 
+        # Keep in mind that the raw reward functions are multiplied by dt as well as max episode lenght, then scaled by reward weight!
+        # Even though the Episode_Reward key is returned every time step, it only contains the envs that reset at this specific time step.
+        threshold_metric_name = "Curriculum/terrain_levels"
+        threshold_metric_per_timestep = [info[threshold_metric_name] if type(info[threshold_metric_name]) == float else info[threshold_metric_name].cpu().item() for info in ep_infos]
+        mean_threshold_metric = np.mean(threshold_metric_per_timestep).item()
+        mean_threshold_metric_polyak = mean_threshold_metric_polyak * curr_beta + mean_threshold_metric * (1-curr_beta)
+        # To determine how many samples the threshold metric has on average, check the Episode_Termination category in wandb.
+        total_resets_over_rollout = sum(sum(done_count for (key, done_count) in info.items() if key.startswith("Episode_Termination/")) for info in ep_infos)
+
+        ADAPTIVE_CURR_ALGORITHM = "deprl"
+        if ADAPTIVE_CURR_ALGORITHM.lower() == "simple":
+            simple_curr_lambda = 0.97
+            delta_alpha_init_simple_algo = 9e-5
+            delta_decrease_rate = delta_alpha_init_simple_algo
+
+            # Performance above threshold: increase effort penalty and slow future increases
+            if mean_threshold_metric_polyak > curr_reward_performance_threshold:
+                curr_energy_weight += delta_alpha_simple_algo
+                delta_alpha_simple_algo *= simple_curr_lambda
+            # Performance below threshold: decrease effort penalty by *fixed* decrement and reset adaptation rate
+            else:
+                curr_energy_weight = max(0, curr_energy_weight - delta_decrease_rate)
+                delta_alpha_simple_algo = delta_alpha_init_simple_algo
+
+        elif ADAPTIVE_CURR_ALGORITHM.lower() == "deprl":
+            # Algo 1: https://arxiv.org/abs/2309.02976
+            # See also: https://github.com/martius-lab/depRL/blob/790df8652f7ce7bae432435e44e509a5b427433e/deprl/custom_replay_buffers/action_cost_replay.py#L62
+            if mean_threshold_metric_polyak > curr_reward_performance_threshold and c_polyak < 0.5: # Oscillations around optimum
+                delta_adaptation_rate *= curr_lambda
+                curr_energy_weight += delta_adaptation_rate
+            elif mean_threshold_metric_polyak > curr_reward_performance_threshold and c_polyak > 0.5:
+                curr_energy_weight += delta_adaptation_rate
+            else:
+                curr_energy_weight -= delta_adaptation_rate
+
+        if ADAPTIVE_CURR_ALGORITHM != None and ADAPTIVE_CURR_ALGORITHM.lower() != "none":
+            curr_energy_weight = max(0, curr_energy_weight) # Prevent rewarding instead of penalizing power / energy consumption (raw reward term is already negative)
+            term = envs.unwrapped.reward_manager.get_term_cfg(energy_reward_term_name)
+            term.weight = curr_energy_weight
+            envs.unwrapped.reward_manager.set_term_cfg(energy_reward_term_name, term)
+
+            writer.add_scalar("Energy_Curriculum/c_target", c_target, iteration)
+            writer.add_scalar("Energy_Curriculum/c_polyak", c_polyak, iteration)
+            writer.add_scalar("Energy_Curriculum/delta_adapation_rate", delta_adaptation_rate, iteration)
+            writer.add_scalar("Energy_Curriculum/mean_threshold_metric", mean_threshold_metric, iteration) # Duplicated for easier comparison in UI
+            writer.add_scalar("Energy_Curriculum/mean_threshold_metric_polyak", mean_threshold_metric_polyak, iteration)
+            writer.add_scalar("Energy_Curriculum/curr_energy_weight", curr_energy_weight, iteration)
+            writer.add_scalar("Episode_Termination/total_resets_over_rollout", total_resets_over_rollout, iteration)
+            writer.add_scalar("Episode_Reward/mean_threshold_metric", mean_threshold_metric, iteration)
+
+            # Update after logging since it's for next iteration
+            c_target = float(mean_threshold_metric_polyak > curr_reward_performance_threshold)
+            c_polyak = curr_beta_c_polyak * c_polyak + (1-curr_beta_c_polyak) * c_target
+        
         # Logging/Analytics, adapted from rslrl
-        for key in ep_infos[0]:
+        for key in ep_infos[0]: # Get keys to iterate over
             infotensor = torch.tensor([], device=device)
-            for ep_info in ep_infos:
+            for ep_info in ep_infos: # Iterate over each time step
                 # handle scalar and zero dimensional tensor infos
                 if key not in ep_info:
                     continue
@@ -370,7 +459,7 @@ def PPO(envs, ppo_cfg, run_path):
                 end = start + MINIBATCH_SIZE
                 mb_inds = b_inds[start:end]
 
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])
+                _, newlogprob, entropy, newvalue, _ = agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
@@ -420,6 +509,15 @@ def PPO(envs, ppo_cfg, run_path):
         writer.add_scalar("Loss/mean_v_loss", sum_v_loss / num_updates, iteration)
         writer.add_scalar("Loss/mean_surrogate_loss", sum_surrogate_loss / num_updates, iteration)
         writer.add_scalar("Loss/learning_rate", optimizer.param_groups[0]["lr"], iteration)
+
+        stacked_action_std_np = np.stack(action_std_buffer, axis=0).reshape(-1, num_joints)
+        mean_per_joint = stacked_action_std_np.mean(axis=0)
+        std_per_joint  = stacked_action_std_np.std(axis=0)
+        for j, name in enumerate(joint_names):
+            # Sanitize joint name to avoid W&B hierarchy issues (slashes, spaces, etc.)
+            sanitized = name.replace("/", "_").replace(" ", "_")
+            writer.add_scalar(f"action_std/{sanitized}/mean", mean_per_joint[j], iteration)
+            writer.add_scalar(f"action_std/{sanitized}/std", std_per_joint[j], iteration)
 
         if (iteration + 1) % ppo_cfg.save_interval == 0:
             model_path = f"{run_path}/model_{iteration}.pt"
