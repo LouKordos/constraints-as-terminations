@@ -36,3 +36,5 @@ runs*
 constraints-as-terminations-logs-and-runs.tar.zst
 job.*.out
 job.*.err
+sim2real/build
+sim2real/build.log
