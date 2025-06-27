@@ -4,7 +4,8 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/go2_sdk/**"
+                "/go2_sdk/**",
+                "/torch/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++-14",

@@ -1,6 +1,6 @@
 FROM ubuntu:24.04
 
-RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl vim libtbb-dev dbus libeigen3-dev sudo iputils-ping
+RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl vim libtbb-dev dbus libeigen3-dev sudo iputils-ping unzip wget
 
 # For color test on shell startup
 RUN echo 'function color_test() {' >> ~/.bashrc && \
@@ -16,6 +16,11 @@ RUN echo 'function color_test() {' >> ~/.bashrc && \
 ENV CC=gcc-14
 ENV CXX=g++-14
 ENV DOCKER_FLAG_FOR_RUN_SCRIPT=1
+
+# CMAKE_PREFIX_PATH will be updated to include /torch/libtorch
+WORKDIR /torch
+RUN wget https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.7.1%2Bcpu.zip
+RUN unzip *.zip
 
 WORKDIR /go2_sdk
 RUN git clone https://github.com/unitreerobotics/unitree_sdk2.git
