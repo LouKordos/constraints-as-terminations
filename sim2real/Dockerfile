@@ -29,6 +29,21 @@ RUN cmake ..
 RUN make -j
 RUN make install
 
+WORKDIR /libzmq
+RUN git clone https://github.com/zeromq/libzmq.git
+WORKDIR /libzmq/libzmq
+RUN git checkout 622fc6dde99ee172ebaa9c8628d85a7a1995a21d
+WORKDIR /libzmq/libzmq/build
+RUN cmake ..
+RUN make -j install
+
+WORKDIR /cppzmq
+RUN git clone https://github.com/zeromq/cppzmq.git
+WORKDIR /cppzmq/cppzmq/build
+RUN git checkout 3bcbd9dad2f57180aacd4b4aea292a74f0de7ef4
+RUN cmake -DCPPZMQ_BUILD_TESTS=OFF ..
+RUN make -j install
+
 # RUN AFTER ALL DEPENDENCY INSTALLATIONS!
 RUN ldconfig
 

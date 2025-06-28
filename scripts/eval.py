@@ -6,6 +6,7 @@ import yaml
 import numpy as np
 import torch
 import time
+import zmq
 from functools import partial
 import sys
 sys.stdout.reconfigure(line_buffering=True)
@@ -293,7 +294,7 @@ def main():
     plots_directory = os.path.join(eval_base_dir, "plots")
     os.makedirs(plots_directory, exist_ok=True)
 
-    fixed_command_sim_steps = 500 # If you want to increase this you also need to increase episode length otherwise env will reset mid-way
+    fixed_command_sim_steps = 100 # If you want to increase this you also need to increase episode length otherwise env will reset mid-way
     fixed_command_scenarios = [ # Scenario positions depend on seed!
         ("fast_walk_stairs_up", torch.tensor([1, 0.0, 0.0], device=device), (torch.tensor([-8, 16, -0.1], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         # ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
@@ -394,6 +395,12 @@ def main():
         print(f"Starting ffmpeg process={' '.join(ffmpeg_cmd)}")
         ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdout=ffmpeg_process_logfile, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, bufsize=4*1024*1024)
 
+    CPP_INFERENCE = False # Allows testing C++ inference in devcontainer (test_pytorch_policy.cpp) in simulation
+    if CPP_INFERENCE:
+        ctx = zmq.Context()
+        socket = ctx.socket(zmq.REQ)
+        socket.connect("tcp://127.0.0.1:5555")
+
     for t in tqdm(range(total_sim_steps)):
         # These should only ever run at the end of eval / after random sampling because set_fixed_velocity_command breaks random command sampling!
         if t >= args.random_sim_step_length and (t-args.random_sim_step_length) % fixed_command_sim_steps == 0:
@@ -410,11 +417,17 @@ def main():
         with torch.no_grad():
             inference_start = time.perf_counter_ns()
             # action, _, _, _, _ = policy_agent.get_action_and_value(policy_agent.obs_rms(policy_observation, update=False), use_deterministic_policy=True)
-            action = actor_with_rms(policy_observation)
+            if CPP_INFERENCE:
+                socket.send(policy_observation.cpu().numpy().tobytes())
+                action_np = np.frombuffer(socket.recv(), dtype=np.float32).reshape(1,12).copy()
+                action = torch.from_numpy(action_np)
+            else:
+                action = actor_with_rms(policy_observation)
+
             inference_end = time.perf_counter_ns()
             inference_duration_us = (inference_end - inference_start) / 1e+3
             inference_durations.append(inference_duration_us)
-            # print(f"Inference took {inference_duration_us:.4f}us")
+            print(f"Inference took {inference_duration_us:.4f}us")
         step_tuple = env.step(action)
         # print(step_tuple)
         next_observation, reward, terminated, truncated, info = step_tuple

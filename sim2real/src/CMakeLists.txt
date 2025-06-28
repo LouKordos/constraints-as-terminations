@@ -35,6 +35,7 @@ find_package(Threads REQUIRED)
 find_package(unitree_sdk2 REQUIRED)
 list(APPEND CMAKE_PREFIX_PATH "/torch/libtorch/")
 find_package(Torch REQUIRED)
+find_package(cppzmq REQUIRED)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
@@ -45,4 +46,4 @@ add_executable(read_observations read_observations.cpp)
 target_link_libraries(read_observations PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 Threads::Threads)
 
 add_executable(test_pytorch_policy test_pytorch_policy.cpp)
-target_link_libraries(test_pytorch_policy PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 Threads::Threads "${TORCH_LIBRARIES}")
+target_link_libraries(test_pytorch_policy PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 Threads::Threads "${TORCH_LIBRARIES}" cppzmq)
