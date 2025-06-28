@@ -23,6 +23,11 @@ def main():
     args = parse_arguments()
     print(args)
 
+    script_path = os.path.dirname(os.path.abspath(__file__))
+    traced_checkpoints_dir = os.path.join(os.path.dirname(script_path), "sim2real", "traced_checkpoints")
+    print(f"traced_checkpoints_dir={traced_checkpoints_dir}")
+    os.makedirs(traced_checkpoints_dir, exist_ok=True)
+
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
     from isaaclab_tasks.utils import parse_env_cfg
@@ -35,10 +40,19 @@ def main():
     agent.load_state_dict(torch.load(args.checkpoint_path, weights_only=True))
 
     example_data = torch.randn(1, *env.unwrapped.single_observation_space["policy"].shape)
+    print("Single observation space shape:", *env.unwrapped.single_observation_space["policy"].shape)
     traced_actor = torch.jit.trace(agent.forward, example_data)
-    deterministic_path = os.path.abspath(args.checkpoint_path + ".traced_deterministic")
-    print(f"Saved to {deterministic_path}")
-    traced_actor.save(deterministic_path)
+
+    checkpoint_path = args.checkpoint_path
+    timestamp = os.path.basename(os.path.dirname(checkpoint_path))
+    filename = os.path.basename(checkpoint_path)
+    stem, _ = os.path.splitext(filename)
+    # Extract numeric ID after the first underscore
+    model_id = stem.split("_", 1)[1] if "_" in stem else stem
+    traced_filename = f"{timestamp}_{model_id}_traced_deterministic.pt"
+    traced_module_path = os.path.join(traced_checkpoints_dir, traced_filename)
+    traced_actor.save(traced_module_path)
+    print(f"Saved to {traced_module_path}")
 
     env.close()
     simulation_app.close()
