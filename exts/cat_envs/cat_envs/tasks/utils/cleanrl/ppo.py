@@ -17,19 +17,19 @@ class RunningMeanStd(nn.Module):
 
         self.epsilon = epsilon
 
-    def forward(self, obs, update=True):
+    def forward(self, obs: torch.Tensor, update: bool = True):
         if update:
             self.update(obs)
 
         return (obs - self.running_mean) / torch.sqrt(self.running_var + self.epsilon)
-
+    
     def update(self, x):
         """Updates the mean, var and count from a batch of samples."""
         batch_mean = torch.mean(x, dim=0)
         batch_var = torch.var(x, correction=0, dim=0)
         batch_count = x.shape[0]
         self.update_from_moments(batch_mean, batch_var, batch_count)
-
+    
     def update_from_moments(self, batch_mean, batch_var, batch_count):
         """Updates from batch mean, variance and count moments."""
         self.running_mean, self.running_var, self.count = (
@@ -42,7 +42,6 @@ class RunningMeanStd(nn.Module):
                 batch_count,
             )
         )
-
 
 def update_mean_var_count_from_moments(mean, var, count, batch_mean, batch_var, batch_count):
     """Updates the mean, var and count using the previous mean, var, count and batch values."""
@@ -58,12 +57,10 @@ def update_mean_var_count_from_moments(mean, var, count, batch_mean, batch_var, 
 
     return new_mean, new_var, new_count
 
-
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
     torch.nn.init.constant_(layer.bias, bias_const)
     return layer
-
 
 class Agent(nn.Module):
     def __init__(self, envs):
@@ -71,7 +68,7 @@ class Agent(nn.Module):
         SINGLE_OBSERVATION_SPACE = envs.unwrapped.single_observation_space["policy"].shape
         SINGLE_ACTION_SPACE = envs.unwrapped.single_action_space.shape
         self.critic = nn.Sequential(
-            layer_init(nn.Linear(np.array(SINGLE_OBSERVATION_SPACE).prod(), 512)),
+            layer_init(nn.Linear(int(np.array(SINGLE_OBSERVATION_SPACE).prod()), 512)),
             nn.ELU(),
             layer_init(nn.Linear(512, 256)),
             nn.ELU(),
@@ -80,15 +77,15 @@ class Agent(nn.Module):
             layer_init(nn.Linear(128, 1), std=1.0),
         )
         self.actor_mean = nn.Sequential(
-            layer_init(nn.Linear(np.array(SINGLE_OBSERVATION_SPACE).prod(), 512)),
+            layer_init(nn.Linear(int(np.array(SINGLE_OBSERVATION_SPACE).prod()), 512)),
             nn.ELU(),
             layer_init(nn.Linear(512, 256)),
             nn.ELU(),
             layer_init(nn.Linear(256, 128)),
             nn.ELU(),
-            layer_init(nn.Linear(128, np.prod(SINGLE_ACTION_SPACE)), std=0.01),
+            layer_init(nn.Linear(128, int(np.prod(SINGLE_ACTION_SPACE))), std=0.01),
         )
-        self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(SINGLE_ACTION_SPACE)))
+        self.actor_logstd = nn.Parameter(torch.zeros(1, int(np.prod(SINGLE_ACTION_SPACE))))
 
         self.obs_rms = RunningMeanStd(shape=SINGLE_OBSERVATION_SPACE)
         self.value_rms = RunningMeanStd(shape=())
@@ -97,6 +94,7 @@ class Agent(nn.Module):
         return self.critic(x)
     
     def forward(self, x):
+        # Note: This is deterministic!
         return self.actor_mean(x)
 
     def get_action_and_value(self, x, action=None, use_deterministic_policy=False):
@@ -111,6 +109,19 @@ class Agent(nn.Module):
                 action = probs.sample()
         return (action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x), action_std)
 
+class ActorWithRMS(nn.Module):
+    def __init__(self, trained_agent: Agent):
+        super().__init__()
+        # extract running_mean / running_var buffers
+        self.register_buffer("running_mean", trained_agent.obs_rms.running_mean.clone())
+        self.register_buffer("running_var", trained_agent.obs_rms.running_var.clone())
+        self.epsilon = float(trained_agent.obs_rms.epsilon)
+        self.actor = trained_agent.actor_mean
+
+    def forward(self, obs: torch.Tensor):
+        # normalized_observation = self.obs_rms(obs, update=False)
+        normalized_observation = (obs - self.running_mean) / torch.sqrt(self.running_var + self.epsilon)
+        return self.actor(normalized_observation)
 
 def PPO(envs, ppo_cfg, run_path):
     print(f"Env in PPO function:\n{os.environ}")

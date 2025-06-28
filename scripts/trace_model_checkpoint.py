@@ -32,16 +32,19 @@ def main():
     simulation_app = app_launcher.app
     from isaaclab_tasks.utils import parse_env_cfg
     from cat_envs.tasks.utils.cleanrl.ppo import Agent
+    from cat_envs.tasks.utils.cleanrl.ppo import ActorWithRMS
     
     env_cfg = parse_env_cfg(args.task, device=args.device, num_envs=args.num_envs, use_fabric=not args.disable_fabric)
     env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array")
 
     agent = Agent(env).to("cpu")
     agent.load_state_dict(torch.load(args.checkpoint_path, weights_only=True))
+    inference_model = ActorWithRMS(agent).eval()
 
     example_data = torch.randn(1, *env.unwrapped.single_observation_space["policy"].shape)
     print("Single observation space shape:", *env.unwrapped.single_observation_space["policy"].shape)
-    traced_actor = torch.jit.trace(agent.forward, example_data)
+
+    traced_actor = torch.jit.trace(inference_model, example_inputs=example_data)
 
     checkpoint_path = args.checkpoint_path
     timestamp = os.path.basename(os.path.dirname(checkpoint_path))
@@ -51,6 +54,7 @@ def main():
     model_id = stem.split("_", 1)[1] if "_" in stem else stem
     traced_filename = f"{timestamp}_{model_id}_traced_deterministic.pt"
     traced_module_path = os.path.join(traced_checkpoints_dir, traced_filename)
+    
     traced_actor.save(traced_module_path)
     print(f"Saved to {traced_module_path}")
 

@@ -251,6 +251,7 @@ def main():
     from isaaclab.utils.dict import print_dict
     from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
     from cat_envs.tasks.utils.cleanrl.ppo import Agent
+    from cat_envs.tasks.utils.cleanrl.ppo import ActorWithRMS
     from cat_envs.tasks.locomotion.velocity.config.solo12.cat_go2_rough_terrain_env_cfg import height_map_grid
     from isaaclab.managers import EventTermCfg
     from isaaclab.utils.math import euler_xyz_from_quat, quat_rotate_inverse
@@ -334,6 +335,7 @@ def main():
 
     policy_agent = Agent(env).to(device)
     policy_agent.load_state_dict(model_state)
+    actor_with_rms = ActorWithRMS(policy_agent)
 
     robot = env.unwrapped.scene["robot"]
     vel_term = env.unwrapped.command_manager.get_term("base_velocity")
@@ -407,7 +409,8 @@ def main():
 
         with torch.no_grad():
             inference_start = time.perf_counter_ns()
-            action, _, _, _, _ = policy_agent.get_action_and_value(policy_agent.obs_rms(policy_observation, update=False), use_deterministic_policy=True)
+            # action, _, _, _, _ = policy_agent.get_action_and_value(policy_agent.obs_rms(policy_observation, update=False), use_deterministic_policy=True)
+            action = actor_with_rms(policy_observation)
             inference_end = time.perf_counter_ns()
             inference_duration_us = (inference_end - inference_start) / 1e+3
             inference_durations.append(inference_duration_us)
