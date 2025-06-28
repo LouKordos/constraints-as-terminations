@@ -46,12 +46,6 @@ else
         touch "/tracy-for-capture-built.marker"
         echo "-------------------------------------------------Tracy capture setup complete------------------------------------------------------"
     fi
-    pkill -f tracy-capture || echo "No tracy capture instances running."
-    TRACY_LOG_FILE="/app/logs/tracy-capture-$(date '+%Y-%m-%d-%H-%M-%S').log"
-    # Start a new tracy-capture instance and redirect output to the log file 
-    /tracy-for-capture/capture/build/tracy-capture -o /app/tracy-profiles/$(date '+%Y-%m-%d-%H-%M-%S').tracy > "$TRACY_LOG_FILE" 2>&1 & 
-    TRACY_PID=$!
-    echo "Tracy capture started with PID $TRACY_PID. Logs are being written to $TRACY_LOG_FILE"
     
     time cmake --build "$BUILD_DIR" -j $(nproc) -v 2>&1 | tee "$LOG_FILE"
     echo "-----------------------------------------------------------------------------------------------------------------------------------"
@@ -62,6 +56,15 @@ else
     else
         echo -e "\n\033[1;32mNo warnings detected during compilation.\033[0m"
     fi
+
+    pkill -f tracy-capture || echo "No tracy capture instances running."
+    mkdir -p /app/logs/
+    mkdir -p /app/tracy-profiles/
+    TRACY_LOG_FILE="/app/logs/tracy-capture-$(date '+%Y-%m-%d-%H-%M-%S').log"
+    # Start a new tracy-capture instance and redirect output to the log file 
+    /tracy-for-capture/capture/build/tracy-capture -o /app/tracy-profiles/$(date '+%Y-%m-%d-%H-%M-%S').tracy > "$TRACY_LOG_FILE" 2>&1 & 
+    TRACY_PID=$!
+    echo "Tracy capture started with PID $TRACY_PID. Logs are being written to $TRACY_LOG_FILE"
 
     if [[ "${BUILD_TYPE}" = "Debug" ]]; then
         gdb ${BUILD_DIR}/src/$BINARY_NAME
