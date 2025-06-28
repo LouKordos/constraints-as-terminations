@@ -824,7 +824,8 @@ class CurriculumCfg:
     #         "num_steps_from_start_step": 3000,
     #         "start_at_step": 15000 * 10,
     #         "start_weight": 0.0,
-    #         "end_weight": 0.4
+    #         "end_weight": 0.4 * 0.02 # Instead of setting scaling_factor=0.02 because ppo.py overrides itab die post und los gehts
+    
     #     }
     # )
 
