@@ -95,6 +95,9 @@ class Agent(nn.Module):
 
     def get_value(self, x):
         return self.critic(x)
+    
+    def forward(self, x):
+        return self.actor_mean(x)
 
     def get_action_and_value(self, x, action=None, use_deterministic_policy=False):
         action_mean = self.actor_mean(x)
