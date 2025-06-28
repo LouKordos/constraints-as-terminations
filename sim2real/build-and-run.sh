@@ -6,7 +6,7 @@ BUILD_TYPE="Release"
 BUILD_DIR="/app/build"
 LOG_FILE="/app/build.log"
 CONTAINER_NAME="sim2real-cat_sim2real-1"
-BINARY_NAME="run_policy 4ns4" # Adjust ethernet interface as needed
+BINARY_NAME="test_pytorch_policy 4ns4" # Adjust ethernet interface as needed
 export CLICOLOR=1
 export CLICOLOR_FORCE=1
 
