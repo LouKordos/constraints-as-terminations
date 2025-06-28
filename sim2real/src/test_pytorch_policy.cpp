@@ -13,6 +13,7 @@ int main(int argc, const char* argv[]) {
     torch::jit::script::Module model;
     try {
         model = torch::jit::load(checkpoint_path.c_str());
+        model.eval();
     }
     catch (const c10::Error& e) {
         std::cerr << "error loading the model\n";
