@@ -58,9 +58,9 @@ else
     fi
 
     pkill -f tracy-capture || echo "No tracy capture instances running."
-    mkdir -p /app/logs/
+    mkdir -p /app/logs/tracy-capture/
     mkdir -p /app/tracy-profiles/
-    TRACY_LOG_FILE="/app/logs/tracy-capture-$(date '+%Y-%m-%d-%H-%M-%S').log"
+    TRACY_LOG_FILE="/app/logs/tracy-capture/tracy-capture-$(date '+%Y-%m-%d-%H-%M-%S').log"
     # Start a new tracy-capture instance and redirect output to the log file 
     /tracy-for-capture/capture/build/tracy-capture -o /app/tracy-profiles/$(date '+%Y-%m-%d-%H-%M-%S').tracy > "$TRACY_LOG_FILE" 2>&1 & 
     TRACY_PID=$!
