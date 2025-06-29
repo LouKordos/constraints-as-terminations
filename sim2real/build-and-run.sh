@@ -65,6 +65,8 @@ else
     /tracy-for-capture/capture/build/tracy-capture -o /app/tracy-profiles/$(date '+%Y-%m-%d-%H-%M-%S').tracy > "$TRACY_LOG_FILE" 2>&1 & 
     TRACY_PID=$!
     echo "Tracy capture started with PID $TRACY_PID. Logs are being written to $TRACY_LOG_FILE"
+    chmod -R 777 /app/logs
+    chmod -R 777 /app/tracy-profiles
 
     if [[ "${BUILD_TYPE}" = "Debug" ]]; then
         gdb ${BUILD_DIR}/src/$BINARY_NAME
