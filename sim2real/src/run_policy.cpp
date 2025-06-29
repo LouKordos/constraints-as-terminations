@@ -29,9 +29,11 @@
 std::shared_ptr<spdlog::logger> logger {nullptr};
 const short num_joints = 12;
 
-std::atomic_flag exit_flag {};
+std::atomic<bool> exit_flag {false};
+static_assert(std::atomic<bool>::is_always_lock_free(), "atomic bool is not lock free.");
+
 void exit_handler([[maybe_unused]] int s) {
-    exit_flag.test_and_set();
+    exit_flag.store(true);
     logger->error("----------------------------------\nSIGNAL CAUGHT; EXIT FLAG SET!\n------------------------------------");
 }
 
@@ -49,7 +51,7 @@ void run_control_loop() {
 
     // auto model = load_model();
 
-    while(!exit_flag.test()) {
+    while(!exit_flag.load()) {
     // MANY SMALL FUNCTIONS FOR EASY PROFILING AND SEGREGATION!
     // Get low level robot state
     // Convert to observation tensor
@@ -183,7 +185,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     std::this_thread::sleep_for(std::chrono::seconds{10});
     
     logger->debug("Reached end of main function, setting exit flag and joining threads...");
-    exit_flag.test_and_set();
+    exit_flag.store(true);
 
     logger->debug("Closing robot state subscriber channel...");
     robot_state_subscriber->CloseChannel();
