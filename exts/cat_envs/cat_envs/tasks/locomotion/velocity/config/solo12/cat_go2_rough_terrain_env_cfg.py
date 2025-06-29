@@ -89,6 +89,8 @@ def height_map_grid(env, asset_cfg: SceneEntityCfg):
     # 4) compute local coordinates, then the height = z_hit - z_base
     local = hits_clean - base_expanded_to_match_shape_world_frame # [E, R, 3]
     height = local[..., 2] # [E, R]
+    # height = torch.ones_like(height) * -0.33
+    # print(height.mean().item())
     #test_offset = torch.ones_like(height) * 0.03
     #height += test_offset
     # height = torch.zeros_like(height)
@@ -825,7 +827,7 @@ class CurriculumCfg:
     #         "start_at_step": 15000 * 10,
     #         "start_weight": 0.0,
     #         "end_weight": 0.4 * 0.02 # Instead of setting scaling_factor=0.02 because ppo.py overrides itab die post und los gehts
-    
+
     #     }
     # )
 
