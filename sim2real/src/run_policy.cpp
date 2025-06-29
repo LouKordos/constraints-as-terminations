@@ -199,11 +199,25 @@ void robot_state_message_handler(const void *message) {
     stamped_state.body_angular_velocity = angular_velocity;
     // Joint order in isaac lab is "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", "FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint", "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
     // Joint order reported by SDK state array is FR_hip_joint, FR_thigh_joint, FR_calf_joint, FL_hip_joint, FL_thigh_joint, FL_calf_joint, RR_hip_joint, RR_thigh_joint, RR_calf_joint, RL_hip_joint, RL_thigh_joint, RL_calf_joint
+    static constexpr int sdk_to_isaac_idx[12] = {
+    /*0*/ 1,  // FR_hip → Isaac[1]
+    /*1*/ 5,  // FR_thigh → Isaac[5]
+    /*2*/ 9,  // FR_calf → Isaac[9]
+    /*3*/ 0,  // FL_hip → Isaac[0]
+    /*4*/ 4,  // FL_thigh → Isaac[4]
+    /*5*/ 8,  // FL_calf → Isaac[8]
+    /*6*/ 3,  // RR_hip → Isaac[3]
+    /*7*/ 7,  // RR_thigh → Isaac[7]
+    /*8*/11,  // RR_calf → Isaac[11]
+    /*9*/ 2,  // RL_hip → Isaac[2]
+    /*10*/6,  // RL_thigh → Isaac[6]
+    /*11*/10  // RL_calf → Isaac[10]
+    };
 
     for (int i = 0; i < num_joints; i++) {
-        //TODO: Map joint positions and vels to order in isaac lab env
-        stamped_state.joint_pos[i] = static_cast<float>(robot_state.motor_state()[i].q());
-        stamped_state.joint_vel[i] = static_cast<float>(robot_state.motor_state()[i].dq());
+        int j = sdk_to_isaac_idx[i];
+        stamped_state.joint_pos[j] = static_cast<float>(robot_state.motor_state()[i].q());
+        stamped_state.joint_vel[j] = static_cast<float>(robot_state.motor_state()[i].dq());
     }
     stamped_state.timestamp = now;
     stamped_state.counter = iteration_counter++;
