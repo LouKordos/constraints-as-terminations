@@ -13,6 +13,10 @@
 #include <unistd.h>
 
 #include <tracy/Tracy.hpp>
+#define TRACY_NO_CONTEXT_SWITCH
+#define TRACY_NO_SYSTEM_TRACING
+#define TRACY_NO_VSYNC_CAPTURE
+#define TRACY_NO_SAMPLING
 
 #include <unitree/robot/channel/channel_publisher.hpp>
 #include <unitree/robot/channel/channel_subscriber.hpp>
@@ -31,7 +35,6 @@
 #include <timed_atomic.hpp>
 #include <stamped_robot_state.hpp>
 
-
 std::shared_ptr<spdlog::logger> logger {nullptr};
 const short num_joints = 12;
 timed_atomic<stamped_robot_state> global_robot_state {};
@@ -45,7 +48,7 @@ void exit_handler([[maybe_unused]] int s) {
 }
 
 // torch::Tensor construct_observation_tensor() {
-//     // TODO: Infer input dimension to return joint state history or not
+//     
 //     // TODO: Height map values might need transformation because of how they were defined in isaac lab env
 //     // TODO: CONFIRM OBSERVATION SCALE AND ORDER
 // }
@@ -81,6 +84,7 @@ void run_control_loop() {
             timeout_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
         }
         // Convert to observation tensor
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
        
         // Run inference to get action
         // Post process action to clip and convert into PD target
@@ -171,6 +175,7 @@ void robot_state_message_handler(const void *message) {
     auto now = std::chrono::steady_clock::now();
     if (last_call_time != std::chrono::steady_clock::time_point{}) {
         auto delta = now - last_call_time;
+        // logger->debug("{}ms", std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
         if (delta > timeout_threshold) {
             exit_flag.store(true);
             logger->error("Duration threshold between consecutive robot state handler callbacks exceeded, allowed threshold={}ms, actual elapsed duration={}ms, exiting.", 
@@ -192,7 +197,11 @@ void robot_state_message_handler(const void *message) {
 
     stamped_state.projected_gravity = projected_gravity;
     stamped_state.body_angular_velocity = angular_velocity;
+    // Joint order in isaac lab is "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", "FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint", "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
+    // Joint order reported by SDK state array is FR_hip_joint, FR_thigh_joint, FR_calf_joint, FL_hip_joint, FL_thigh_joint, FL_calf_joint, RR_hip_joint, RR_thigh_joint, RR_calf_joint, RL_hip_joint, RL_thigh_joint, RL_calf_joint
+
     for (int i = 0; i < num_joints; i++) {
+        //TODO: Map joint positions and vels to order in isaac lab env
         stamped_state.joint_pos[i] = static_cast<float>(robot_state.motor_state()[i].q());
         stamped_state.joint_vel[i] = static_cast<float>(robot_state.motor_state()[i].dq());
     }
@@ -250,6 +259,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     std::string robot_state_topic {"rt/lowstate"};
     robot_state_subscriber.reset(new unitree::robot::ChannelSubscriber<unitree_go::msg::dds_::LowState_>(robot_state_topic));
     robot_state_subscriber->InitChannel(std::bind(&robot_state_message_handler, std::placeholders::_1), 1);
+
+    // TODO: Infer input dimension and set global variable
 
     // run_safety_checklist(robot_state, &robot_state_subscriber);
     run_control_loop();
