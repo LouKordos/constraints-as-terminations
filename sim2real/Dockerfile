@@ -1,6 +1,6 @@
 FROM ubuntu:24.04
 
-RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl vim libtbb-dev dbus libeigen3-dev sudo iputils-ping unzip wget
+RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl vim libtbb-dev dbus libeigen3-dev sudo iputils-ping unzip wget iproute2
 
 # For color test on shell startup
 RUN echo 'function color_test() {' >> ~/.bashrc && \
