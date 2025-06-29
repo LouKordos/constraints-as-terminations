@@ -25,6 +25,7 @@ RUN unzip *.zip
 WORKDIR /go2_sdk
 RUN git clone https://github.com/unitreerobotics/unitree_sdk2.git
 WORKDIR /go2_sdk/unitree_sdk2/build
+RUN git checkout 66cc92816dd4af720e35b75f7dbd5be35381b68b
 RUN cmake ..
 RUN make -j
 RUN make install
