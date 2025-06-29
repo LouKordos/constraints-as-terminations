@@ -222,12 +222,6 @@ void robot_state_message_handler(const void *message) {
     stamped_state.timestamp = now;
     stamped_state.counter = iteration_counter++;
     global_robot_state.try_store_for(stamped_state, std::chrono::microseconds{1000});
-
-    std::vector<double> joint_positions;
-    joint_positions.reserve(num_joints);
-    for (int i = 0; i < num_joints; i++) {
-        joint_positions.push_back(robot_state.motor_state()[i].q());
-    }
     // append_row_to_csv("/app/logs/joint_positions.csv", joint_positions);
     logger->debug(
         "Foot forces=[{}]\tIMU RPY=[{:+.4f},{:+.4f},{:+.4f}]\tprojected_gravity=[{:+.4f},{:+.4f},{:.4f}]\tangular_vel=[{:+.4f},{:+.4f},{:+.4f}]\tq=[{}]",
@@ -235,7 +229,7 @@ void robot_state_message_handler(const void *message) {
         rpy_xyz[0], rpy_xyz[1], rpy_xyz[2],
         projected_gravity[0], projected_gravity[1], projected_gravity[2],
         angular_velocity[0], angular_velocity[1], angular_velocity[2],
-        join_formatted(joint_positions));
+        join_formatted(stamped_state.joint_pos));
     // std::this_thread::sleep_for(std::chrono::milliseconds{200});
 }
 
