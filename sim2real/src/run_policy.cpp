@@ -54,11 +54,14 @@ void exit_handler([[maybe_unused]] int s) {
 // Of course this is not proper safety, but this is hard to achieve with the Go2 robot.
 void run_control_loop() {
     logger->debug("Starting main control loop.");
-
+    logger->debug("Loading torch model...");
+    // TODO: Enable eval mode
     // auto model = load_model();
     auto atomic_op_timeout = std::chrono::microseconds{500};
+    auto timeout_threshold = std::chrono::duration{std::chrono::milliseconds{5}};
 
     while(!exit_flag.load()) {
+        ZoneScoped;
         FrameMarkNamed("run_control_loop");
 
         auto robot_state_res = global_robot_state.try_load_for(atomic_op_timeout);
@@ -68,19 +71,22 @@ void run_control_loop() {
         }
         auto robot_state = robot_state_res.value();
         logger->debug("Robot state from control loop: {}", robot_state.timestamp.time_since_epoch().count());
-    // MANY SMALL FUNCTIONS FOR EASY PROFILING AND SEGREGATION!
-    // Get low level robot state
-    // If timeout, exit
-    // If robot state timestamp is too old, exit
-    // Convert to observation tensor
-    // TODO: Enable eval mode
-    // Run inference to get action
-    // Post process action to clip and convert into PD target
-    // check target before applying, if it exceeds joint limits, exit
-    // Other safety checks from checklist
-    // Check exit flag
-    // Use wrapper with timeout to send low level command with crc32 to robot to execute action
-    // Repeat
+        auto now = std::chrono::steady_clock::now();
+        auto delta = now - robot_state.timestamp;
+        if(delta > timeout_threshold) {
+            exit_flag.store(true);
+            logger->error("State timestamp too old, allowed threshold={}ms, actual state age={}ms. Exiting to prevent outdated states.", 
+            timeout_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
+        }
+        // Convert to observation tensor
+       
+        // Run inference to get action
+        // Post process action to clip and convert into PD target
+        // check target before applying, if it exceeds joint limits, exit
+        // Other safety checks from checklist
+        // Check exit flag
+        // Use wrapper with timeout to send low level command with crc32 to robot to execute action
+        // Repeat
     }
 }
 
@@ -139,19 +145,19 @@ std::string join_formatted(const Range& values, std::string_view fmt_spec = "{:.
 
 void robot_state_message_handler(const void *message) {
     ZoneScoped;
-    FrameMark;
+    FrameMarkNamed("robot_state_message_handler");
     unitree_go::msg::dds_::LowState_ robot_state = *(unitree_go::msg::dds_::LowState_ *)message;
 
     static auto last_call_time = std::chrono::steady_clock::time_point{}; // default = epoch
-    static constexpr auto timeout_threshold = std::chrono::milliseconds{10};
+    static constexpr auto timeout_threshold = std::chrono::milliseconds{5};
 
     auto now = std::chrono::steady_clock::now();
     if (last_call_time != std::chrono::steady_clock::time_point{}) {
         auto delta = now - last_call_time;
         if (delta > timeout_threshold) {
+            exit_flag.store(true);
             logger->error("Duration threshold between consecutive robot state handler callbacks exceeded, allowed threshold={}ms, actual elapsed duration={}ms, exiting.", 
                 timeout_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
-            exit_flag.store(true);
         }
     }
     // update for next time
