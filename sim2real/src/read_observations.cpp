@@ -132,7 +132,7 @@ void Custom::InitLowCmd()
 
 std::array<double, 3> quat_to_projected_gravity(const std::array<float, 4> &quat_wxyz_body_to_world)
 {
-    double gravity_scale = 9.81; // Positive sign because conversion below already assumes (0,0,-1) gravity vector
+    const double gravity_scale = -0.1; // Form below rotates (0,0,1) but gravity is (0,0,-1)
 
     // Invert / conjugate because orientation coming from go2 SDK is body => world
     double quat_w_world_to_body = quat_wxyz_body_to_world[0];
@@ -145,6 +145,37 @@ std::array<double, 3> quat_to_projected_gravity(const std::array<float, 4> &quat
     double gravity_z_body = (quat_w_world_to_body * quat_w_world_to_body - quat_x_world_to_body * quat_x_world_to_body - quat_y_world_to_body * quat_y_world_to_body + quat_z_world_to_body * quat_z_world_to_body) * gravity_scale;
 
     return {gravity_x_body, gravity_y_body, gravity_z_body};
+}
+// Compute body-frame gravity vector given a body→world quaternion.
+// quat_body_to_world_wxyz is a unit quaternion [w, x, y, z] rotating body to world.
+// Returns [g_x, g_y, g_z] in body frame.
+static inline std::array<float, 3> projected_gravity_body_frame(const std::array<float, 4> &quat_body_to_world_wxyz)
+{
+    // Extract components
+    const float w = quat_body_to_world_wxyz[0];
+    const float x = quat_body_to_world_wxyz[1];
+    const float y = quat_body_to_world_wxyz[2];
+    const float z = quat_body_to_world_wxyz[3];
+
+    const float wi =  w;
+    const float xi = -x;
+    const float yi = -y;
+    const float zi = -z;
+
+    const float gx = 0.0f, gy = 0.0f, gz = -1.0f;
+    // First Hamilton product: q_inv ⊗ g
+    const float a0 =  zi;
+    const float a1 = -yi;
+    const float a2 =  xi;
+    const float a3 = -wi;
+
+    // Second Hamilton product: (q_inv ⊗ g) ⊗ q
+    const float r0 =  a0*w - a1*x - a2*y - a3*z;  // scalar part (ignored)
+    const float r1 =  a0*x + a1*w + a2*z - a3*y;
+    const float r2 =  a0*y - a1*z + a2*w + a3*x;
+    const float r3 =  a0*z + a1*y - a2*x + a3*w;
+
+    return { r1, r2, r3 };
 }
 
 std::array<float, 3> quaternion_to_euler_xyz(const std::array<float, 4> &quat_wxyz)
@@ -179,7 +210,7 @@ void Custom::LowStateMessageHandler(const void *message)
     std::cout << "\t\tIMU: roll,pitch,yaw=" << low_state.imu_state().rpy()[0] << "," << low_state.imu_state().rpy()[1] << "," << low_state.imu_state().rpy()[2];
     auto euler_from_quat = quaternion_to_euler_xyz(low_state.imu_state().quaternion());
     std::cout << "\t\t quat_from_euler roll,pitch,yaw=" << euler_from_quat[0] << "," << euler_from_quat[1] << "," << euler_from_quat[2];
-    auto projected_gravity = quat_to_projected_gravity(low_state.imu_state().quaternion());
+    auto projected_gravity = projected_gravity_body_frame(low_state.imu_state().quaternion());
     std::cout << "\t\tIMU projected gravity x,y,z=" << projected_gravity[0] << "," << projected_gravity[1] << "," << projected_gravity[2];
     std::cout << "\t\tIMU angular vel x,y,z=" << low_state.imu_state().gyroscope()[0] << "," << low_state.imu_state().gyroscope()[1] << "," << low_state.imu_state().gyroscope()[2];
     std::cout << "\t\tjoint angles=";
