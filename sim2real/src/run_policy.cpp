@@ -4,6 +4,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <expected>
 
 #include <signal.h>
 #include <stdlib.h>
@@ -56,13 +57,12 @@ void run_control_loop() {
     // Get low level robot state
     // Convert to observation tensor
     // TODO: Enable eval mode
-    // TODO: timeout on robot state read and action write
     // Run inference to get action
     // Post process action to clip and convert into PD target
     // check target before applying, if it exceeds joint limits, exit
     // Other safety checks from checklist
     // Check exit flag
-    // Send low level command with crc32 to robot to execute action
+    // Use wrapper with timeout to send low level command with crc32 to robot to execute action
     // Repeat
     }
 }
