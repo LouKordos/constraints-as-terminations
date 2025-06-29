@@ -23,8 +23,16 @@
 #include <unitree/idl/go2/LowState_.hpp>
 #include <unitree/idl/go2/LowCmd_.hpp>
 
-// #include <torch/script.h>
-// #include <torch/torch.h>
+// Provide a non-ambiguous overload for streaming std::atomic types.
+// Required because otherwise importing torch/script.h produces ambiguous
+// overload errors.
+template<typename T>
+std::ostream& operator<<(std::ostream& os, const std::atomic<T>& v) {
+    os << v.load(); 
+    return os;
+}
+#include <torch/script.h>
+#include <torch/torch.h>
 
 #include "spdlog/spdlog.h"
 #include "spdlog/async.h"
