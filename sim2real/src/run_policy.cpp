@@ -67,8 +67,20 @@ void exit_handler([[maybe_unused]] int s) {
 void run_control_loop() {
     logger->debug("Starting main control loop.");
     logger->debug("Loading torch model...");
-    // TODO: Enable eval mode
-    // auto model = load_model();
+
+    // TODO: Make path adjustable/configureable
+    std::string checkpoint_path = "/app/traced_checkpoints/2025-06-22-08-06-02_6299_traced_deterministic.pt";
+    torch::jit::script::Module model;
+    try {
+        model = torch::jit::load(checkpoint_path.c_str());
+        model.eval();
+    }
+    catch (const c10::Error& e) {
+        logger->debug("Failed to load module, exiting.");
+        exit_flag.store(true);
+    }
+
+    std::cout << "Loaded module checkpoint from " << checkpoint_path << std::endl;
     auto atomic_op_timeout = std::chrono::microseconds{500};
     auto timeout_threshold = std::chrono::milliseconds{50};
 
@@ -91,9 +103,8 @@ void run_control_loop() {
             logger->error("State timestamp too old, allowed threshold={}ms, actual state age={}ms. Exiting to prevent outdated states.", 
             timeout_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
         }
-        // Convert to observation tensor
         std::this_thread::sleep_for(std::chrono::milliseconds{2});
-       
+        // Convert to observation tensor
         // Run inference to get action
         // Post process action to clip and convert into PD target
         // check target before applying, if it exceeds joint limits, exit
