@@ -58,7 +58,7 @@ void run_control_loop() {
     // TODO: Enable eval mode
     // auto model = load_model();
     auto atomic_op_timeout = std::chrono::microseconds{500};
-    auto timeout_threshold = std::chrono::duration{std::chrono::milliseconds{5}};
+    auto timeout_threshold = std::chrono::milliseconds{50};
 
     while(!exit_flag.load()) {
         ZoneScoped;
@@ -70,10 +70,11 @@ void run_control_loop() {
             logger->error("Failed to retrieve robot state within {}us, exiting.", atomic_op_timeout.count());
         }
         auto robot_state = robot_state_res.value();
-        logger->debug("Robot state from control loop: {}", robot_state.timestamp.time_since_epoch().count());
+        // logger->debug("Robot state from control loop: {}", robot_state.timestamp.time_since_epoch().count());
         auto now = std::chrono::steady_clock::now();
         auto delta = now - robot_state.timestamp;
-        if(delta > timeout_threshold) {
+        // logger->debug("robot_state.counter={}\tdelta={}", robot_state.counter, std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
+        if(delta > timeout_threshold && robot_state.counter > 0) { // Discard first iteration
             exit_flag.store(true);
             logger->error("State timestamp too old, allowed threshold={}ms, actual state age={}ms. Exiting to prevent outdated states.", 
             timeout_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
@@ -149,7 +150,8 @@ void robot_state_message_handler(const void *message) {
     unitree_go::msg::dds_::LowState_ robot_state = *(unitree_go::msg::dds_::LowState_ *)message;
 
     static auto last_call_time = std::chrono::steady_clock::time_point{}; // default = epoch
-    static constexpr auto timeout_threshold = std::chrono::milliseconds{5};
+    static constexpr auto timeout_threshold = std::chrono::milliseconds{500};
+    static long long iteration_counter = 0;
 
     auto now = std::chrono::steady_clock::now();
     if (last_call_time != std::chrono::steady_clock::time_point{}) {
@@ -160,11 +162,7 @@ void robot_state_message_handler(const void *message) {
                 timeout_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
         }
     }
-    // update for next time
     last_call_time = now;
-
-    //TODO: Add timestamp to message to detect stale/outdated states
-    //TODO: Map joint positions and vels to order in isaac lab env
 
     auto foot_forces = robot_state.foot_force();
     auto quat_wxyz_body_to_world = robot_state.imu_state().quaternion();
@@ -184,6 +182,7 @@ void robot_state_message_handler(const void *message) {
         stamped_state.joint_vel[i] = static_cast<float>(robot_state.motor_state()[i].dq());
     }
     stamped_state.timestamp = now;
+    stamped_state.counter = iteration_counter++;
     global_robot_state.try_store_for(stamped_state, std::chrono::microseconds{1000});
 
     // std::vector<double> joint_positions;
