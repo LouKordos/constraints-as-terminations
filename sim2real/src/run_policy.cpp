@@ -299,7 +299,7 @@ void robot_state_message_handler(const void *message) {
     stamped_state.counter = iteration_counter++;
     global_robot_state.try_store_for(stamped_state, std::chrono::microseconds{1000});
     if(true) {
-        // append_row_to_csv("/app/logs/joint_positions.csv", joint_positions);
+        // append_row_to_csv("/app/logs/joint_positions.csv", std::vector<double>(stamped_state.joint_pos.begin(), stamped_state.joint_pos.end()));
         logger->debug(
             "Foot forces=[{}]\tIMU RPY=[{:+.4f},{:+.4f},{:+.4f}]\tprojected_gravity=[{:+.4f},{:+.4f},{:.4f}]\tangular_vel=[{:+.4f},{:+.4f},{:+.4f}]\tq=[{}]",
             fmt::join(foot_forces, ","),
@@ -339,7 +339,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     sigint_handler.sa_flags = 0;
     sigaction(SIGINT, &sigint_handler, NULL);
 
-    logger->debug("Finished setting up loggin and sigint handler, setting up robot communication.");
     unitree::robot::ChannelFactory::Instance()->Init(0, argv[1]);
     unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::LowState_> robot_state_subscriber;
     std::string robot_state_topic {"rt/lowstate"};
