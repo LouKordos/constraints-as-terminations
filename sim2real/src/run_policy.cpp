@@ -114,7 +114,7 @@ void run_control_loop() {
         model.eval();
     }
     catch (const c10::Error& e) {
-        logger->debug("Failed to load module, exiting.");
+        logger->error("Failed to load module, exiting.");
         exit_flag.store(true);
     }
 
@@ -382,6 +382,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     sigint_handler.sa_flags = 0;
     sigaction(SIGINT, &sigint_handler, NULL);
 
+    logger->debug("Finished setting up logging and sigint handler, setting up robot communication.");
     unitree::robot::ChannelFactory::Instance()->Init(0, argv[1]);
     unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::LowState_> robot_state_subscriber;
     std::string robot_state_topic {"rt/lowstate"};
