@@ -291,14 +291,16 @@ void robot_state_message_handler(const void *message) {
     stamped_state.timestamp = now;
     stamped_state.counter = iteration_counter++;
     global_robot_state.try_store_for(stamped_state, std::chrono::microseconds{1000});
-    // append_row_to_csv("/app/logs/joint_positions.csv", joint_positions);
-    logger->debug(
-        "Foot forces=[{}]\tIMU RPY=[{:+.4f},{:+.4f},{:+.4f}]\tprojected_gravity=[{:+.4f},{:+.4f},{:.4f}]\tangular_vel=[{:+.4f},{:+.4f},{:+.4f}]\tq=[{}]",
-        fmt::join(foot_forces, ","),
-        rpy_xyz[0], rpy_xyz[1], rpy_xyz[2],
-        projected_gravity[0], projected_gravity[1], projected_gravity[2],
-        angular_velocity[0], angular_velocity[1], angular_velocity[2],
-        join_formatted(stamped_state.joint_pos));
+    if(true) {
+        // append_row_to_csv("/app/logs/joint_positions.csv", joint_positions);
+        logger->debug(
+            "Foot forces=[{}]\tIMU RPY=[{:+.4f},{:+.4f},{:+.4f}]\tprojected_gravity=[{:+.4f},{:+.4f},{:.4f}]\tangular_vel=[{:+.4f},{:+.4f},{:+.4f}]\tq=[{}]",
+            fmt::join(foot_forces, ","),
+            rpy_xyz[0], rpy_xyz[1], rpy_xyz[2],
+            projected_gravity[0], projected_gravity[1], projected_gravity[2],
+            angular_velocity[0], angular_velocity[1], angular_velocity[2],
+            join_formatted(stamped_state.joint_pos));   
+    }
     // std::this_thread::sleep_for(std::chrono::milliseconds{200});
 }
 
