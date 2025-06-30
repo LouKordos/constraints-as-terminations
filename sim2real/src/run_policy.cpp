@@ -7,6 +7,7 @@
 #include <expected>
 #include <fstream>
 #include <cmath>
+#include <ranges>
 
 #include <signal.h>
 #include <stdlib.h>
@@ -23,6 +24,7 @@
 #include <unitree/robot/channel/channel_subscriber.hpp>
 #include <unitree/idl/go2/LowState_.hpp>
 #include <unitree/idl/go2/LowCmd_.hpp>
+#include <unitree/robot/b2/motion_switcher/motion_switcher_client.hpp>
 
 // Provide a non-ambiguous overload for streaming std::atomic types.
 // Required because otherwise importing torch/script.h produces ambiguous
@@ -47,14 +49,49 @@ std::ostream& operator<<(std::ostream& os, const std::atomic<T>& v) {
 std::shared_ptr<spdlog::logger> logger {nullptr};
 const short num_joints = 12;
 int observation_dim = 188; // TODO: Infer this from loaded model
-const float action_scale = 0.8;
+const float action_scale = 0.8f;
+const float actuator_Kp = 25.0f;
+const float actuator_Kd = 0.5;
+constexpr double PosStopF = (2.146E+9f);
+constexpr double VelStopF = (16000.0f);
 
 // Isaac Lab joint order
-const std::array<std::pair<float, float>, 2> base_orientation_limit_rad {std::pair<float, float>{-0.3, 0.3}, {-0.3, 0.3}}; // Only roll and pitch, does not make sense to limit yaw
-const std::array<std::pair<float, float>, num_joints> joint_position_limits {std::pair<float, float>{-0.9, 0.9}, {-0.9, 0.9}, {-0.9, 0.9}, {-0.9, 0.9}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-2.6, -0.7}, {-2.6, -0.7}, {-2.6, -0.7}, {-2.6, -0.7}}; // rad
+const std::array<std::pair<float, float>, 2> base_orientation_limit_rad {std::pair<float, float>{-0.6, 0.6}, {-0.6, 0.6}}; // Only roll and pitch, does not make sense to limit yaw
+const std::array<std::pair<float, float>, num_joints> joint_position_limits {std::pair<float, float>{-0.9, 0.9}, {-0.9, 0.9}, {-0.9, 0.9}, {-0.9, 0.9}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}}; // rad
+std::array<float, num_joints> default_joint_positions {0.1, -0.1, 0.1, -0.1, 0.8, 0.8, 1.0, 1.0, -1.5, -1.5, -1.5, -1.5}; // Isaac Lab order
 const double joint_vel_abs_limit = 30; // rad/s
 const double joint_torque_abs_limit = 40; //Nm
 timed_atomic<stamped_robot_state> global_robot_state {};
+
+// Joint order in isaac lab is "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", "FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint", "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
+// Joint order reported by SDK state array is FR_hip_joint, FR_thigh_joint, FR_calf_joint, FL_hip_joint, FL_thigh_joint, FL_calf_joint, RR_hip_joint, RR_thigh_joint, RR_calf_joint, RL_hip_joint, RL_thigh_joint, RL_calf_joint
+static constexpr int sdk_to_isaac_idx[12] = {
+/*0*/ 1,  // FR_hip → Isaac[1]
+/*1*/ 5,  // FR_thigh → Isaac[5]
+/*2*/ 9,  // FR_calf → Isaac[9]
+/*3*/ 0,  // FL_hip → Isaac[0]
+/*4*/ 4,  // FL_thigh → Isaac[4]
+/*5*/ 8,  // FL_calf → Isaac[8]
+/*6*/ 3,  // RR_hip → Isaac[3]
+/*7*/ 7,  // RR_thigh → Isaac[7]
+/*8*/11,  // RR_calf → Isaac[11]
+/*9*/ 2,  // RL_hip → Isaac[2]
+/*10*/6,  // RL_thigh → Isaac[6]
+/*11*/10  // RL_calf → Isaac[10]
+};
+
+// Helper: format each element with `fmt_spec` and join with `sep`
+template<typename Range>
+std::string join_formatted(const Range& values, std::string_view fmt_spec = "{:.4f}", std::string_view sep = ",")
+{
+    std::vector<std::string> formatted;
+    formatted.reserve(std::size(values));
+    for (auto&& v : values) {
+        formatted.push_back(fmt::format(fmt::runtime(fmt_spec), v));
+    }
+
+    return fmt::format("{}", fmt::join(formatted, sep));
+}
 
 std::atomic<bool> exit_flag {false};
 static_assert(std::atomic<bool>::is_always_lock_free, "atomic bool is not lock free.");
@@ -62,6 +99,135 @@ static_assert(std::atomic<bool>::is_always_lock_free, "atomic bool is not lock f
 void exit_handler([[maybe_unused]] int s) {
     exit_flag.store(true);
     logger->error("----------------------------------\nSIGNAL CAUGHT; EXIT FLAG SET!\n------------------------------------");
+}
+
+// Taken from unitree_go2_sdk stand_example
+uint32_t crc32_core(uint32_t* ptr, uint32_t len)
+{
+    unsigned int xbit = 0;
+    unsigned int data = 0;
+    unsigned int CRC32 = 0xFFFFFFFF;
+    const unsigned int dwPolynomial = 0x04c11db7;
+
+    for (unsigned int i = 0; i < len; i++)
+    {
+        xbit = 1 << 31;
+        data = ptr[i];
+        for (unsigned int bits = 0; bits < 32; bits++)
+        {
+            if (CRC32 & 0x80000000)
+            {
+                CRC32 <<= 1;
+                CRC32 ^= dwPolynomial;
+            }
+            else
+            {
+                CRC32 <<= 1;
+            }
+
+            if (data & xbit)
+                CRC32 ^= dwPolynomial;
+            xbit >>= 1;
+        }
+    }
+
+    return CRC32;
+}
+
+// Taken from unitree_go2_sdk stand_example
+int query_motion_status(unitree::robot::b2::MotionSwitcherClient &msc)
+{
+    std::string robotForm,motionName;
+    int motionStatus;
+    int32_t ret = msc.CheckMode(robotForm, motionName);
+    if(ret != 0) {
+        logger->warn("CheckMode failed. Error code: {}", ret);
+    }
+    if(motionName.empty())
+    {
+        motionStatus = 0;
+    }
+    else
+    {
+        logger->info("Service {} is still activated...", motionName);
+        motionStatus = 1;
+    }
+    return motionStatus;
+}
+
+void enable_low_level_control() {
+    unitree_go::msg::dds_::LowCmd_ low_cmd{};
+    low_cmd.head()[0] = 0xFE;
+    low_cmd.head()[1] = 0xEF;
+    low_cmd.level_flag() = 0xFF;
+    low_cmd.gpio() = 0;
+
+    for(int i=0; i<20; i++)
+    {
+        low_cmd.motor_cmd()[i].mode() = (0x01); // motor switch to servo (PMSM) mode
+        low_cmd.motor_cmd()[i].q() = (PosStopF);
+        low_cmd.motor_cmd()[i].kp() = (0);
+        low_cmd.motor_cmd()[i].dq() = (VelStopF);
+        low_cmd.motor_cmd()[i].kd() = (0);
+        low_cmd.motor_cmd()[i].tau() = (0);
+    }
+
+    std::string robot_command_topic {"rt/lowcmd"};
+    unitree::robot::ChannelPublisherPtr<unitree_go::msg::dds_::LowCmd_> lowcmd_publisher;
+    lowcmd_publisher.reset(new unitree::robot::ChannelPublisher<unitree_go::msg::dds_::LowCmd_>(robot_command_topic));
+    lowcmd_publisher->InitChannel();
+
+    unitree::robot::b2::MotionSwitcherClient msc;
+    msc.SetTimeout(10.0f);
+    msc.Init();
+    // Shut down motion control-related service
+    while(query_motion_status(msc))
+    {
+        std::this_thread::sleep_for(std::chrono::seconds{1});
+        logger->debug("Trying to disable motion control-related service...");
+        int32_t ret = msc.ReleaseMode(); 
+        if (ret == 0) {
+            logger->info("ReleaseMode succeeded.");
+        } else {
+            logger->error("ReleaseMode failed. Error code: {}", ret);
+        }
+    }
+
+    auto robot_initial_state_res = global_robot_state.try_load_for(std::chrono::microseconds{1000});
+    if(!robot_initial_state_res.has_value()) {
+        exit_flag.store(true);
+        logger->error("Failed to retrieve robot state within {}us, exiting.", std::chrono::microseconds{1000}.count());
+    }
+    auto initial_robot_state = robot_initial_state_res.value();
+    
+    // Interpolate to default positions in joint space
+    double time = 0.0f;
+    double interpolation_duration = 5.0f;
+    auto dt = std::chrono::milliseconds{2};
+    logger->debug("Starting interpolation to default joint position with initial joint pos (isaac lab order)=[{}]", join_formatted(initial_robot_state.joint_pos));
+    for(time = 0.0f; time < interpolation_duration && !exit_flag.load(); time += (dt.count() / 1e+3)) {
+        for(int i = 0; i < num_joints; i++) {
+            int j = sdk_to_isaac_idx[i];
+            low_cmd.motor_cmd()[i].q() = (time/interpolation_duration) * default_joint_positions[j] + (1.0f-time/interpolation_duration) * initial_robot_state.joint_pos[j];
+            low_cmd.motor_cmd()[i].dq() = 0;
+            low_cmd.motor_cmd()[i].kp() = actuator_Kp;
+            low_cmd.motor_cmd()[i].kd() = actuator_Kd;
+            low_cmd.motor_cmd()[i].tau() = 0;
+        }
+        low_cmd.crc() = crc32_core((uint32_t *)&low_cmd, (sizeof(unitree_go::msg::dds_::LowCmd_)>>2)-1);
+        lowcmd_publisher->Write(low_cmd);
+        logger->debug("t={}\tjoint pos (go2 sdk order)= [{}]", time, fmt::join(low_cmd.motor_cmd() | std::views::take(12) | std::views::transform([](auto &m){ return m.q(); }), ", "));
+        std::this_thread::sleep_for(dt); // Run at approximately 500Hz
+    }
+    logger->info("Finished moving robot to default joint position.");
+    while(!exit_flag.load()) {
+        lowcmd_publisher->Write(low_cmd);
+    }
+}
+
+void enable_damping_mode() {
+    // Disable low level mode
+    // Enable damping mode
 }
 
 // Mirrors Isaac Lab ObservationsCfg defined in EnvCfg
@@ -124,13 +290,20 @@ void run_control_loop() {
 
     std::array<float, num_joints> current_action {};
     std::array<float, num_joints> previous_action {};
-    std::array<float, num_joints> default_joint_positions {0.1, -0.1, 0.1, -0.1, 0.8, 0.8, 1.0, 1.0, -1.5, -1.5, -1.5, -1.5};
     std::vector<torch::jit::IValue> inference_input;
     inference_input.reserve(1);
     inference_input.clear();
     inference_input.push_back(torch::ones({1, observation_dim})); // To prevent dynamic allocations in loop
     at::Tensor raw_current_action{};
     torch::NoGradGuard no_grad;
+
+    logger->info("Low level control mode will be enabled in 5 seconds!");
+    std::this_thread::sleep_for(std::chrono::seconds{5});
+    if(!exit_flag.load()) {
+        enable_low_level_control();
+        logger->debug("Enabled low level control mode, entering main control loop");
+        std::this_thread::sleep_for(std::chrono::seconds{1});
+    }
 
     // TODO: Make timed loop
     while(!exit_flag.load()) {
@@ -156,19 +329,22 @@ void run_control_loop() {
         // TODO: Get this from teleop
         std::array<float, 3> vel_command {};
 
+        //TODO: Clip vel command and logger->warn that it had to be clipped
+        //TODO: Use stamped_vel_command to ensure it's up to date, if it's too old, set to zero and just stand there
+
         auto observation = construct_observation_tensor(robot_state, vel_command, previous_action);
         inference_input[0] = observation;
         raw_current_action = model.forward(inference_input).toTensor().contiguous();
         std::memcpy(current_action.data(), raw_current_action.data_ptr<float>(), num_joints * sizeof(float));
         previous_action = current_action;
-        logger->debug("raw action={}", current_action);
+        // logger->debug("raw action={}", current_action);
         // TODO: Store all intermediate values such as current action, pd_targets in rosbag for debugging
-        std::array<double, num_joints> pd_target {};
+        std::array<double, num_joints> pd_target {}; // Go2 native order, NOT Isaac Lab!!!
         for(int i = 0; i < num_joints; i++) {
-            pd_target[i] = default_joint_positions[i] + current_action[i] * action_scale; // Scale same as Isaac Lab
+            int j = sdk_to_isaac_idx[i]; // Remap to go2 order
+            pd_target[i] = default_joint_positions[j] + current_action[j] * action_scale; // Scale same as Isaac Lab
         }
         // Do not check if target exceeds joint limits because policy might learn to command out of range values temporarily for more rapid motion.
-        // safety checks from checklist
         if(exit_flag.load()) { // Check before actually applying the action
             logger->error("Exit flag detected in control loop before applying action, exiting.");
             break;
@@ -177,15 +353,6 @@ void run_control_loop() {
         // std::this_thread::sleep_for(std::chrono::milliseconds{2});
     }
 }
-
-// void run_safety_checklist(const unitree_go::msg::dds_::LowState_ &robot_state, const unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::LowState_> &robot_state_subscriber) {
-//     logger->debug("Starting initial safety checklist...");
-//     // Initial startup in sport mode, calibrate (see safety checklist)
-//     // Show some states to ensure everything looks good
-//     // If good, disable sport mode and enter low level control mode => return
-//     // If bad, set exit flag and return
-//     // TODO: Detailed logging
-// }
 
 // TODO: Move into helper class or replace with library
 // Compute body-frame gravity vector given a body→world quaternion.
@@ -216,19 +383,6 @@ static inline std::array<float, 3> projected_gravity_body_frame(const std::array
     const float r3 =  a0*z + a1*y - a2*x + a3*w;
 
     return { r1, r2, r3 };
-}
-
-// Helper: format each element with `fmt_spec` and join with `sep`
-template<typename Range>
-std::string join_formatted(const Range& values, std::string_view fmt_spec = "{:.4f}", std::string_view sep = ",")
-{
-    std::vector<std::string> formatted;
-    formatted.reserve(std::size(values));
-    for (auto&& v : values) {
-        formatted.push_back(fmt::format(fmt::runtime(fmt_spec), v));
-    }
-
-    return fmt::format("{}", fmt::join(formatted, sep));
 }
 
 void append_row_to_csv(const std::string& filename, const std::vector<double>& row) {
@@ -275,7 +429,7 @@ void check_state_safety_limits(const stamped_robot_state &robot_state) {
         }
     }
 
-    // TODO: Put robot into damping mode / sport mode so that it doesn't fall down
+    // TODO: Put robot into damping mode
 }
 
 void robot_state_message_handler(const void *message) {
@@ -312,22 +466,6 @@ void robot_state_message_handler(const void *message) {
 
     stamped_state.projected_gravity = projected_gravity;
     stamped_state.body_angular_velocity = angular_velocity;
-    // Joint order in isaac lab is "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", "FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint", "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
-    // Joint order reported by SDK state array is FR_hip_joint, FR_thigh_joint, FR_calf_joint, FL_hip_joint, FL_thigh_joint, FL_calf_joint, RR_hip_joint, RR_thigh_joint, RR_calf_joint, RL_hip_joint, RL_thigh_joint, RL_calf_joint
-    static constexpr int sdk_to_isaac_idx[12] = {
-    /*0*/ 1,  // FR_hip → Isaac[1]
-    /*1*/ 5,  // FR_thigh → Isaac[5]
-    /*2*/ 9,  // FR_calf → Isaac[9]
-    /*3*/ 0,  // FL_hip → Isaac[0]
-    /*4*/ 4,  // FL_thigh → Isaac[4]
-    /*5*/ 8,  // FL_calf → Isaac[8]
-    /*6*/ 3,  // RR_hip → Isaac[3]
-    /*7*/ 7,  // RR_thigh → Isaac[7]
-    /*8*/11,  // RR_calf → Isaac[11]
-    /*9*/ 2,  // RL_hip → Isaac[2]
-    /*10*/6,  // RL_thigh → Isaac[6]
-    /*11*/10  // RL_calf → Isaac[10]
-    };
 
     for (int i = 0; i < num_joints; i++) {
         int j = sdk_to_isaac_idx[i];
@@ -341,7 +479,7 @@ void robot_state_message_handler(const void *message) {
 
     check_state_safety_limits(stamped_state);
 
-    if(true) {
+    if(false) {
         // append_row_to_csv("/app/logs/joint_positions.csv", std::vector<double>(stamped_state.joint_pos.begin(), stamped_state.joint_pos.end()));
         logger->debug(
             "Foot forces=[{}]\tIMU RPY=[{:+.4f},{:+.4f},{:+.4f}]\tprojected_gravity=[{:+.4f},{:+.4f},{:.4f}]\tangular_vel=[{:+.4f},{:+.4f},{:+.4f}]\tq=[{}]",
@@ -390,11 +528,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     robot_state_subscriber->InitChannel(std::bind(&robot_state_message_handler, std::placeholders::_1), 1);
 
     // TODO: Infer input dimension and set global variable
-
-    // run_safety_checklist(robot_state, &robot_state_subscriber);
     run_control_loop();
 
-    // std::this_thread::sleep_for(std::chrono::seconds{10});
+    logger->info("Enabling damping mode...");
+    enable_damping_mode();
     
     logger->debug("Reached end of main function, setting exit flag and joining threads...");
     exit_flag.store(true);
