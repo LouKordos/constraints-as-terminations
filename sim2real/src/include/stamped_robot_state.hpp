@@ -11,6 +11,7 @@ struct stamped_robot_state{
     std::array<float, 3> body_angular_velocity; // XYZ Body angular velocity (rad/s)
     std::array<float, 12> joint_pos; // Joint positions (q) for each joint. Order as defined in IsaacLab env ObservationsCfg
     std::array<float, 12> joint_vel; // Joint positions (dq) for each joint. Order as defined in IsaacLab env ObservationsCfg
+    std::array<float, 12> joint_torque; // Estimated joint torque in Nm
     std::chrono::steady_clock::time_point timestamp;
     long long counter;
 };

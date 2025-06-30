@@ -293,6 +293,7 @@ void robot_state_message_handler(const void *message) {
         int j = sdk_to_isaac_idx[i];
         stamped_state.joint_pos[j] = static_cast<float>(robot_state.motor_state()[i].q());
         stamped_state.joint_vel[j] = static_cast<float>(robot_state.motor_state()[i].dq());
+        stamped_state.joint_torque[j] = static_cast<float>(robot_state.motor_state()[i].tau_est());
     }
     stamped_state.timestamp = now;
     stamped_state.counter = iteration_counter++;
