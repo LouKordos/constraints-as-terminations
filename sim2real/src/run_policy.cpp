@@ -6,6 +6,7 @@
 #include <mutex>
 #include <expected>
 #include <fstream>
+#include <cmath>
 
 #include <signal.h>
 #include <stdlib.h>
@@ -47,6 +48,12 @@ std::shared_ptr<spdlog::logger> logger {nullptr};
 const short num_joints = 12;
 int observation_dim = 188; // TODO: Infer this from loaded model
 const float action_scale = 0.8;
+
+// Isaac Lab joint order
+const std::array<std::pair<float, float>, 2> base_orientation_limit_rad {std::pair<float, float>{-0.3, 0.3}, {-0.3, 0.3}}; // Only roll and pitch, does not make sense to limit yaw
+const std::array<std::pair<float, float>, num_joints> joint_position_limits {std::pair<float, float>{-0.9, 0.9}, {-0.9, 0.9}, {-0.9, 0.9}, {-0.9, 0.9}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-2.6, -0.7}, {-2.6, -0.7}, {-2.6, -0.7}, {-2.6, -0.7}}; // rad
+const double joint_vel_abs_limit = 30; // rad/s
+const double joint_torque_abs_limit = 40; //Nm
 timed_atomic<stamped_robot_state> global_robot_state {};
 
 std::atomic<bool> exit_flag {false};
@@ -238,6 +245,39 @@ void append_row_to_csv(const std::string& filename, const std::vector<double>& r
     ofs << '\n';
 }
 
+// Sets exit_flag=true if states are exceeded
+void check_state_safety_limits(const stamped_robot_state &robot_state) {
+    ZoneScoped;
+    if(robot_state.body_rpy_xyz[0] < base_orientation_limit_rad[0].first || robot_state.body_rpy_xyz[0] > base_orientation_limit_rad[0].second) {
+        exit_flag.store(true);
+        logger->error("Base roll angle out of bounds, roll={}, bounds=[{},{}]", robot_state.body_rpy_xyz[0], base_orientation_limit_rad[0].first, base_orientation_limit_rad[0].second);
+    }
+
+    if(robot_state.body_rpy_xyz[1] < base_orientation_limit_rad[1].first || robot_state.body_rpy_xyz[1] > base_orientation_limit_rad[1].second) {
+        exit_flag.store(true);
+        logger->error("Base pitch angle out of bounds, pitch={}, bounds=[{},{}]", robot_state.body_rpy_xyz[1], base_orientation_limit_rad[1].first, base_orientation_limit_rad[1].second);
+    }
+    
+    for(int i = 0; i < num_joints; i++) {
+        if(robot_state.joint_pos[i] < joint_position_limits[i].first || robot_state.joint_pos[i] > joint_position_limits[i].second) {
+            exit_flag.store(true);
+            logger->error("Joint position for index {} out of bounds, pos={}, bounds=[{},{}]", i, robot_state.joint_pos[i], joint_position_limits[i].first, joint_position_limits[i].second);
+        }
+
+        if(std::abs(robot_state.joint_torque[i]) > joint_torque_abs_limit) {
+            exit_flag.store(true);
+            logger->error("Joint torque for index {} out of bounds, torque={}, limit={}", i, robot_state.joint_torque[i], joint_torque_abs_limit);
+        }
+
+        if(std::abs(robot_state.joint_vel[i]) > joint_vel_abs_limit) {
+            exit_flag.store(true);
+            logger->error("Joint velocity for index {} out of bounds, velocity={}, limit={}", i, robot_state.joint_vel[i], joint_vel_abs_limit);
+        }
+    }
+
+    // TODO: Put robot into damping mode / sport mode so that it doesn't fall down
+}
+
 void robot_state_message_handler(const void *message) {
     ZoneScoped;
     FrameMarkNamed("robot_state_message_handler");
@@ -298,6 +338,9 @@ void robot_state_message_handler(const void *message) {
     stamped_state.timestamp = now;
     stamped_state.counter = iteration_counter++;
     global_robot_state.try_store_for(stamped_state, std::chrono::microseconds{1000});
+
+    check_state_safety_limits(stamped_state);
+
     if(true) {
         // append_row_to_csv("/app/logs/joint_positions.csv", std::vector<double>(stamped_state.joint_pos.begin(), stamped_state.joint_pos.end()));
         logger->debug(
