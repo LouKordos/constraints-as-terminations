@@ -45,6 +45,7 @@ std::ostream& operator<<(std::ostream& os, const std::atomic<T>& v) {
 
 std::shared_ptr<spdlog::logger> logger {nullptr};
 const short num_joints = 12;
+int observation_dim = 188; // TODO: Infer this from loaded model
 timed_atomic<stamped_robot_state> global_robot_state {};
 
 std::atomic<bool> exit_flag {false};
@@ -55,11 +56,40 @@ void exit_handler([[maybe_unused]] int s) {
     logger->error("----------------------------------\nSIGNAL CAUGHT; EXIT FLAG SET!\n------------------------------------");
 }
 
-// torch::Tensor construct_observation_tensor() {
-//     
-//     // TODO: Height map values might need transformation because of how they were defined in isaac lab env
-//     // TODO: CONFIRM OBSERVATION SCALE AND ORDER
-// }
+// Mirrors Isaac Lab ObservationsCfg defined in EnvCfg
+torch::Tensor construct_observation_tensor(const stamped_robot_state& robot_state, const std::array<float, 3>& vel_command, const std::array<float, num_joints>& previous_action)
+{
+    ZoneScoped;
+    auto opts = torch::TensorOptions() .dtype(torch::kFloat32).device(torch::kCPU);
+    auto observation = at::empty({1, observation_dim}, opts);
+
+    auto base_ang_vel = at::from_blob(const_cast<float*>(robot_state.body_angular_velocity.data()),{1, 3}, opts).clone();
+    base_ang_vel.mul_(0.25f);
+    observation.slice(1, 0, 3).copy_(base_ang_vel);
+
+    auto velocity_cmd = at::from_blob(const_cast<float*>(vel_command.data()), {1, 3}, opts).clone();
+    velocity_cmd.mul_(torch::tensor({2.0f, 2.0f, 0.25f}, opts));
+    observation.slice(1, 3, 6).copy_(velocity_cmd);
+
+    auto projected_gravity = at::from_blob(const_cast<float*>(robot_state.projected_gravity.data()), {1, 3}, opts).clone();
+    projected_gravity.mul_(0.1f);
+    observation.slice(1, 6, 9).copy_(projected_gravity);
+
+    auto joint_positions = at::from_blob(const_cast<float*>(robot_state.joint_pos.data()), {1, 12}, opts).clone();
+    observation.slice(1, 9, 9+num_joints).copy_(joint_positions);
+
+    auto joint_velocities = at::from_blob(const_cast<float*>(robot_state.joint_vel.data()), {1, 12}, opts).clone();
+    joint_velocities.mul_(0.05f);
+    observation.slice(1, 21, 21+num_joints).copy_(joint_velocities);
+
+    auto prev_action = at::from_blob(const_cast<float*>(previous_action.data()), {1, num_joints}, opts).clone();
+    observation.slice(1, 33, 33+num_joints).copy_(prev_action);
+    // TODO: Height map values might need transformation because of how they were defined in isaac lab env
+    // TODO: Replace with real height map data
+    observation.slice(1, 33 + num_joints, observation_dim).fill_(-0.33f);
+
+    return observation;
+}
 
 // Uses timed_atomic to guarantee that each operation only takes a limited amount of time.
 // This allows estop / sigint to be noticed below a certain duration.
@@ -84,6 +114,9 @@ void run_control_loop() {
     auto atomic_op_timeout = std::chrono::microseconds{500};
     auto timeout_threshold = std::chrono::milliseconds{50};
 
+    std::array<float, num_joints> previous_action {};
+
+    // TODO: Make timed loop
     while(!exit_flag.load()) {
         ZoneScoped;
         FrameMarkNamed("run_control_loop");
@@ -103,9 +136,14 @@ void run_control_loop() {
             logger->error("State timestamp too old, allowed threshold={}ms, actual state age={}ms. Exiting to prevent outdated states.", 
             timeout_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds{2});
-        // Convert to observation tensor
+
+        // TODO: Get this from teleop
+        std::array<float, 3> vel_command {};
+
+        auto observation = construct_observation_tensor(robot_state, vel_command, previous_action);
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
         // Run inference to get action
+        // Set previous_action = current_action (BEFORE POSTPROCESSING!)
         // Post process action to clip and convert into PD target
         // check target before applying, if it exceeds joint limits, exit
         // Other safety checks from checklist
