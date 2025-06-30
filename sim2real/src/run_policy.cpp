@@ -114,7 +114,14 @@ void run_control_loop() {
     auto atomic_op_timeout = std::chrono::microseconds{500};
     auto timeout_threshold = std::chrono::milliseconds{50};
 
+    std::array<float, num_joints> current_action {};
     std::array<float, num_joints> previous_action {};
+    std::vector<torch::jit::IValue> inference_input;
+    inference_input.reserve(1);
+    inference_input.clear();
+    inference_input.push_back(torch::ones({1, observation_dim})); // To prevent dynamic allocations in loop
+    at::Tensor raw_current_action{};
+    torch::NoGradGuard no_grad;
 
     // TODO: Make timed loop
     while(!exit_flag.load()) {
@@ -141,15 +148,20 @@ void run_control_loop() {
         std::array<float, 3> vel_command {};
 
         auto observation = construct_observation_tensor(robot_state, vel_command, previous_action);
-        std::this_thread::sleep_for(std::chrono::milliseconds{1});
-        // Run inference to get action
-        // Set previous_action = current_action (BEFORE POSTPROCESSING!)
+        inference_input[0] = observation;
+        raw_current_action = model.forward(inference_input).toTensor().contiguous();
+        std::memcpy(current_action.data(), raw_current_action.data_ptr<float>(), num_joints * sizeof(float));
+        previous_action = current_action;
+        logger->debug("raw action={}", current_action);
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
         // Post process action to clip and convert into PD target
         // check target before applying, if it exceeds joint limits, exit
-        // Other safety checks from checklist
-        // Check exit flag
+        // safety checks from checklist
+        if(exit_flag.load()) { // Check before actually applying the action
+            logger->error("Exit flag detected in control loop before applying action, exiting.");
+            break;
+        }
         // Use wrapper with timeout to send low level command with crc32 to robot to execute action
-        // Repeat
     }
 }
 
