@@ -46,6 +46,7 @@ std::ostream& operator<<(std::ostream& os, const std::atomic<T>& v) {
 std::shared_ptr<spdlog::logger> logger {nullptr};
 const short num_joints = 12;
 int observation_dim = 188; // TODO: Infer this from loaded model
+const float action_scale = 0.8;
 timed_atomic<stamped_robot_state> global_robot_state {};
 
 std::atomic<bool> exit_flag {false};
@@ -116,6 +117,7 @@ void run_control_loop() {
 
     std::array<float, num_joints> current_action {};
     std::array<float, num_joints> previous_action {};
+    std::array<float, num_joints> default_joint_positions {0.1, -0.1, 0.1, -0.1, 0.8, 0.8, 1.0, 1.0, -1.5, -1.5, -1.5, -1.5};
     std::vector<torch::jit::IValue> inference_input;
     inference_input.reserve(1);
     inference_input.clear();
@@ -153,15 +155,19 @@ void run_control_loop() {
         std::memcpy(current_action.data(), raw_current_action.data_ptr<float>(), num_joints * sizeof(float));
         previous_action = current_action;
         logger->debug("raw action={}", current_action);
-        std::this_thread::sleep_for(std::chrono::milliseconds{2});
-        // Post process action to clip and convert into PD target
-        // check target before applying, if it exceeds joint limits, exit
+        // TODO: Store all intermediate values such as current action, pd_targets in rosbag for debugging
+        std::array<double, num_joints> pd_target {};
+        for(int i = 0; i < num_joints; i++) {
+            pd_target[i] = default_joint_positions[i] + current_action[i] * action_scale; // Scale same as Isaac Lab
+        }
+        // Do not check if target exceeds joint limits because policy might learn to command out of range values temporarily for more rapid motion.
         // safety checks from checklist
         if(exit_flag.load()) { // Check before actually applying the action
             logger->error("Exit flag detected in control loop before applying action, exiting.");
             break;
         }
         // Use wrapper with timeout to send low level command with crc32 to robot to execute action
+        // std::this_thread::sleep_for(std::chrono::milliseconds{2});
     }
 }
 
