@@ -167,7 +167,7 @@ class MySceneCfg(InteractiveSceneCfg):
         update_period=0.0,  # will override in __post_init__
         offset=RayCasterCfg.OffsetCfg(pos=(0.2, 0.0, 0.5)),  # 0.5 m above base
         mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
-        attach_yaw_only=True,  # keep sensor level (no pitch/roll with body). This is a gross oversimplification but the original paper also used a grid of heights around the robot
+        attach_yaw_only=True, # keep sensor level (no pitch/roll with body). This is a gross oversimplification but the original paper also used a grid of heights around the robot
         pattern_cfg=patterns.GridPatternCfg( # Grid pattern shoots down vertical rays to retrieve hight at each grid point. Needs adjustments to be more realistic, such as using e.g. LIDARConfig
             size=[1, 0.8], # see Fig. 3 in paper for grid layout, I tried approximating it visually here
             resolution=0.08,
