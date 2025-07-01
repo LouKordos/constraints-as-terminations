@@ -158,13 +158,14 @@ int query_motion_status(unitree::robot::b2::MotionSwitcherClient &msc)
 
 unitree_go::msg::dds_::LowCmd_ low_cmd{};
 unitree::robot::ChannelPublisherPtr<unitree_go::msg::dds_::LowCmd_> lowcmd_publisher;
+unitree::common::ThreadPtr lowCmdWriteThreadPtr;
 bool first_iteration = true;
 stamped_robot_state initial_robot_state;
 float interpolation_time = 0.0f;
 float interpolation_duration = 5.0f;
 auto dt = std::chrono::milliseconds{2};
 
-void movement_test() {
+void send_pd_commands() {
     if(exit_flag.load()) {
         return; // Will cause robot to disable because no commands have been received
     }
@@ -198,11 +199,12 @@ void movement_test() {
 
 void enable_low_level_control() {
     logger->debug("Setting up low level control...");
+
+    // Init commands
     low_cmd.head()[0] = 0xFE;
     low_cmd.head()[1] = 0xEF;
     low_cmd.level_flag() = 0xFF;
     low_cmd.gpio() = 0;
-
     for(int i=0; i<20; i++)
     {
         low_cmd.motor_cmd()[i].mode() = (0x01); // motor switch to servo (PMSM) mode
@@ -237,20 +239,10 @@ void enable_low_level_control() {
         }
 
         logger->debug("Sleeping for 5sec in motion status loop.");
-        std::this_thread::sleep_for(std::chrono::seconds{5});
+        std::this_thread::sleep_for(std::chrono::seconds{3});
     }
 
-    unitree::common::ThreadPtr lowCmdWriteThreadPtr = unitree::common::CreateRecurrentThreadEx("writebasiccmd", UT_CPU_ID_NONE, 2000, &movement_test);
-
-    while(!exit_flag.load()) {
-        std::this_thread::sleep_for(std::chrono::seconds{1});
-    }
-}
-
-void enable_damping_mode() {
-    // Not needed because the robot goes into limp mode after 20ms of no commands anyway
-    // Disable low level mode
-    // Enable damping mode
+    lowCmdWriteThreadPtr = unitree::common::CreateRecurrentThreadEx("writebasiccmd", UT_CPU_ID_NONE, 2000, &send_pd_commands);
 }
 
 // Mirrors Isaac Lab ObservationsCfg defined in EnvCfg
