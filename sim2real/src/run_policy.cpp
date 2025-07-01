@@ -156,45 +156,38 @@ int query_motion_status(unitree::robot::b2::MotionSwitcherClient &msc)
     return motionStatus;
 }
 
+// TODO: Move to class to prevent global access and only allow sending commands via timed_atomic!
 unitree_go::msg::dds_::LowCmd_ low_cmd{};
 unitree::robot::ChannelPublisherPtr<unitree_go::msg::dds_::LowCmd_> lowcmd_publisher;
 unitree::common::ThreadPtr lowCmdWriteThreadPtr;
-bool first_iteration = true;
-stamped_robot_state initial_robot_state;
-float interpolation_time = 0.0f;
-float interpolation_duration = 5.0f;
-auto dt = std::chrono::milliseconds{2};
+timed_atomic<std::array<float, num_joints>> pd_setpoint_sdk_order {};
+auto atomic_op_timeout = std::chrono::microseconds{500};
 
 void send_pd_commands() {
+    ZoneScoped;
+    FrameMark;
     if(exit_flag.load()) {
         return; // Will cause robot to disable because no commands have been received
     }
 
-    if(first_iteration) {
-        first_iteration = false;
-
-        auto robot_initial_state_res = global_robot_state.try_load_for(std::chrono::microseconds{1000});
-        if(!robot_initial_state_res.has_value()) {
-            exit_flag.store(true);
-            logger->error("Failed to retrieve robot state within {}us, exiting.", std::chrono::microseconds{1000}.count());
-            return;
-        }
-        initial_robot_state = robot_initial_state_res.value();
+    auto setpoint_res = pd_setpoint_sdk_order.try_load_for(atomic_op_timeout);
+    if(!setpoint_res.has_value()) {
+        exit_flag.store(true);
+        logger->error("Failed to fetch desired action within {}us in send_pd_commands(), exiting.", atomic_op_timeout.count());
+        return;
     }
+    auto setpoint_sdk_order = setpoint_res.value();
 
     for(int i = 0; i < num_joints; i++) {
-        int j = sdk_to_isaac_idx[i];
-        low_cmd.motor_cmd()[i].q() = std::min((interpolation_time/interpolation_duration), 1.0f) * default_joint_positions[j] + std::max((1.0f-interpolation_time/interpolation_duration), 0.0f) * initial_robot_state.joint_pos[j];
+        low_cmd.motor_cmd()[i].q() = setpoint_sdk_order[i];
         low_cmd.motor_cmd()[i].dq() = 0;
         low_cmd.motor_cmd()[i].kp() = actuator_Kp;
         low_cmd.motor_cmd()[i].kd() = actuator_Kd;
         low_cmd.motor_cmd()[i].tau() = 0;
     }
-    interpolation_time += (dt.count() / 1e+3);
 
     low_cmd.crc() = crc32_core((uint32_t *)&low_cmd, (sizeof(unitree_go::msg::dds_::LowCmd_)>>2)-1);
     lowcmd_publisher->Write(low_cmd);
-    logger->debug("t={:.3f}\tjoint pos (go2 sdk order)= [{}]", interpolation_time, fmt::join(low_cmd.motor_cmd() | std::views::take(12) | std::views::transform([](auto &m){ return m.q(); }), ", "));
 }
 
 void enable_low_level_control() {
@@ -242,7 +235,32 @@ void enable_low_level_control() {
         std::this_thread::sleep_for(std::chrono::seconds{3});
     }
 
+    // Start sending commands to robot at 500Hz
     lowCmdWriteThreadPtr = unitree::common::CreateRecurrentThreadEx("writebasiccmd", UT_CPU_ID_NONE, 2000, &send_pd_commands);
+
+    auto robot_initial_state_res = global_robot_state.try_load_for(std::chrono::microseconds{1000});
+    if(!robot_initial_state_res.has_value()) {
+        exit_flag.store(true);
+        logger->error("Failed to retrieve robot state within {}us, exiting.", std::chrono::microseconds{1000}.count());
+        return;
+    }
+    stamped_robot_state initial_robot_state = robot_initial_state_res.value();
+
+    // float interpolation_time = 0.0f;
+    // float interpolation_duration = 5.0f;
+    // auto dt = std::chrono::milliseconds{2};
+    // // TODO: Interpolate from initial to default position => update global timed_atomic
+    // // TODO: MAP JOINTS CORRECTLY; GLOBAL ACTION IS IN SDK ORDER
+    // for(int i = 0; i < num_joints; i++) {
+    //     int j = sdk_to_isaac_idx[i];
+    //     low_cmd.motor_cmd()[i].q() = std::min((interpolation_time/interpolation_duration), 1.0f) * default_joint_positions[j] + std::max((1.0f-interpolation_time/interpolation_duration), 0.0f) * initial_robot_state.joint_pos[j];
+    //     low_cmd.motor_cmd()[i].dq() = 0;
+    //     low_cmd.motor_cmd()[i].kp() = actuator_Kp;
+    //     low_cmd.motor_cmd()[i].kd() = actuator_Kd;
+    //     low_cmd.motor_cmd()[i].tau() = 0;
+    // }
+    // logger->debug("t={:.3f}\tjoint pos (go2 sdk order)= [{}]", interpolation_time, fmt::join(low_cmd.motor_cmd() | std::views::take(12) | std::views::transform([](auto &m){ return m.q(); }), ", "));
+    // interpolation_time += (dt.count() / 1e+3);
 }
 
 // Mirrors Isaac Lab ObservationsCfg defined in EnvCfg
@@ -300,7 +318,6 @@ void run_control_loop() {
     }
 
     std::cout << "Loaded module checkpoint from " << checkpoint_path << std::endl;
-    auto atomic_op_timeout = std::chrono::microseconds{500};
     auto timeout_threshold = std::chrono::milliseconds{50};
 
     std::array<float, num_joints> current_action {};
@@ -352,18 +369,21 @@ void run_control_loop() {
         previous_action = current_action;
         // logger->debug("raw action={}", current_action);
         // TODO: Store all intermediate values such as current action, pd_targets in rosbag for debugging
-        std::array<double, num_joints> pd_target {}; // Go2 native order, NOT Isaac Lab!!!
+        std::array<float, num_joints> pd_target_sdk_order {}; // Go2 native order, NOT Isaac Lab!!!
         for(int i = 0; i < num_joints; i++) {
             int j = sdk_to_isaac_idx[i]; // Remap to go2 order
-            pd_target[i] = default_joint_positions[j] + current_action[j] * action_scale; // Scale same as Isaac Lab
+            pd_target_sdk_order[i] = default_joint_positions[j] + current_action[j] * action_scale; // Scale same as Isaac Lab
         }
         // Do not check if target exceeds joint limits because policy might learn to command out of range values temporarily for more rapid motion.
         if(exit_flag.load()) { // Check before actually applying the action
             logger->error("Exit flag detected in control loop before applying action, exiting.");
             break;
         }
-        // Use wrapper with timeout to send low level command with crc32 to robot to execute action
-        // std::this_thread::sleep_for(std::chrono::milliseconds{2});
+
+        // if(!pd_setpoint_sdk_order.try_store_for(pd_target_sdk_order, atomic_op_timeout)) {
+        //     exit_flag.store(true);
+        //     logger->error("Failed to update global PD target within {}us, exiting.", atomic_op_timeout.count());
+        // }
     }
 }
 
@@ -540,6 +560,24 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     robot_state_subscriber.reset(new unitree::robot::ChannelSubscriber<unitree_go::msg::dds_::LowState_>(robot_state_topic));
     robot_state_subscriber->InitChannel(std::bind(&robot_state_message_handler, std::placeholders::_1), 1);
 
+    std::this_thread::sleep_for(std::chrono::milliseconds{500});
+
+    auto state_res = global_robot_state.try_load_for(atomic_op_timeout);
+    if(!state_res.has_value()) {
+        exit_flag.store(true);
+        logger->error("Failed to fetch state within {}us in main(), exiting.", atomic_op_timeout.count());
+    }
+
+    // Set to current position to prevent sudden jumps when low level controller is enabled
+    std::array<float, num_joints> temp_setpoint {};
+    for(int i = 0; i < num_joints; i++) {
+        temp_setpoint[i] = state_res.value().joint_pos[sdk_to_isaac_idx[i]];
+    }
+    if(!pd_setpoint_sdk_order.try_store_for(temp_setpoint, atomic_op_timeout)) {
+        exit_flag.store(true);
+        logger->error("Failed to set PD setpoint within {}us in main(), exiting.", atomic_op_timeout.count());
+    }
+
     // TODO: Infer input dimension and set global variable
     run_control_loop();
 
@@ -549,9 +587,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     logger->debug("Reached end of main function, setting exit flag and joining threads...");
     exit_flag.store(true);
 
-    logger->debug("Closing robot state subscriber channel...");
+    logger->debug("Closing robot channels...");
     robot_state_subscriber->CloseChannel();
-    logger->debug("Closed robot state subscriber channel.");
+    lowcmd_publisher->CloseChannel();
+    logger->debug("Closed robot channels.");
 
     // TODO: JOIN ANY THREADS TO ENSURE CLEAN EXIT!
     logger->debug("Flushing and exiting...");
