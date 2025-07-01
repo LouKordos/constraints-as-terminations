@@ -369,7 +369,9 @@ void run_control_loop() {
 
         auto observation = construct_observation_tensor(robot_state, vel_command, previous_action);
         inference_input[0] = observation;
-        raw_current_action = model.forward(inference_input).toTensor().contiguous();
+        {ZoneScopedN("Inference (model.forward)");
+            raw_current_action = model.forward(inference_input).toTensor().contiguous();
+        }
         std::memcpy(current_action.data(), raw_current_action.data_ptr<float>(), num_joints * sizeof(float));
         // logger->debug("raw action={}", current_action);
         auto delta_action = [](auto const& curr, auto const& prev, double dt){ 
