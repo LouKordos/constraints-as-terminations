@@ -156,6 +156,7 @@ int query_motion_status(unitree::robot::b2::MotionSwitcherClient &msc)
 }
 
 void enable_low_level_control() {
+    logger->debug("Setting up low level control...");
     unitree_go::msg::dds_::LowCmd_ low_cmd{};
     low_cmd.head()[0] = 0xFE;
     low_cmd.head()[1] = 0xEF;
@@ -177,13 +178,17 @@ void enable_low_level_control() {
     lowcmd_publisher.reset(new unitree::robot::ChannelPublisher<unitree_go::msg::dds_::LowCmd_>(robot_command_topic));
     lowcmd_publisher->InitChannel();
 
+    logger->info("Hold robot using tether or safely put on the floor, low level control mode will be enabled once enter key is registered. This will make robot fall down!");
+    std::cin.ignore();
+
+    std::this_thread::sleep_for(std::chrono::seconds{3});
+
     unitree::robot::b2::MotionSwitcherClient msc;
     msc.SetTimeout(10.0f);
     msc.Init();
     // Shut down motion control-related service
     while(query_motion_status(msc))
     {
-        std::this_thread::sleep_for(std::chrono::seconds{1});
         logger->debug("Trying to disable motion control-related service...");
         int32_t ret = msc.ReleaseMode(); 
         if (ret == 0) {
@@ -191,6 +196,9 @@ void enable_low_level_control() {
         } else {
             logger->error("ReleaseMode failed. Error code: {}", ret);
         }
+
+        logger->debug("Sleeping for 5sec in motion status loop.");
+        std::this_thread::sleep_for(std::chrono::seconds{5});
     }
 
     auto robot_initial_state_res = global_robot_state.try_load_for(std::chrono::microseconds{1000});
@@ -222,10 +230,12 @@ void enable_low_level_control() {
     logger->info("Finished moving robot to default joint position.");
     while(!exit_flag.load()) {
         lowcmd_publisher->Write(low_cmd);
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
     }
 }
 
 void enable_damping_mode() {
+    // Not needed because the robot goes into limp mode after 20ms of no commands anyway
     // Disable low level mode
     // Enable damping mode
 }
@@ -297,13 +307,11 @@ void run_control_loop() {
     at::Tensor raw_current_action{};
     torch::NoGradGuard no_grad;
 
-    logger->info("Low level control mode will be enabled in 5 seconds!");
-    std::this_thread::sleep_for(std::chrono::seconds{5});
-    if(!exit_flag.load()) {
-        enable_low_level_control();
-        logger->debug("Enabled low level control mode, entering main control loop");
-        std::this_thread::sleep_for(std::chrono::seconds{1});
-    }
+    // if(!exit_flag.load()) {
+    //     enable_low_level_control();
+    //     logger->debug("Enabled low level control mode, entering main control loop");
+    //     std::this_thread::sleep_for(std::chrono::seconds{1});
+    // }
 
     // TODO: Make timed loop
     while(!exit_flag.load()) {
@@ -479,7 +487,7 @@ void robot_state_message_handler(const void *message) {
 
     check_state_safety_limits(stamped_state);
 
-    if(false) {
+    if(true) {
         // append_row_to_csv("/app/logs/joint_positions.csv", std::vector<double>(stamped_state.joint_pos.begin(), stamped_state.joint_pos.end()));
         logger->debug(
             "Foot forces=[{}]\tIMU RPY=[{:+.4f},{:+.4f},{:+.4f}]\tprojected_gravity=[{:+.4f},{:+.4f},{:.4f}]\tangular_vel=[{:+.4f},{:+.4f},{:+.4f}]\tq=[{}]",
@@ -530,8 +538,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     // TODO: Infer input dimension and set global variable
     run_control_loop();
 
-    logger->info("Enabling damping mode...");
-    enable_damping_mode();
+    // logger->info("Enabling damping mode...");
+    // enable_damping_mode();
     
     logger->debug("Reached end of main function, setting exit flag and joining threads...");
     exit_flag.store(true);
