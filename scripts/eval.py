@@ -395,7 +395,7 @@ def main():
         print(f"Starting ffmpeg process={' '.join(ffmpeg_cmd)}")
         ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdout=ffmpeg_process_logfile, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, bufsize=4*1024*1024)
 
-    CPP_INFERENCE = True # Allows testing C++ inference in devcontainer (test_pytorch_policy.cpp) in simulation
+    CPP_INFERENCE = False # Allows testing C++ inference in devcontainer (test_pytorch_policy.cpp) in simulation
     if CPP_INFERENCE:
         print("NOTE: C++ inference selected, connecting to 127.0.0.1:5555 via zmq...")
         ctx = zmq.Context()
