@@ -47,3 +47,6 @@ target_link_libraries(read_observations PUBLIC spdlog::spdlog TracyClient atomic
 
 add_executable(test_pytorch_policy test_pytorch_policy.cpp)
 target_link_libraries(test_pytorch_policy PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 Threads::Threads "${TORCH_LIBRARIES}" cppzmq)
+
+add_executable(sdk_stand_example sdk_stand_example.cpp)
+target_link_libraries(sdk_stand_example PUBLIC unitree_sdk2)
