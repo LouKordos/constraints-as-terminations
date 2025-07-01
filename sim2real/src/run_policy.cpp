@@ -23,6 +23,7 @@
 #include <unitree/robot/channel/channel_publisher.hpp>
 #include <unitree/robot/channel/channel_subscriber.hpp>
 #include <unitree/idl/go2/LowState_.hpp>
+#include <unitree/idl/go2/HeightMap_.hpp>
 #include <unitree/idl/go2/LowCmd_.hpp>
 #include <unitree/common/thread/thread.hpp>
 #include <unitree/robot/b2/motion_switcher/motion_switcher_client.hpp>
@@ -538,6 +539,12 @@ void robot_state_message_handler(const void *message) {
     // std::this_thread::sleep_for(std::chrono::milliseconds{200});
 }
 
+void height_map_handler(const void *message) {
+    unitree_go::msg::dds_::HeightMap_ height_map = *(unitree_go::msg::dds_::HeightMap_*)message;
+
+    // logger->debug("Heightmap res={}\twidth={}\theight={}\torigin_x={}\torigin_y={}", height_map.resolution(), height_map.width(), height_map.height(), height_map.origin()[0], height_map.origin()[1]);
+}
+
 int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
 {
     try {
@@ -573,6 +580,14 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     robot_state_subscriber.reset(new unitree::robot::ChannelSubscriber<unitree_go::msg::dds_::LowState_>(robot_state_topic));
     robot_state_subscriber->InitChannel(std::bind(&robot_state_message_handler, std::placeholders::_1), 1);
 
+    unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::HeightMap_> height_map_subscriber;
+    std::string height_map_topic {"rt/utlidar/height_map_array"};
+    height_map_subscriber.reset(new unitree::robot::ChannelSubscriber<unitree_go::msg::dds_::HeightMap_>(height_map_topic));
+    height_map_subscriber->InitChannel(std::bind(&height_map_handler, std::placeholders::_1), 1);
+    // while(!exit_flag.load()) {
+    //     std::this_thread::sleep_for(std::chrono::seconds{1});
+    // }
+
     std::this_thread::sleep_for(std::chrono::milliseconds{500});
 
     auto state_res = global_robot_state.try_load_for(atomic_op_timeout);
@@ -602,6 +617,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
 
     logger->debug("Closing robot channels...");
     robot_state_subscriber->CloseChannel();
+    height_map_subscriber->CloseChannel();
     lowcmd_publisher->CloseChannel();
     logger->debug("Closed robot channels.");
 
