@@ -214,8 +214,8 @@ void enable_low_level_control() {
 
     logger->info("Hold robot using tether or safely put on the floor, low level control mode will be enabled once enter key is registered. This will make robot fall down!");
     std::cin.ignore();
-
-    std::this_thread::sleep_for(std::chrono::seconds{3});
+    logger->info("Sleeping for 5sec to let user reevaluate his choices :)");
+    std::this_thread::sleep_for(std::chrono::seconds{5});
 
     unitree::robot::b2::MotionSwitcherClient msc;
     msc.SetTimeout(10.0f);
@@ -246,21 +246,27 @@ void enable_low_level_control() {
     }
     stamped_robot_state initial_robot_state = robot_initial_state_res.value();
 
-    // float interpolation_time = 0.0f;
-    // float interpolation_duration = 5.0f;
-    // auto dt = std::chrono::milliseconds{2};
-    // // TODO: Interpolate from initial to default position => update global timed_atomic
-    // // TODO: MAP JOINTS CORRECTLY; GLOBAL ACTION IS IN SDK ORDER
-    // for(int i = 0; i < num_joints; i++) {
-    //     int j = sdk_to_isaac_idx[i];
-    //     low_cmd.motor_cmd()[i].q() = std::min((interpolation_time/interpolation_duration), 1.0f) * default_joint_positions[j] + std::max((1.0f-interpolation_time/interpolation_duration), 0.0f) * initial_robot_state.joint_pos[j];
-    //     low_cmd.motor_cmd()[i].dq() = 0;
-    //     low_cmd.motor_cmd()[i].kp() = actuator_Kp;
-    //     low_cmd.motor_cmd()[i].kd() = actuator_Kd;
-    //     low_cmd.motor_cmd()[i].tau() = 0;
-    // }
-    // logger->debug("t={:.3f}\tjoint pos (go2 sdk order)= [{}]", interpolation_time, fmt::join(low_cmd.motor_cmd() | std::views::take(12) | std::views::transform([](auto &m){ return m.q(); }), ", "));
-    // interpolation_time += (dt.count() / 1e+3);
+    // Linear interpolation to default joint position, policy actions are offsets from these default positions
+    float interpolation_duration = 5.0f;
+    auto dt = std::chrono::milliseconds{2};
+    std::array<float, num_joints> temp_setpoint_sdk_order {};
+    for(float interpolation_time = 0.0f; interpolation_time < interpolation_duration && !exit_flag.load(); interpolation_time += (dt.count() / 1e+3)) {
+        for(int i = 0; i < num_joints; i++) {
+            int j = sdk_to_isaac_idx[i];
+            temp_setpoint_sdk_order[i] = std::min((interpolation_time/interpolation_duration), 1.0f) * default_joint_positions[j] + std::max((1.0f-interpolation_time/interpolation_duration), 0.0f) * initial_robot_state.joint_pos[j];
+        }
+        logger->debug("t={:.3f}\tjoint pos (go2 sdk order)= [{}]", interpolation_time, join_formatted(temp_setpoint_sdk_order));
+        if(!pd_setpoint_sdk_order.try_store_for(temp_setpoint_sdk_order, atomic_op_timeout)) {
+            exit_flag.store(true);
+            logger->error("Failed to update global PD setpoint within {}us during linear interpolation to default joint positions, exiting.", atomic_op_timeout.count());
+        }
+        std::this_thread::sleep_for(dt);
+    }
+
+    // TODO: Update joint position and orientation limits to be safer
+    // TODO: Log this
+
+    logger->info("Finished linear interpolation to default joint positions, low level command mode activation succeeded.");
 }
 
 // Mirrors Isaac Lab ObservationsCfg defined in EnvCfg
@@ -593,9 +599,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     logger->debug("Closed robot channels.");
 
     // TODO: JOIN ANY THREADS TO ENSURE CLEAN EXIT!
-    logger->debug("Flushing and exiting...");
+    logger->debug("Flushing logs...");
     logger->flush();
     spdlog::shutdown();
+    std::cout << "Spdlog shut down, exiting. Terminal may freeze for a bit due to tracy-capture processing events in the background" << std::endl;
 
     return 0;
 }
