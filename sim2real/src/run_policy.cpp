@@ -339,6 +339,7 @@ void run_control_loop() {
         std::this_thread::sleep_for(std::chrono::seconds{1});
     }
 
+    // TODO: FFT on actions => Determine if low pass filter => Low pass filter => Run at higher frequency 
     auto dt = std::chrono::milliseconds{20};
     while(!exit_flag.load()) {
         ZoneScoped;
@@ -361,7 +362,7 @@ void run_control_loop() {
         }
 
         // TODO: Get this from teleop
-        std::array<float, 3> vel_command {};
+        std::array<float, 3> vel_command {1.0, 0.0, 0.0};
 
         //TODO: Clip vel command and logger->warn that it had to be clipped
         //TODO: Use stamped_vel_command to ensure it's up to date, if it's too old, set to zero and just stand there
