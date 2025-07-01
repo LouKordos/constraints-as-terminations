@@ -24,6 +24,7 @@
 #include <unitree/robot/channel/channel_subscriber.hpp>
 #include <unitree/idl/go2/LowState_.hpp>
 #include <unitree/idl/go2/LowCmd_.hpp>
+#include <unitree/common/thread/thread.hpp>
 #include <unitree/robot/b2/motion_switcher/motion_switcher_client.hpp>
 
 // Provide a non-ambiguous overload for streaming std::atomic types.
@@ -155,9 +156,48 @@ int query_motion_status(unitree::robot::b2::MotionSwitcherClient &msc)
     return motionStatus;
 }
 
+unitree_go::msg::dds_::LowCmd_ low_cmd{};
+unitree::robot::ChannelPublisherPtr<unitree_go::msg::dds_::LowCmd_> lowcmd_publisher;
+bool first_iteration = true;
+stamped_robot_state initial_robot_state;
+float interpolation_time = 0.0f;
+float interpolation_duration = 5.0f;
+auto dt = std::chrono::milliseconds{2};
+
+void movement_test() {
+    if(exit_flag.load()) {
+        return; // Will cause robot to disable because no commands have been received
+    }
+
+    if(first_iteration) {
+        first_iteration = false;
+
+        auto robot_initial_state_res = global_robot_state.try_load_for(std::chrono::microseconds{1000});
+        if(!robot_initial_state_res.has_value()) {
+            exit_flag.store(true);
+            logger->error("Failed to retrieve robot state within {}us, exiting.", std::chrono::microseconds{1000}.count());
+            return;
+        }
+        initial_robot_state = robot_initial_state_res.value();
+    }
+
+    for(int i = 0; i < num_joints; i++) {
+        int j = sdk_to_isaac_idx[i];
+        low_cmd.motor_cmd()[i].q() = std::min((interpolation_time/interpolation_duration), 1.0f) * default_joint_positions[j] + std::max((1.0f-interpolation_time/interpolation_duration), 0.0f) * initial_robot_state.joint_pos[j];
+        low_cmd.motor_cmd()[i].dq() = 0;
+        low_cmd.motor_cmd()[i].kp() = actuator_Kp;
+        low_cmd.motor_cmd()[i].kd() = actuator_Kd;
+        low_cmd.motor_cmd()[i].tau() = 0;
+    }
+    interpolation_time += (dt.count() / 1e+3);
+
+    low_cmd.crc() = crc32_core((uint32_t *)&low_cmd, (sizeof(unitree_go::msg::dds_::LowCmd_)>>2)-1);
+    lowcmd_publisher->Write(low_cmd);
+    logger->debug("t={:.3f}\tjoint pos (go2 sdk order)= [{}]", interpolation_time, fmt::join(low_cmd.motor_cmd() | std::views::take(12) | std::views::transform([](auto &m){ return m.q(); }), ", "));
+}
+
 void enable_low_level_control() {
     logger->debug("Setting up low level control...");
-    unitree_go::msg::dds_::LowCmd_ low_cmd{};
     low_cmd.head()[0] = 0xFE;
     low_cmd.head()[1] = 0xEF;
     low_cmd.level_flag() = 0xFF;
@@ -174,7 +214,6 @@ void enable_low_level_control() {
     }
 
     std::string robot_command_topic {"rt/lowcmd"};
-    unitree::robot::ChannelPublisherPtr<unitree_go::msg::dds_::LowCmd_> lowcmd_publisher;
     lowcmd_publisher.reset(new unitree::robot::ChannelPublisher<unitree_go::msg::dds_::LowCmd_>(robot_command_topic));
     lowcmd_publisher->InitChannel();
 
@@ -187,7 +226,7 @@ void enable_low_level_control() {
     msc.SetTimeout(10.0f);
     msc.Init();
     // Shut down motion control-related service
-    while(query_motion_status(msc))
+    while(query_motion_status(msc) && !exit_flag.load())
     {
         logger->debug("Trying to disable motion control-related service...");
         int32_t ret = msc.ReleaseMode(); 
@@ -201,36 +240,10 @@ void enable_low_level_control() {
         std::this_thread::sleep_for(std::chrono::seconds{5});
     }
 
-    auto robot_initial_state_res = global_robot_state.try_load_for(std::chrono::microseconds{1000});
-    if(!robot_initial_state_res.has_value()) {
-        exit_flag.store(true);
-        logger->error("Failed to retrieve robot state within {}us, exiting.", std::chrono::microseconds{1000}.count());
-    }
-    auto initial_robot_state = robot_initial_state_res.value();
-    
-    // Interpolate to default positions in joint space
-    double time = 0.0f;
-    double interpolation_duration = 5.0f;
-    auto dt = std::chrono::milliseconds{2};
-    logger->debug("Starting interpolation to default joint position with initial joint pos (isaac lab order)=[{}]", join_formatted(initial_robot_state.joint_pos));
-    for(time = 0.0f; time < interpolation_duration && !exit_flag.load(); time += (dt.count() / 1e+3)) {
-        for(int i = 0; i < num_joints; i++) {
-            int j = sdk_to_isaac_idx[i];
-            low_cmd.motor_cmd()[i].q() = (time/interpolation_duration) * default_joint_positions[j] + (1.0f-time/interpolation_duration) * initial_robot_state.joint_pos[j];
-            low_cmd.motor_cmd()[i].dq() = 0;
-            low_cmd.motor_cmd()[i].kp() = actuator_Kp;
-            low_cmd.motor_cmd()[i].kd() = actuator_Kd;
-            low_cmd.motor_cmd()[i].tau() = 0;
-        }
-        low_cmd.crc() = crc32_core((uint32_t *)&low_cmd, (sizeof(unitree_go::msg::dds_::LowCmd_)>>2)-1);
-        lowcmd_publisher->Write(low_cmd);
-        logger->debug("t={}\tjoint pos (go2 sdk order)= [{}]", time, fmt::join(low_cmd.motor_cmd() | std::views::take(12) | std::views::transform([](auto &m){ return m.q(); }), ", "));
-        std::this_thread::sleep_for(dt); // Run at approximately 500Hz
-    }
-    logger->info("Finished moving robot to default joint position.");
+    unitree::common::ThreadPtr lowCmdWriteThreadPtr = unitree::common::CreateRecurrentThreadEx("writebasiccmd", UT_CPU_ID_NONE, 2000, &movement_test);
+
     while(!exit_flag.load()) {
-        lowcmd_publisher->Write(low_cmd);
-        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        std::this_thread::sleep_for(std::chrono::seconds{1});
     }
 }
 
@@ -307,11 +320,11 @@ void run_control_loop() {
     at::Tensor raw_current_action{};
     torch::NoGradGuard no_grad;
 
-    // if(!exit_flag.load()) {
-    //     enable_low_level_control();
-    //     logger->debug("Enabled low level control mode, entering main control loop");
-    //     std::this_thread::sleep_for(std::chrono::seconds{1});
-    // }
+    if(!exit_flag.load()) {
+        enable_low_level_control();
+        logger->debug("Enabled low level control mode, entering main control loop");
+        std::this_thread::sleep_for(std::chrono::seconds{1});
+    }
 
     // TODO: Make timed loop
     while(!exit_flag.load()) {
@@ -487,7 +500,7 @@ void robot_state_message_handler(const void *message) {
 
     check_state_safety_limits(stamped_state);
 
-    if(true) {
+    if(false) {
         // append_row_to_csv("/app/logs/joint_positions.csv", std::vector<double>(stamped_state.joint_pos.begin(), stamped_state.joint_pos.end()));
         logger->debug(
             "Foot forces=[{}]\tIMU RPY=[{:+.4f},{:+.4f},{:+.4f}]\tprojected_gravity=[{:+.4f},{:+.4f},{:.4f}]\tangular_vel=[{:+.4f},{:+.4f},{:+.4f}]\tq=[{}]",
