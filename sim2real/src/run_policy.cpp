@@ -214,8 +214,8 @@ void enable_low_level_control() {
 
     logger->info("Hold robot using tether or safely put on the floor, low level control mode will be enabled once enter key is registered. This will make robot fall down!");
     std::cin.ignore();
-    logger->info("Sleeping for 5sec to let user reevaluate his choices :)");
-    std::this_thread::sleep_for(std::chrono::seconds{5});
+    logger->info("Sleeping for 10sec to let user reevaluate his choices :)");
+    std::this_thread::sleep_for(std::chrono::seconds{10});
 
     unitree::robot::b2::MotionSwitcherClient msc;
     msc.SetTimeout(10.0f);
@@ -263,10 +263,8 @@ void enable_low_level_control() {
         std::this_thread::sleep_for(dt);
     }
 
-    // TODO: Update joint position and orientation limits to be safer
-    // TODO: Log this
-
-    logger->info("Finished linear interpolation to default joint positions, low level command mode activation succeeded.");
+    logger->info("Finished linear interpolation to default joint positions, low level command mode activation succeeded. Sleeping for 3sec to stabilize...");
+    std::this_thread::sleep_for(std::chrono::seconds{3});
 }
 
 // Mirrors Isaac Lab ObservationsCfg defined in EnvCfg
@@ -341,7 +339,7 @@ void run_control_loop() {
         std::this_thread::sleep_for(std::chrono::seconds{1});
     }
 
-    // TODO: Make timed loop
+    auto dt = std::chrono::milliseconds{20};
     while(!exit_flag.load()) {
         ZoneScoped;
         FrameMarkNamed("run_control_loop");
@@ -372,8 +370,12 @@ void run_control_loop() {
         inference_input[0] = observation;
         raw_current_action = model.forward(inference_input).toTensor().contiguous();
         std::memcpy(current_action.data(), raw_current_action.data_ptr<float>(), num_joints * sizeof(float));
-        previous_action = current_action;
         // logger->debug("raw action={}", current_action);
+        auto delta_action = [](auto const& curr, auto const& prev, double dt){ 
+            std::array<double, num_joints> r; 
+            std::ranges::transform(curr, prev, r.begin(), 
+                [dt](auto a, auto b){return (a-b)/dt;}); return r; }(current_action, previous_action, dt.count() / 1e+3);
+        logger->debug("delta_action/dt= [{}]", join_formatted(delta_action));
         // TODO: Store all intermediate values such as current action, pd_targets in rosbag for debugging
         std::array<float, num_joints> pd_target_sdk_order {}; // Go2 native order, NOT Isaac Lab!!!
         for(int i = 0; i < num_joints; i++) {
@@ -386,10 +388,12 @@ void run_control_loop() {
             break;
         }
 
-        // if(!pd_setpoint_sdk_order.try_store_for(pd_target_sdk_order, atomic_op_timeout)) {
-        //     exit_flag.store(true);
-        //     logger->error("Failed to update global PD target within {}us, exiting.", atomic_op_timeout.count());
-        // }
+        if(!pd_setpoint_sdk_order.try_store_for(pd_target_sdk_order, atomic_op_timeout)) {
+            exit_flag.store(true);
+            logger->error("Failed to update global PD target within {}us, exiting.", atomic_op_timeout.count());
+        }
+        previous_action = current_action;
+        std::this_thread::sleep_for(dt);
     }
 }
 
