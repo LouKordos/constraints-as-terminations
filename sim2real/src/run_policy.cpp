@@ -8,6 +8,8 @@
 #include <fstream>
 #include <cmath>
 #include <ranges>
+#include <format>
+#include <filesystem>
 
 #include <signal.h>
 #include <stdlib.h>
@@ -15,10 +17,10 @@
 #include <unistd.h>
 
 #include <tracy/Tracy.hpp>
-#define TRACY_NO_CONTEXT_SWITCH
+// #define TRACY_NO_CONTEXT_SWITCH
 #define TRACY_NO_SYSTEM_TRACING
 #define TRACY_NO_VSYNC_CAPTURE
-#define TRACY_NO_SAMPLING
+// #define TRACY_NO_SAMPLING
 
 #include <unitree/robot/channel/channel_publisher.hpp>
 #include <unitree/robot/channel/channel_subscriber.hpp>
@@ -27,6 +29,8 @@
 #include <unitree/idl/go2/LowCmd_.hpp>
 #include <unitree/common/thread/thread.hpp>
 #include <unitree/robot/b2/motion_switcher/motion_switcher_client.hpp>
+
+#include <mcap/writer.hpp>
 
 // Provide a non-ambiguous overload for streaming std::atomic types.
 // Required because otherwise importing torch/script.h produces ambiguous
@@ -306,15 +310,14 @@ torch::Tensor construct_observation_tensor(const stamped_robot_state& robot_stat
 // Uses timed_atomic to guarantee that each operation only takes a limited amount of time.
 // This allows estop / sigint to be noticed below a certain duration.
 // Of course this is not proper safety, but this is hard to achieve with the Go2 robot.
-void run_control_loop() {
+void run_control_loop(std::filesystem::path checkpoint_path) {
     logger->debug("Starting main control loop.");
     logger->debug("Loading torch model...");
 
     // TODO: Make path adjustable/configureable
-    std::string checkpoint_path = "/app/traced_checkpoints/2025-06-22-08-06-02_6299_traced_deterministic.pt";
     torch::jit::script::Module model;
     try {
-        model = torch::jit::load(checkpoint_path.c_str());
+        model = torch::jit::load(checkpoint_path.string());
         model.eval();
     }
     catch (const c10::Error& e) {
@@ -547,10 +550,25 @@ void height_map_handler(const void *message) {
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
 {
+    auto run_timestamp_utc = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
+    std::filesystem::path logdir_path {"/app/logs/utc_" + std::format("{:%Y-%m-%d-%H-%M-%S}", run_timestamp_utc) + "/"};
+    std::error_code ec;
+
+    if(std::filesystem::create_directories(logdir_path, ec)) {
+        std::cout << "Successfully created logdir at " << logdir_path << std::endl;
+    }
+    else {
+        if(ec) {
+            std::cerr << "Error creating logdir: " << ec.message() << " (code " << ec.value() << "), exiting.\n";
+            exit_flag.store(true);
+            return EXIT_FAILURE;
+        } // else path already existed
+    }
+
     try {
         ZoneScopedN("Logging init");
         auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-        logger = spdlog::create_async<spdlog::sinks::basic_file_sink_mt>("async_file_logger", "/app/logs/run_policy.log");
+        logger = spdlog::create_async<spdlog::sinks::basic_file_sink_mt>("async_file_logger", logdir_path.string() + "run_policy.log");
         logger->sinks().push_back(console_sink);
         logger->set_pattern("[%Y-%m-%d %H:%M:%S.%f] [%l] %v");
         logger->set_level(spdlog::level::debug);
@@ -573,7 +591,20 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     sigint_handler.sa_flags = 0;
     sigaction(SIGINT, &sigint_handler, NULL);
 
-    logger->debug("Finished setting up logging and sigint handler, setting up robot communication.");
+    std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-22-08-06-02_6299_traced_deterministic.pt"};
+    logger->info("Using checkpoint at {}", checkpoint_path.string());
+
+    // logger->debug("Setting up mcap telemetry...");
+    // mcap::McapWriter writer;
+    // auto status = writer.open(logdir_path.string() + std::format("run_checkpoint_{}.mcap", checkpoint_path.filename().string()), mcap::McapWriterOptions("ros2"));
+    // if(!status.ok()) {
+    //     logger->error("Failed to set up mcap writer, status={}, exiting.", status.message);
+    //     exit_flag.store(true);
+    // }
+    // // TODO: Define schemata
+    // Start thread for periodic logging (500Hz)
+
+    logger->debug("Setting up robot communication.");
     unitree::robot::ChannelFactory::Instance()->Init(0, argv[1]);
     unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::LowState_> robot_state_subscriber;
     std::string robot_state_topic {"rt/lowstate"};
@@ -607,7 +638,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     }
 
     // TODO: Infer input dimension and set global variable
-    run_control_loop();
+    run_control_loop(checkpoint_path);
 
     // logger->info("Enabling damping mode...");
     // enable_damping_mode();
