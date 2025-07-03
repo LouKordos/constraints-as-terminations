@@ -30,7 +30,12 @@
 #include <unitree/common/thread/thread.hpp>
 #include <unitree/robot/b2/motion_switcher/motion_switcher_client.hpp>
 
-#include <mcap/writer.hpp>
+// #include <mcap/writer.hpp>
+
+#include <rosbag2_cpp/writer.hpp>
+#include <rosbag2_storage/storage_options.hpp>
+#include <rosbag2_storage/topic_metadata.hpp>
+#include <rclcpp/clock.hpp>
 
 // Provide a non-ambiguous overload for streaming std::atomic types.
 // Required because otherwise importing torch/script.h produces ambiguous
