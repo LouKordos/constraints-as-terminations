@@ -33,6 +33,7 @@ if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
     echo "Host (no docker) detected."
     docker compose --progress plain up -d
     echo "Docker container is now running, starting interactive shell. Run /app/build-and-run.sh inside the shell to proceed."
+    echo "If you require GUI access, you may need to run xhost +local:docker"
     docker exec -it $CONTAINER_NAME /bin/bash
 else
     echo "Docker detected."

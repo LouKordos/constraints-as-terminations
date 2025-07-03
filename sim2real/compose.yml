@@ -9,6 +9,8 @@ services:
     image: cat-sim2real:latest
     environment:
       - DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
       - TERM=xterm-256color
     # All this is needed for Tracy profiling
     cap_add:
@@ -26,3 +28,8 @@ services:
         read_only: true
       # For tracy capture compilation inside container
       - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket
+      - type: bind
+        source: /tmp/.X11-unix
+        target: /tmp/.X11-unix
+        bind:
+          create_host_path: true
