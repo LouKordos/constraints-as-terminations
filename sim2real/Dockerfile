@@ -12,6 +12,7 @@ ENV DOCKER_FLAG_FOR_RUN_SCRIPT=1
 #WORKDIR /torch
 #RUN wget https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.7.1%2Bcpu.zip
 #RUN unzip *.zip
+ENV ROS_DOMAIN_ID=69
 
 # Need to build from source due to arm64 on Go2 Jetson
 RUN apt update -y && apt install -y build-essential cmake git python3 python3-pip python3-venv libopenblas-dev libomp-dev libopenmpi-dev ninja-build libyaml-dev libjpeg-dev libpng-dev
