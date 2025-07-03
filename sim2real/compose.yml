@@ -3,6 +3,8 @@ services:
     pull_policy: build
     build:
       context: .
+      args:
+        progress: plain
       network: host
     image: cat-sim2real:latest
     environment:
