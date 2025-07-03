@@ -1,7 +1,10 @@
-FROM ubuntu:24.04
+FROM osrf/ros:jazzy-desktop
 
 RUN printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4
 
+RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl vim libtbb-dev dbus libeigen3-dev sudo iputils-ping unzip wget iproute2 libzstd-dev zstd locales curl
+
+RUN echo 'source /opt/ros/jazzy/setup.bash' >> ~/.bashrc
 
 ENV CC=gcc-14
 ENV CXX=g++-14
