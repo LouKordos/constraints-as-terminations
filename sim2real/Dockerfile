@@ -11,9 +11,49 @@ ENV CXX=g++-14
 ENV DOCKER_FLAG_FOR_RUN_SCRIPT=1
 
 # CMAKE_PREFIX_PATH will be updated to include /torch/libtorch
+#WORKDIR /torch
+#RUN wget https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.7.1%2Bcpu.zip
+#RUN unzip *.zip
+
+# Need to build from source due to arm64 on Go2 Jetson
+RUN apt update -y && apt install -y build-essential cmake git python3 python3-pip python3-venv libopenblas-dev libomp-dev libopenmpi-dev ninja-build libyaml-dev libjpeg-dev libpng-dev
 WORKDIR /torch
-RUN wget https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.7.1%2Bcpu.zip
-RUN unzip *.zip
+RUN git clone --recursive https://github.com/pytorch/pytorch.git
+WORKDIR /torch/pytorch
+RUN git checkout e2d141dbde55c2a4370fac5165b0561b6af4798b && git submodule sync && git submodule update --init --recursive
+WORKDIR /torch/pytorch/build
+RUN apt install -y python3-typing-extensions
+RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake -G Ninja --compile-no-warning-as-error \
+      -DBUILD_SHARED_LIBS=ON \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DPYTHON_EXECUTABLE=$(which python3) \
+      -DUSE_CUDA=OFF \
+      -DUSE_ROCM=OFF \
+      -DUSE_CUDNN=OFF \
+      -DUSE_MIOPEN=OFF \
+      -DUSE_NCCL=OFF \
+      -DUSE_TENSORPIPE=OFF \
+      -DUSE_FBGEMM=OFF \
+      -DUSE_QNNPACK=OFF \
+      -DUSE_XNNPACK=OFF \
+      -DUSE_NNPACK=OFF \
+      -DBUILD_CAFFE2=OFF \
+      -DBUILD_CAFFE2_OPS=OFF \
+      -DUSE_DISTRIBUTED=OFF \
+      -DUSE_KINETO=OFF \
+      -DBUILD_TEST=OFF \
+      -DUSE_OPENCL=OFF \
+      -DUSE_OPENCV=OFF \
+      -DUSE_SYSTEM_ONNX=OFF \
+      -DUSE_NNAPI=OFF \
+      -DBUILD_PYTHON=OFF \
+      -DTREAT_WARNINGS_AS_ERRORS=OFF \
+      -DCMAKE_C_FLAGS="-Wno-error" \
+      -DCMAKE_CXX_FLAGS="-Wno-error" \
+      -DCMAKE_CUDA_FLAGS="-Wno-error" \
+      -DCMAKE_INSTALL_PREFIX=/torch/libtorch \
+      ..
+RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake --build . --target install
 
 WORKDIR /go2_sdk
 RUN git clone https://github.com/unitreerobotics/unitree_sdk2.git
