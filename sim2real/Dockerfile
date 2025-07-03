@@ -2,16 +2,6 @@ FROM ubuntu:24.04
 
 RUN printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4
 
-# For color test on shell startup
-RUN echo 'function color_test() {' >> ~/.bashrc && \
-    echo '    for i in {0..255} ; do' >> ~/.bashrc && \
-    echo '        printf "\\x1b[48;5;%sm%3d\\e[0m " "$i" "$i"' >> ~/.bashrc && \
-    echo '        if (( i == 15 )) || (( i > 15 )) && (( (i-15) % 6 == 0 )); then' >> ~/.bashrc && \
-    echo '            printf "\\n";' >> ~/.bashrc && \
-    echo '        fi' >> ~/.bashrc && \
-    echo '    done' >> ~/.bashrc && \
-    echo '}' >> ~/.bashrc && \
-    echo 'color_test' >> ~/.bashrc
 
 ENV CC=gcc-14
 ENV CXX=g++-14
