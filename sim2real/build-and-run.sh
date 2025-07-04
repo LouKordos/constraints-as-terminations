@@ -41,7 +41,7 @@ if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
         echo "multiarch builder already exists, skipping creation."
     fi 
     echo "Starting build..."
-    COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose --progress plain build --builder multiarch-builder
+    COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose --progress plain build --builder multiarch-builder-${CONTAINER_NAME}
     docker compose up -d
     echo "Docker container is now running, starting interactive shell. Run /app/build-and-run.sh inside the shell to proceed."
     echo "If you require GUI access, you may need to run xhost +local:docker"
