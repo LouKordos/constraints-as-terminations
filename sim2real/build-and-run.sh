@@ -31,9 +31,21 @@ done
         
 if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
     echo "Host (no docker) detected."
-    docker compose --progress plain up -d
+    echo "Installing qemu emulation for arm64 builds..."
+    docker run --privileged --rm tonistiigi/binfmt --install all
+    echo "Creating buildx builder for multiarch builds if not exists..."
+    if ! docker buildx inspect multiarch-builder-${CONTAINER_NAME} >/dev/null 2>&1; then
+        echo "Creating multiarch builder…"
+        docker buildx create --name multiarch-builder-${CONTAINER_NAME} --driver docker-container --bootstrap
+    else
+        echo "multiarch builder already exists, skipping creation."
+    fi 
+    echo "Starting build..."
+    COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose --progress plain build --builder multiarch-builder
+    docker compose up -d
     echo "Docker container is now running, starting interactive shell. Run /app/build-and-run.sh inside the shell to proceed."
     echo "If you require GUI access, you may need to run xhost +local:docker"
+    echo "You may also choose to push now for easy deployment. Not automating this due to high bandwidth and time usage."
     docker exec -it $CONTAINER_NAME /bin/bash
 else
     echo "Docker detected."

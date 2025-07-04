@@ -6,7 +6,11 @@ services:
       args:
         progress: plain
       network: host
-    image: cat-sim2real:latest
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: loukordos/cat-sim2real:latest
     environment:
       - DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
       - DISPLAY=${DISPLAY}
