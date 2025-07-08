@@ -73,6 +73,9 @@ RUN make -j install
 # RUN AFTER ALL DEPENDENCY INSTALLATIONS!
 RUN ldconfig
 
+RUN rosdep init
+RUN rosdep update
+
 COPY . /app
 COPY ./.vimrc ~/.vimrc
 WORKDIR /app
