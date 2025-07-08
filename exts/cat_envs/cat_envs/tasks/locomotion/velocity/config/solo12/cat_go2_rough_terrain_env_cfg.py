@@ -609,7 +609,7 @@ class RewardsCfg:
     minimize_power = RewTerm(
         func=rewards.joint_power,
         weight=0.0, # Updated by curriculum
-        params={"scaling_factor": 0.02} # May be updated in ppo.py, check carefully!
+        params={"scaling_factor": 1.0 } # Set to 1.0 in ppo.py anyway
     )
 
 # Never forget to also add a curriculum term for each added constraint
@@ -826,7 +826,7 @@ class CurriculumCfg:
     #         "num_steps_from_start_step": 3000,
     #         "start_at_step": 15000 * 10,
     #         "start_weight": 0.0,
-    #         "end_weight": 0.4 * 0.02 # Instead of setting scaling_factor=0.02 because ppo.py overrides itab die post und los gehts
+    #         "end_weight": 0.4 * 0.02 # Instead of setting scaling_factor=0.02 because ppo.py overrides it
 
     #     }
     # )
