@@ -39,3 +39,6 @@ job.*.err
 sim2real/build
 sim2real/build.log
 sim2real/tracy-profiles
+sim2real/ros2_ws/**/build
+sim2real/ros2_ws/**/install
+sim2real/ros2_ws/**/log
