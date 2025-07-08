@@ -378,20 +378,20 @@ void run_control_loop(std::filesystem::path checkpoint_path) {
             timeout_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
         }
 
-        std::array<float, 3> vel_command {1.0, 0.0, 0.0};
-	if(auto vcmd = global_vel_command.try_load_for(atomic_op_timeout); vcmd.has_value()) {
-		vel_command = vcmd.value();
-	}
-	else {
-		logger->error("Failed to fetch vel_command within {}us, exiting.", atomic_op_timeout.count());
-		exit_flag.store(true);
-	}
-	for(int i = 0; i < 3; i++) {
-		if(std::abs(vel_command[i]) > vel_command_mag_limit[i]) {
-			logger->warn("Had to clip vel_command[{}]={}, vel_command_mag_limit[i]={}", i, vel_command[i], vel_command_mag_limit[i]);
-			vel_command[i] = std::max(-vel_command_mag_limit[i], std::min(vel_command_mag_limit[i], vel_command[i]));
-		}	
-	}
+        std::array<float, 3> vel_command {0.0, 0.0, 0.0};
+        if(auto vcmd = global_vel_command.try_load_for(atomic_op_timeout); vcmd.has_value()) {
+            vel_command = vcmd.value();
+        }
+        else {
+            logger->error("Failed to fetch vel_command within {}us, exiting.", atomic_op_timeout.count());
+            exit_flag.store(true);
+        }
+        for(int i = 0; i < 3; i++) {
+            if(std::abs(vel_command[i]) > vel_command_mag_limit[i]) {
+                logger->warn("Had to clip vel_command[{}]={}, vel_command_mag_limit[i]={}", i, vel_command[i], vel_command_mag_limit[i]);
+                vel_command[i] = std::max(-vel_command_mag_limit[i], std::min(vel_command_mag_limit[i], vel_command[i]));
+            }	
+        }
 
         auto observation = construct_observation_tensor(robot_state, vel_command, previous_action);
         inference_input[0] = observation;
@@ -457,6 +457,7 @@ static inline std::array<float, 3> projected_gravity_body_frame(const std::array
     return { r1, r2, r3 };
 }
 
+// DEPRECATED
 void append_row_to_csv(const std::string& filename, const std::vector<double>& row) {
     std::ofstream ofs(filename, std::ios::app);
     if (!ofs.is_open()) {
@@ -572,61 +573,61 @@ void height_map_handler(const void *message) {
 
 void vel_command_listener(std::string endpoint)
 {
-   zmq::context_t ctx{1};
-   zmq::socket_t sock{ctx, zmq::socket_type::pull};
+    zmq::context_t ctx{1};
+    zmq::socket_t sock{ctx, zmq::socket_type::pull};
 
-   try {
-       sock.bind(endpoint);
-       logger->info("Velocity‑command listener connected to {}", endpoint);
-   } catch(const zmq::error_t& e) {
-       logger->error("Failed to connect PULL socket ({}), zeroing commands and exiting.", e.what());
-       exit_flag.store(true);
-       global_vel_command.try_store_for({0.f,0.f,0.f}, atomic_op_timeout);
-       return;
-   }
+    try {
+        sock.bind(endpoint);
+        logger->info("Velocity command listener connected to {}", endpoint);
+    }
+    catch(const zmq::error_t& e) {
+        logger->error("Failed to connect PULL socket ({}), zeroing commands and exiting.", e.what());
+        exit_flag.store(true);
+        global_vel_command.try_store_for({0.f,0.f,0.f}, atomic_op_timeout);
+        return;
+    }
 
-   zmq::pollitem_t poll_items[] = { { static_cast<void*>(sock), 0, ZMQ_POLLIN, 0 } };
-   std::array<float, 3> zero {0.f,0.f,0.f};
+    zmq::pollitem_t poll_items[] = { { static_cast<void*>(sock), 0, ZMQ_POLLIN, 0 } };
+    std::array<float, 3> zero {0.f,0.f,0.f};
 
-   while(!exit_flag.load())
-   {
-	   ZoneScopedN("vel_command_listener_loop");
-       int rc = zmq::poll(poll_items, 1, vel_cmd_zmq_poll_timeout);
-       if(rc == 0) {
-           logger->warn("No vel command received for {}ms, setting global command to zero", vel_cmd_zmq_poll_timeout.count());
-	       global_vel_command.try_store_for(zero, atomic_op_timeout);
-           continue;
-       }
+    while(!exit_flag.load()) {
+        ZoneScopedN("vel_command_listener_loop");
+        int rc = zmq::poll(poll_items, 1, vel_cmd_zmq_poll_timeout);
+        if(rc == 0) {
+            logger->warn("No vel command received for {}ms, setting global command to zero", vel_cmd_zmq_poll_timeout.count());
+            global_vel_command.try_store_for(zero, atomic_op_timeout);
+            continue;
+        }
 
-       zmq::message_t msg;
-       if(!sock.recv(msg, zmq::recv_flags::none)) {
-           logger->warn("Failed to recv() on velocity command socket, keeping previous value.");
-           continue;
-       }
+        zmq::message_t msg;
+        if(!sock.recv(msg, zmq::recv_flags::none)) {
+            logger->warn("Failed to recv() on velocity command socket, keeping previous value.");
+            continue;
+        }
 
-       std::string_view payload{static_cast<char*>(msg.data()), msg.size()};
-       std::stringstream ss{std::string(payload)};
-       long long ts_ms;
-       float vx, vy, omega;
-       char comma;
+        std::string_view payload{static_cast<char*>(msg.data()), msg.size()};
+        std::stringstream ss{std::string(payload)};
+        long long ts_ms;
+        float vx, vy, omega;
+        char comma;
 
-       if(!(ss >> ts_ms >> comma >> vx >> comma >> vy >> comma >> omega)) {
-           logger->warn("Malformed velocity command: '{}' Storing zero.", payload);
-           global_vel_command.try_store_for(zero, atomic_op_timeout);
-           continue;
-       }
+        if(!(ss >> ts_ms >> comma >> vx >> comma >> vy >> comma >> omega)) {
+            logger->warn("Malformed velocity command: '{}' Storing zero.", payload);
+            global_vel_command.try_store_for(zero, atomic_op_timeout);
+            continue;
+        }
 
-       auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-       auto age = now_ms - ts_ms;
+        auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        auto age = now_ms - ts_ms;
 
-       if(age > vel_cmd_stale_threshold.count()) {
-           logger->warn("Stale velocity command (age {} ms > {} ms), zeroing.", age, vel_cmd_stale_threshold.count());
-           global_vel_command.try_store_for(zero, atomic_op_timeout);
-           continue;
-       }
+        if(age > vel_cmd_stale_threshold.count()) {
+            logger->warn("Stale velocity command (age {} ms > {} ms), zeroing.", age, vel_cmd_stale_threshold.count());
+            global_vel_command.try_store_for(zero, atomic_op_timeout);
+            continue;
+        }
 
-       global_vel_command.try_store_for({vx, vy, omega}, atomic_op_timeout);
-   }
+        global_vel_command.try_store_for({vx, vy, omega}, atomic_op_timeout);
+    }
 }
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
