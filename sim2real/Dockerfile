@@ -74,6 +74,7 @@ RUN make -j install
 RUN ldconfig
 
 COPY . /app
+COPY ./.vimrc ~/.vimrc
 WORKDIR /app
 
 # Using CMD instead of ENTRYPOINT here so that docker-compose.yml for vs code can override it.
