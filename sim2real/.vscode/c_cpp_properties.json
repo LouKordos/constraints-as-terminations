@@ -5,7 +5,9 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "/go2_sdk/**",
-                "/torch/**"
+                "/torch/**",
+                "/opt/ros/jazzy/include/rclcpp",
+                "/opt/ros/jazzy/include/rcl"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++-14",

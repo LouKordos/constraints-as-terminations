@@ -31,11 +31,9 @@
 #include <unitree/common/thread/thread.hpp>
 #include <unitree/robot/b2/motion_switcher/motion_switcher_client.hpp>
 
-// #include <mcap/writer.hpp>
-
-#include <rosbag2_cpp/writer.hpp>
-#include <rosbag2_storage/storage_options.hpp>
-#include <rosbag2_storage/topic_metadata.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <sensor_msgs/msg/imu.hpp>
+#include <std_msgs/msg/float32_multi_array.hpp>
 #include <rclcpp/clock.hpp>
 
 #include <zmq.hpp>
@@ -59,6 +57,7 @@ std::ostream& operator<<(std::ostream& os, const std::atomic<T>& v) {
 
 #include <timed_atomic.hpp>
 #include <stamped_robot_state.hpp>
+#include <async_rosbag_logger.hpp>
 
 std::shared_ptr<spdlog::logger> logger {nullptr};
 const short num_joints = 12;
@@ -178,6 +177,7 @@ unitree_go::msg::dds_::LowCmd_ low_cmd{};
 unitree::robot::ChannelPublisherPtr<unitree_go::msg::dds_::LowCmd_> lowcmd_publisher;
 unitree::common::ThreadPtr lowCmdWriteThreadPtr;
 timed_atomic<std::array<float, num_joints>> pd_setpoint_sdk_order {};
+timed_atomic<std::array<float, num_joints>> global_current_action_isaac_order {};
 auto atomic_op_timeout = std::chrono::microseconds{500};
 
 void send_pd_commands() {
@@ -399,12 +399,16 @@ void run_control_loop(std::filesystem::path checkpoint_path) {
             raw_current_action = model.forward(inference_input).toTensor().contiguous();
         }
         std::memcpy(current_action.data(), raw_current_action.data_ptr<float>(), num_joints * sizeof(float));
+        if(!global_current_action_isaac_order.try_store_for(current_action, atomic_op_timeout)) {
+            logger->error("Failed to set global current_action within {}us, exiting.", atomic_op_timeout.count());
+            exit_flag.store(true);
+        }
         // logger->debug("raw action={}", current_action);
         auto delta_action = [](auto const& curr, auto const& prev, double dt){ 
             std::array<double, num_joints> r; 
             std::ranges::transform(curr, prev, r.begin(), 
                 [dt](auto a, auto b){return (a-b)/dt;}); return r; }(current_action, previous_action, dt.count() / 1e+3);
-        logger->debug("delta_action/dt= [{}]", join_formatted(delta_action));
+        // logger->debug("delta_action/dt= [{}]", join_formatted(delta_action));
         // TODO: Store all intermediate values such as current action, pd_targets in rosbag for debugging
         std::array<float, num_joints> pd_target_sdk_order {}; // Go2 native order, NOT Isaac Lab!!!
         for(int i = 0; i < num_joints; i++) {
@@ -548,12 +552,29 @@ void robot_state_message_handler(const void *message) {
     }
     stamped_state.timestamp = now;
     stamped_state.counter = iteration_counter++;
-    global_robot_state.try_store_for(stamped_state, std::chrono::microseconds{1000});
+    global_robot_state.try_store_for(stamped_state, atomic_op_timeout);
 
     check_state_safety_limits(stamped_state);
 
+    {ZoneScopedN("rosbag_logging");
+        RawSample rs;
+        rs.stamp = rclcpp::Clock().now();
+        rs.joint_pos = stamped_state.joint_pos;
+        rs.joint_vel = stamped_state.joint_vel;
+        rs.joint_tau = stamped_state.joint_torque;
+        rs.quat_wxyz = {stamped_state.quat_body_to_world_wxyz[0], stamped_state.quat_body_to_world_wxyz[1], stamped_state.quat_body_to_world_wxyz[2]};
+        rs.body_gyro  = stamped_state.body_angular_velocity;
+        rs.proj_grav  = stamped_state.projected_gravity;
+
+        if (auto a = global_current_action_isaac_order.try_load_for(atomic_op_timeout))
+            rs.action = a.value();
+        if (auto p = pd_setpoint_sdk_order.try_load_for(atomic_op_timeout))
+            rs.pd_target = p.value();
+
+        AsyncRosbagLogger::instance().enqueue(rs);
+    }
+
     if(false) {
-        // append_row_to_csv("/app/logs/joint_positions.csv", std::vector<double>(stamped_state.joint_pos.begin(), stamped_state.joint_pos.end()));
         logger->debug(
             "Foot forces=[{}]\tIMU RPY=[{:+.4f},{:+.4f},{:+.4f}]\tprojected_gravity=[{:+.4f},{:+.4f},{:.4f}]\tangular_vel=[{:+.4f},{:+.4f},{:+.4f}]\tq=[{}]",
             fmt::join(foot_forces, ","),
@@ -677,6 +698,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     logger->info("Using checkpoint at {}", checkpoint_path.string());
 
     logger->debug("Setting up robot communication.");
+    AsyncRosbagLogger::instance().open((logdir_path / "rosbag").string());
     unitree::robot::ChannelFactory::Instance()->Init(0, argv[1]);
     unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::LowState_> robot_state_subscriber;
     std::string robot_state_topic {"rt/lowstate"};
@@ -725,8 +747,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     logger->debug("Closed robot channels.");
 
     if(vel_cmd_listener_thread.joinable()) vel_cmd_listener_thread.join();
-
-    // TODO: JOIN ANY THREADS TO ENSURE CLEAN EXIT!
+    AsyncRosbagLogger::instance().shutdown();
     logger->debug("Flushing logs...");
     logger->flush();
     spdlog::shutdown();
