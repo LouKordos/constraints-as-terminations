@@ -77,6 +77,11 @@
         "variant": "cpp",
         "print": "cpp",
         "text_encoding": "cpp",
-        "ranges": "cpp"
+        "ranges": "cpp",
+        "any": "cpp",
+        "strstream": "cpp",
+        "source_location": "cpp",
+        "future": "cpp",
+        "stdfloat": "cpp"
     }
 }
