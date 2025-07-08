@@ -571,6 +571,7 @@ void robot_state_message_handler(const void *message) {
         if (auto p = pd_setpoint_sdk_order.try_load_for(atomic_op_timeout))
             rs.pd_target = p.value();
 
+        std::transform(stamped_state.foot_forces_raw.begin(), stamped_state.foot_forces_raw.end(), rs.foot_force_raw_adc.begin(), [](int16_t v){ return static_cast<float>(v); });
         AsyncRosbagLogger::instance().enqueue(rs);
     }
 

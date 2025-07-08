@@ -17,6 +17,7 @@ struct RawSample
     std::array<float, 3> proj_grav;
     std::array<float, 12> action;
     std::array<float, 12> pd_target;
+    std::array<float, 4> foot_force_raw_adc;
     rclcpp::Time stamp;
 };
 
@@ -76,6 +77,12 @@ class AsyncRosbagLogger
             fa_action_.data.resize(12);
             fa_pd_.data.resize(12);
 
+            fa_foot_force_.data.resize(4);
+            fa_foot_force_.layout.dim.resize(1);
+            fa_foot_force_.layout.dim[0].label  = "foot_order_FL_FR_RL_RR";
+            fa_foot_force_.layout.dim[0].size   = 4;
+            fa_foot_force_.layout.dim[0].stride = 4;
+
             run_.store(true, std::memory_order_release);
             worker_ = std::thread(&AsyncRosbagLogger::loop, this);
         }
@@ -107,7 +114,7 @@ class AsyncRosbagLogger
             std::copy(s.joint_pos.begin(), s.joint_pos.end(), js_.position.begin());
             std::copy(s.joint_vel.begin(), s.joint_vel.end(), js_.velocity.begin());
             std::copy(s.joint_tau.begin(), s.joint_tau.end(), js_.effort.begin());
-            writer_.write(js_, "/joint_states", js_.header.stamp);
+            writer_.write(js_, "/joint_states_isaac_order", js_.header.stamp);
 
             // IMU
             imu_.header = js_.header;
@@ -123,11 +130,12 @@ class AsyncRosbagLogger
             imu_.linear_acceleration.z = s.proj_grav[2];
             writer_.write(imu_, "/imu", imu_.header.stamp);
 
-            // Float arrays
             std::copy(s.action.begin(), s.action.end(), fa_action_.data.begin());
             std::copy(s.pd_target.begin(), s.pd_target.end(), fa_pd_.data.begin());
-            writer_.write(fa_action_, "/policy_action", imu_.header.stamp);
-            writer_.write(fa_pd_, "/pd_target", imu_.header.stamp);
+            writer_.write(fa_action_, "/policy_action_isaac_order", imu_.header.stamp);
+            writer_.write(fa_pd_, "/pd_setpoint_sdk_order", imu_.header.stamp);
+            std::copy(s.foot_force_raw_adc.begin(), s.foot_force_raw_adc.end(), fa_foot_force_.data.begin());
+            writer_.write(fa_foot_force_, "/foot_force_raw_adc", imu_.header.stamp);
         }
 
         RingBuffer<1024> queue_; // 2 s buffer at 500 Hz
@@ -138,5 +146,5 @@ class AsyncRosbagLogger
         // pre‑allocated reusable message instances
         sensor_msgs::msg::JointState js_;
         sensor_msgs::msg::Imu imu_;
-        std_msgs::msg::Float32MultiArray fa_action_, fa_pd_;
+        std_msgs::msg::Float32MultiArray fa_action_, fa_pd_, fa_foot_force_;
 };
