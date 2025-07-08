@@ -45,10 +45,15 @@ if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
     docker compose up -d
     echo "Docker container is now running, starting interactive shell. Run /app/build-and-run.sh inside the shell to proceed."
     echo "If you require GUI access, you may need to run xhost +local:docker"
-    echo "You may also choose to push now for easy deployment. Not automating this due to high bandwidth and time usage."
+    echo "You may also choose to docker compose push now for easy deployment. Not automating this due to high bandwidth and time usage."
     docker exec -it $CONTAINER_NAME /bin/bash
 else
     echo "Docker detected."
+    cd /app/ros2_ws
+    echo "Building ROS packages..."
+    colcon build --symlink-install
+    #source /app/install/setup.bash
+    echo "Building main codebase..."
     cd /app
     time cmake -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -S . -B ${BUILD_DIR}
     if [[ ! -f "/tracy-for-capture-built.marker" ]]; then
