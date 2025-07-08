@@ -45,7 +45,7 @@ find_package(rosbag2_cpp CONFIG REQUIRED)
 # find_package(rosbag2_storage_mcap CONFIG REQUIRED)
 
 add_executable(run_policy run_policy.cpp)
-target_link_libraries(run_policy PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 atomic Threads::Threads "${TORCH_LIBRARIES}" rclcpp::rclcpp rosbag2_cpp::rosbag2_cpp)
+target_link_libraries(run_policy PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 atomic Threads::Threads "${TORCH_LIBRARIES}" rclcpp::rclcpp rosbag2_cpp::rosbag2_cpp cppzmq)
 
 add_executable(read_observations read_observations.cpp)
 target_link_libraries(read_observations PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 Threads::Threads)
