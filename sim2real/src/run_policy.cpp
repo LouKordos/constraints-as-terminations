@@ -10,6 +10,7 @@
 #include <ranges>
 #include <format>
 #include <filesystem>
+#include <sstream>
 
 #include <signal.h>
 #include <stdlib.h>
@@ -36,6 +37,8 @@
 #include <rosbag2_storage/storage_options.hpp>
 #include <rosbag2_storage/topic_metadata.hpp>
 #include <rclcpp/clock.hpp>
+
+#include <zmq.hpp>
 
 // Provide a non-ambiguous overload for streaming std::atomic types.
 // Required because otherwise importing torch/script.h produces ambiguous
@@ -73,6 +76,10 @@ std::array<float, num_joints> default_joint_positions {0.1, -0.1, 0.1, -0.1, 0.8
 const double joint_vel_abs_limit = 30; // rad/s
 const double joint_torque_abs_limit = 40; //Nm
 timed_atomic<stamped_robot_state> global_robot_state {};
+
+constexpr auto vel_cmd_stale_threshold = std::chrono::milliseconds{200};
+constexpr auto vel_cmd_zmq_poll_timeout = std::chrono::milliseconds{300};
+timed_atomic<std::array<float, 3>> global_vel_command { {0.0f, 0.0f, 0.0f} };
 
 // Joint order in isaac lab is "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", "FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint", "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
 // Joint order reported by SDK state array is FR_hip_joint, FR_thigh_joint, FR_calf_joint, FL_hip_joint, FL_thigh_joint, FL_calf_joint, RR_hip_joint, RR_thigh_joint, RR_calf_joint, RL_hip_joint, RL_thigh_joint, RL_calf_joint
@@ -348,7 +355,8 @@ void run_control_loop(std::filesystem::path checkpoint_path) {
         std::this_thread::sleep_for(std::chrono::seconds{1});
     }
 
-    // TODO: FFT on actions => Determine if low pass filter => Low pass filter => Run at higher frequency 
+	std::array<float, 3> vel_command_mag_limit = {2.0, 2.0, 1.0}; //vel_x, vel_y, omega_z    
+
     auto dt = std::chrono::milliseconds{20};
     while(!exit_flag.load()) {
         ZoneScoped;
@@ -370,11 +378,20 @@ void run_control_loop(std::filesystem::path checkpoint_path) {
             timeout_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
         }
 
-        // TODO: Get this from teleop
         std::array<float, 3> vel_command {1.0, 0.0, 0.0};
-
-        //TODO: Clip vel command and logger->warn that it had to be clipped
-        //TODO: Use stamped_vel_command to ensure it's up to date, if it's too old, set to zero and just stand there
+	if(auto vcmd = global_vel_command.try_load_for(atomic_op_timeout); vcmd.has_value()) {
+		vel_command = vcmd.value();
+	}
+	else {
+		logger->error("Failed to fetch vel_command within {}us, exiting.", atomic_op_timeout.count());
+		exit_flag.store(true);
+	}
+	for(int i = 0; i < 3; i++) {
+		if(std::abs(vel_command[i]) > vel_command_mag_limit[i]) {
+			logger->warn("Had to clip vel_command[{}]={}, vel_command_mag_limit[i]={}", i, vel_command[i], vel_command_mag_limit[i]);
+			vel_command[i] = std::max(-vel_command_mag_limit[i], std::min(vel_command_mag_limit[i], vel_command[i]));
+		}	
+	}
 
         auto observation = construct_observation_tensor(robot_state, vel_command, previous_action);
         inference_input[0] = observation;
@@ -553,6 +570,65 @@ void height_map_handler(const void *message) {
     // logger->debug("Heightmap res={}\twidth={}\theight={}\torigin_x={}\torigin_y={}", height_map.resolution(), height_map.width(), height_map.height(), height_map.origin()[0], height_map.origin()[1]);
 }
 
+void vel_command_listener(std::string endpoint)
+{
+   zmq::context_t ctx{1};
+   zmq::socket_t sock{ctx, zmq::socket_type::pull};
+
+   try {
+       sock.bind(endpoint);
+       logger->info("Velocity‑command listener connected to {}", endpoint);
+   } catch(const zmq::error_t& e) {
+       logger->error("Failed to connect PULL socket ({}), zeroing commands and exiting.", e.what());
+       exit_flag.store(true);
+       global_vel_command.try_store_for({0.f,0.f,0.f}, atomic_op_timeout);
+       return;
+   }
+
+   zmq::pollitem_t poll_items[] = { { static_cast<void*>(sock), 0, ZMQ_POLLIN, 0 } };
+   std::array<float, 3> zero {0.f,0.f,0.f};
+
+   while(!exit_flag.load())
+   {
+	   ZoneScopedN("vel_command_listener_loop");
+       int rc = zmq::poll(poll_items, 1, vel_cmd_zmq_poll_timeout);
+       if(rc == 0) {
+           logger->warn("No vel command received for {}ms, setting global command to zero", vel_cmd_zmq_poll_timeout.count());
+	       global_vel_command.try_store_for(zero, atomic_op_timeout);
+           continue;
+       }
+
+       zmq::message_t msg;
+       if(!sock.recv(msg, zmq::recv_flags::none)) {
+           logger->warn("Failed to recv() on velocity command socket, keeping previous value.");
+           continue;
+       }
+
+       std::string_view payload{static_cast<char*>(msg.data()), msg.size()};
+       std::stringstream ss{std::string(payload)};
+       long long ts_ms;
+       float vx, vy, omega;
+       char comma;
+
+       if(!(ss >> ts_ms >> comma >> vx >> comma >> vy >> comma >> omega)) {
+           logger->warn("Malformed velocity command: '{}' Storing zero.", payload);
+           global_vel_command.try_store_for(zero, atomic_op_timeout);
+           continue;
+       }
+
+       auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+       auto age = now_ms - ts_ms;
+
+       if(age > vel_cmd_stale_threshold.count()) {
+           logger->warn("Stale velocity command (age {} ms > {} ms), zeroing.", age, vel_cmd_stale_threshold.count());
+           global_vel_command.try_store_for(zero, atomic_op_timeout);
+           continue;
+       }
+
+       global_vel_command.try_store_for({vx, vy, omega}, atomic_op_timeout);
+   }
+}
+
 int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
 {
     auto run_timestamp_utc = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
@@ -599,16 +675,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-22-08-06-02_6299_traced_deterministic.pt"};
     logger->info("Using checkpoint at {}", checkpoint_path.string());
 
-    // logger->debug("Setting up mcap telemetry...");
-    // mcap::McapWriter writer;
-    // auto status = writer.open(logdir_path.string() + std::format("run_checkpoint_{}.mcap", checkpoint_path.filename().string()), mcap::McapWriterOptions("ros2"));
-    // if(!status.ok()) {
-    //     logger->error("Failed to set up mcap writer, status={}, exiting.", status.message);
-    //     exit_flag.store(true);
-    // }
-    // // TODO: Define schemata
-    // Start thread for periodic logging (500Hz)
-
     logger->debug("Setting up robot communication.");
     unitree::robot::ChannelFactory::Instance()->Init(0, argv[1]);
     unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::LowState_> robot_state_subscriber;
@@ -620,9 +686,9 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     std::string height_map_topic {"rt/utlidar/height_map_array"};
     height_map_subscriber.reset(new unitree::robot::ChannelSubscriber<unitree_go::msg::dds_::HeightMap_>(height_map_topic));
     height_map_subscriber->InitChannel(std::bind(&height_map_handler, std::placeholders::_1), 1);
-    // while(!exit_flag.load()) {
-    //     std::this_thread::sleep_for(std::chrono::seconds{1});
-    // }
+
+    std::string zmq_endpoint = "tcp://*:6969";
+	std::thread vel_cmd_listener_thread(vel_command_listener, zmq_endpoint);
 
     std::this_thread::sleep_for(std::chrono::milliseconds{500});
 
@@ -656,6 +722,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     height_map_subscriber->CloseChannel();
     lowcmd_publisher->CloseChannel();
     logger->debug("Closed robot channels.");
+
+    if(vel_cmd_listener_thread.joinable()) vel_cmd_listener_thread.join();
 
     // TODO: JOIN ANY THREADS TO ENSURE CLEAN EXIT!
     logger->debug("Flushing logs...");
