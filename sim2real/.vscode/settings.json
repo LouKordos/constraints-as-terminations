@@ -82,6 +82,7 @@
         "strstream": "cpp",
         "source_location": "cpp",
         "future": "cpp",
-        "stdfloat": "cpp"
+        "stdfloat": "cpp",
+        "multi_span": "cpp"
     }
 }

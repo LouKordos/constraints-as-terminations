@@ -45,6 +45,7 @@ def main():
     print("Single observation space shape:", *env.unwrapped.single_observation_space["policy"].shape)
 
     traced_actor = torch.jit.trace(inference_model, example_inputs=example_data)
+    print(traced_actor.graph)
 
     checkpoint_path = args.checkpoint_path
     timestamp = os.path.basename(os.path.dirname(checkpoint_path))

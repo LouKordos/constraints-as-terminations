@@ -58,10 +58,13 @@ std::ostream& operator<<(std::ostream& os, const std::atomic<T>& v) {
 #include <timed_atomic.hpp>
 #include <stamped_robot_state.hpp>
 #include <async_rosbag_logger.hpp>
+#include <history_buffer.hpp>
 
 std::shared_ptr<spdlog::logger> logger {nullptr};
 const short num_joints = 12;
-int observation_dim = 188; // TODO: Infer this from loaded model
+int observation_dim_no_history = 188;
+int observation_dim_history = 236;
+int history_length = 3;
 const float action_scale = 0.8f;
 const float actuator_Kp = 25.0f;
 const float actuator_Kd = 0.5;
@@ -284,37 +287,56 @@ void enable_low_level_control() {
     std::this_thread::sleep_for(std::chrono::seconds{3});
 }
 
-// Mirrors Isaac Lab ObservationsCfg defined in EnvCfg
-torch::Tensor construct_observation_tensor(const stamped_robot_state& robot_state, const std::array<float, 3>& vel_command, const std::array<float, num_joints>& previous_action)
+// TODO for when deadline is not haunting you: Move this into class
+torch::Tensor construct_observation_tensor(const stamped_robot_state& robot_state, const std::array<float, 3>& vel_command, const std::array<float, num_joints>& previous_action, bool use_history, bool reset_history = false)
 {
     ZoneScoped;
-    auto opts = torch::TensorOptions() .dtype(torch::kFloat32).device(torch::kCPU);
-    auto observation = at::empty({1, observation_dim}, opts);
+    auto opts  = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU);
+    const int obs_dim = use_history ? observation_dim_history : observation_dim_no_history;
+    auto observation = torch::empty({1, obs_dim}, opts);
 
-    auto base_ang_vel = at::from_blob(const_cast<float*>(robot_state.body_angular_velocity.data()),{1, 3}, opts).clone();
+    auto base_ang_vel = torch::from_blob(const_cast<float*>(robot_state.body_angular_velocity.data()), {1, 3}, opts).clone();
     base_ang_vel.mul_(0.25f);
     observation.slice(1, 0, 3).copy_(base_ang_vel);
 
-    auto velocity_cmd = at::from_blob(const_cast<float*>(vel_command.data()), {1, 3}, opts).clone();
+    auto velocity_cmd = torch::from_blob(const_cast<float*>(vel_command.data()), {1, 3}, opts).clone();
     velocity_cmd.mul_(torch::tensor({2.0f, 2.0f, 0.25f}, opts));
     observation.slice(1, 3, 6).copy_(velocity_cmd);
 
-    auto projected_gravity = at::from_blob(const_cast<float*>(robot_state.projected_gravity.data()), {1, 3}, opts).clone();
+    auto projected_gravity = torch::from_blob(const_cast<float*>(robot_state.projected_gravity.data()), {1, 3}, opts).clone();
     projected_gravity.mul_(0.1f);
     observation.slice(1, 6, 9).copy_(projected_gravity);
 
-    auto joint_positions = at::from_blob(const_cast<float*>(robot_state.joint_pos.data()), {1, 12}, opts).clone();
-    observation.slice(1, 9, 9+num_joints).copy_(joint_positions);
+    static HistoryBuffer pos_hist(history_length, num_joints, torch::kCPU);
+    static HistoryBuffer vel_hist(history_length, num_joints, torch::kCPU);
+    if (reset_history) { pos_hist.reset(); vel_hist.reset(); }
 
-    auto joint_velocities = at::from_blob(const_cast<float*>(robot_state.joint_vel.data()), {1, 12}, opts).clone();
-    joint_velocities.mul_(0.05f);
-    observation.slice(1, 21, 21+num_joints).copy_(joint_velocities);
+    auto jp_cur = torch::from_blob(const_cast<float*>(robot_state.joint_pos.data()), {num_joints}, opts).clone();
+    auto jv_cur = torch::from_blob(const_cast<float*>(robot_state.joint_vel.data()), {num_joints}, opts).clone();
+    jv_cur.mul_(0.05f);
 
-    auto prev_action = at::from_blob(const_cast<float*>(previous_action.data()), {1, num_joints}, opts).clone();
-    observation.slice(1, 33, 33+num_joints).copy_(prev_action);
+    if (use_history) {
+        pos_hist.update(jp_cur);
+        vel_hist.update(jv_cur);
+
+        const int pos_start = 9;
+        const int vel_start = pos_start + history_length * num_joints;
+        observation.slice(1, pos_start, pos_start + history_length * num_joints).copy_(pos_hist.flattened().unsqueeze(0));
+        observation.slice(1, vel_start, vel_start + history_length * num_joints).copy_(vel_hist.flattened().unsqueeze(0));
+    }
+    else {
+        observation.slice(1, 9, 9 + num_joints).copy_(jp_cur.unsqueeze(0));
+        observation.slice(1, 21, 21 + num_joints).copy_(jv_cur.unsqueeze(0));
+    }
+
+    auto prev_action = torch::from_blob(const_cast<float*>(previous_action.data()), {1, num_joints}, opts).clone();
+    const int prev_action_start_index = use_history ? (9 + 2 * history_length * num_joints) : (33);
+    observation.slice(1, prev_action_start_index, prev_action_start_index + num_joints).copy_(prev_action);
+
     // TODO: Height map values might need transformation because of how they were defined in isaac lab env
     // TODO: Replace with real height map data
-    observation.slice(1, 33 + num_joints, observation_dim).fill_(-0.33f);
+    const int height_map_start = prev_action_start_index + num_joints;
+    observation.slice(1, height_map_start, obs_dim).fill_(-0.33f);
 
     return observation;
 }
@@ -326,26 +348,39 @@ void run_control_loop(std::filesystem::path checkpoint_path) {
     logger->debug("Starting main control loop.");
     logger->debug("Loading torch model...");
 
-    // TODO: Make path adjustable/configureable
-    torch::jit::script::Module model;
+    torch::jit::Module model;
     try {
         model = torch::jit::load(checkpoint_path.string());
         model.eval();
+        logger->debug("Successfully loaded traced model.");
     }
     catch (const c10::Error& e) {
         logger->error("Failed to load module, exiting.");
         exit_flag.store(true);
     }
 
-    std::cout << "Loaded module checkpoint from " << checkpoint_path << std::endl;
-    auto timeout_threshold = std::chrono::milliseconds{50};
+    int64_t in_features = -1;
+    for (const auto& p : model.named_parameters(/*recurse=*/true)) {
+        if (p.name.ends_with(".weight") && p.value.dim() == 2) {
+            in_features = p.value.size(1);
+            break;
+        }
+    }
+    if(in_features != observation_dim_no_history && in_features != observation_dim_history) {
+        logger->error("Observation dimension does not match expected value, exiting. in_features={}", in_features);
+        exit_flag.store(true);
+    }
+
+    int model_observation_dim = in_features;
+    logger->info("Loaded module checkpoint from {} with observation dimension={}", checkpoint_path.string(), model_observation_dim);
+    auto state_timeout_threshold = std::chrono::milliseconds{50};
 
     std::array<float, num_joints> current_action {};
     std::array<float, num_joints> previous_action {};
     std::vector<torch::jit::IValue> inference_input;
     inference_input.reserve(1);
     inference_input.clear();
-    inference_input.push_back(torch::ones({1, observation_dim})); // To prevent dynamic allocations in loop
+    inference_input.push_back(torch::ones({1, model_observation_dim})); // To prevent dynamic allocations in loop
     at::Tensor raw_current_action{};
     torch::NoGradGuard no_grad;
 
@@ -372,10 +407,10 @@ void run_control_loop(std::filesystem::path checkpoint_path) {
         auto now = std::chrono::steady_clock::now();
         auto delta = now - robot_state.timestamp;
         // logger->debug("robot_state.counter={}\tdelta={}", robot_state.counter, std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
-        if(delta > timeout_threshold && robot_state.counter > 0) { // Discard first iteration
+        if(delta > state_timeout_threshold && robot_state.counter > 0) { // Discard first iteration
             exit_flag.store(true);
             logger->error("State timestamp too old, allowed threshold={}ms, actual state age={}ms. Exiting to prevent outdated states.", 
-            timeout_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
+            state_timeout_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count());
         }
 
         std::array<float, 3> vel_command {0.0, 0.0, 0.0};
@@ -393,7 +428,7 @@ void run_control_loop(std::filesystem::path checkpoint_path) {
             }	
         }
 
-        auto observation = construct_observation_tensor(robot_state, vel_command, previous_action);
+        auto observation = construct_observation_tensor(robot_state, vel_command, previous_action, model_observation_dim == observation_dim_history, robot_state.counter == 0);
         inference_input[0] = observation;
         {ZoneScopedN("Inference (model.forward)");
             raw_current_action = model.forward(inference_input).toTensor().contiguous();
@@ -605,12 +640,12 @@ void vel_command_listener(std::string endpoint)
     catch(const zmq::error_t& e) {
         logger->error("Failed to connect PULL socket ({}), zeroing commands and exiting.", e.what());
         exit_flag.store(true);
-        global_vel_command.try_store_for({0.f,0.f,0.f}, atomic_op_timeout);
+        global_vel_command.try_store_for({0.0f,0.0f,0.0f}, atomic_op_timeout);
         return;
     }
 
     zmq::pollitem_t poll_items[] = { { static_cast<void*>(sock), 0, ZMQ_POLLIN, 0 } };
-    std::array<float, 3> zero {0.f,0.f,0.f};
+    std::array<float, 3> zero {0.0f,0.0f,0.0f};
 
     while(!exit_flag.load()) {
         ZoneScopedN("vel_command_listener_loop");
@@ -695,7 +730,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     sigint_handler.sa_flags = 0;
     sigaction(SIGINT, &sigint_handler, NULL);
 
-    std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-22-08-06-02_6299_traced_deterministic.pt"};
+    // std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-22-08-06-02_6299_traced_deterministic.pt"};
+    std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-28-17-13-04_21349_traced_deterministic.pt"};
     logger->info("Using checkpoint at {}", checkpoint_path.string());
 
     logger->debug("Setting up robot communication.");
