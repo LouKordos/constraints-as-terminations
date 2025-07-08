@@ -405,7 +405,7 @@ void run_control_loop(std::filesystem::path checkpoint_path) {
             logger->error("Failed to update global PD target within {}us, exiting.", atomic_op_timeout.count());
         }
         previous_action = current_action;
-        std::this_thread::sleep_for(dt);
+        {std::this_thread::sleep_for(dt);} // Scoped to exclude from tracy profiling
     }
 }
 
