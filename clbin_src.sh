@@ -1,1 +1,1 @@
-fdfind --type f -H -x sh -c 'printf "\n\n---------------------------File: {}--------------------------\n\n" && cat {}' | curl -F 'file=@-' https://0x0.st
+fdfind --type f -H -x sh -c 'printf "\n\n---------------------------File: {}--------------------------\n\n" && cat {}' | curl -A 'MyUploader/1.0' -F 'file=@-' -F 'secret=' https://0x0.st
