@@ -37,3 +37,8 @@ services:
         target: /tmp/.X11-unix
         bind:
           create_host_path: true
+      - type: bind
+        source: $HOME/.Xauthority
+        target: /root/.Xauthority
+        bind:
+          create_host_path: true
