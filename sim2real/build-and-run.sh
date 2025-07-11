@@ -92,4 +92,6 @@ else
     else
         ${BUILD_DIR}/src/$BINARY_NAME
     fi
+
+    echo "Do not forget to source /app/ros2_ws/install/setup.bash"
 fi
