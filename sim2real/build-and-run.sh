@@ -44,17 +44,17 @@ if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
     COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose --progress plain build --builder multiarch-builder-${CONTAINER_NAME}
     docker compose up -d
     echo "Docker container is now running, starting interactive shell. Run /app/build-and-run.sh inside the shell to proceed."
-    echo "If you require GUI access, you may need to run xhost +local:docker"
+    echo "If you require GUI access, you may need to run (outside the docker container) xhost +local:docker, as well as xhost +SI:localuser:root for ssh X forwarding => Docker => X11"
     echo "You may also choose to docker compose push now for easy deployment. Not automating this due to high bandwidth and time usage."
+    echo "Do not forget to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2. Check if it works with ros2 topic list, that should show topics such as /utlidar/cloud."
     docker exec -it $CONTAINER_NAME /bin/bash
 else
     echo "Docker detected."
-    cd /app/ros2_ws
-    echo "Building ROS packages..."
-    colcon build --symlink-install
-    #source /app/install/setup.bash
-    echo "Building main codebase..."
     cd /app
+    echo "Building ROS packages..."
+    ./bootstrap_ros2_ws.sh
+    source ./ros2_ws/install/setup.bash
+    echo "Building main codebase..."
     time cmake -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -S . -B ${BUILD_DIR}
     if [[ ! -f "/tracy-for-capture-built.marker" ]]; then
         echo "-----------------------------------------Setting up automatic tracy profile capture------------------------------------------------"
