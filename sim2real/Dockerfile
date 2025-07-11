@@ -1,21 +1,23 @@
-FROM ros:jazzy-ros-core-noble
+ARG ROS_DISTRO=jazzy
+
+FROM ros:$ROS_DISTRO-ros-core-noble
 
 RUN printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4
-RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl vim libtbb-dev dbus libeigen3-dev sudo iputils-ping unzip wget iproute2 libzstd-dev zstd locales curl dbus dbus-x11 x11-apps xauth ros-dev-tools ros-jazzy-desktop tree netcat-openbsd
-RUN echo 'source /opt/ros/jazzy/setup.bash' >> ~/.bashrc
+# Essential stuff
+RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl vim libtbb-dev dbus libeigen3-dev sudo iputils-ping unzip wget iproute2 libzstd-dev zstd locales curl dbus dbus-x11 x11-apps xauth tree netcat-openbsd libboost-all-dev libyaml-cpp-dev
 
-ENV DOCKER_FLAG_FOR_RUN_SCRIPT=1
-ENV ROS_DOMAIN_ID=69
+# ROS2 stuff
+RUN apt-get update -y && apt-get install -y ros-dev-tools ros-$ROS_DISTRO-desktop ros-$ROS_DISTRO-rmw-cyclonedds-cpp ros-$ROS_DISTRO-rosidl-generator-dds-idl ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan
 
 # Need to build from source due to arm64 on Go2 Jetson
-RUN apt update -y && apt install -y build-essential cmake git python3 python3-pip python3-venv libopenblas-dev libomp-dev libopenmpi-dev ninja-build libyaml-dev libjpeg-dev libpng-dev
-RUN apt upgrade -y
+RUN apt-get update -y && apt-get install -y build-essential cmake git python3 python3-pip python3-venv libopenblas-dev libomp-dev libopenmpi-dev ninja-build libyaml-dev libjpeg-dev libpng-dev
+RUN apt-get upgrade -y
 WORKDIR /torch
 RUN git clone --recursive https://github.com/pytorch/pytorch.git
 WORKDIR /torch/pytorch
 RUN git checkout e2d141dbde55c2a4370fac5165b0561b6af4798b && git submodule sync && git submodule update --init --recursive
 WORKDIR /torch/pytorch/build
-RUN apt install -y python3-typing-extensions
+RUN apt-get install -y python3-typing-extensions
 RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake -G Ninja --compile-no-warning-as-error \
       -DBUILD_SHARED_LIBS=ON \
       -DCMAKE_BUILD_TYPE=Release \
@@ -72,9 +74,12 @@ RUN make -j install
 
 # RUN AFTER ALL DEPENDENCY INSTALLATIONS!
 RUN ldconfig
-
 RUN rosdep init
 RUN rosdep update
+RUN echo 'source /opt/ros/jazzy/setup.bash' >> ~/.bashrc
+ENV DOCKER_FLAG_FOR_RUN_SCRIPT=1
+ENV ROS_DOMAIN_ID=69
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 COPY . /app
 COPY ./.vimrc ~/.vimrc
