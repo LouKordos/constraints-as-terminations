@@ -6,8 +6,9 @@ source /opt/ros/$ROS_DISTRO/setup.bash
 set -x # After verbose source
 
 BASE_DIR=/app # In case you want to run outside docker
-mkdir -p $BASE_DIR/ros2_ws/src
-cd $BASE_DIR/ros2_ws/src
+mkdir -p $BASE_DIR/ros2_ws/src/third_party # Use third_party for any external packages because it's ignored by git
+sudo chmod -R 777 $BASE_DIR/ros2_ws
+cd $BASE_DIR/ros2_ws/src/third_party # For custom code, use ros2_ws/src/
 
 # For /tf topic and improved Go2 ROS2 integration
 git clone -b humble https://github.com/Unitree-Go2-Robot/go2_robot.git go2_robot || (cd go2_robot && git pull)
