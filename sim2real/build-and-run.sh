@@ -96,5 +96,6 @@ else
         ${BUILD_DIR}/src/$BINARY_NAME $BINARY_ARGV
     fi
 
-    echo "Do not forget to source /app/ros2_ws/install/setup.bash"
+    echo "Remember to source /app/ros2_ws/install/setup.bash if you are working with ROS custom packages! bashrc already sources /opt/ros/jazzy/setup.bash"
+    echo "Also remember to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."
 fi
