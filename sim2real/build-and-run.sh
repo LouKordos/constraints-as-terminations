@@ -3,6 +3,7 @@ set -exo pipefail
 
 # Default build type
 BUILD_TYPE="Release"
+CLEAN_BUILD=false
 BUILD_DIR="/app/build"
 LOG_FILE="/app/build.log"
 CONTAINER_NAME="sim2real-cat_sim2real-1"
@@ -15,6 +16,10 @@ export CLICOLOR_FORCE=1
 # Parse command line arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
+        --clean-build)
+            CLEAN_BUILD=true
+            shift
+            ;;
         --build-type=*)
             BUILD_TYPE="${1#*=}"
             shift
@@ -53,6 +58,10 @@ if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
     docker exec -it $CONTAINER_NAME /bin/bash
 else
     echo "Docker detected."
+    if [[ "${CLEAN_BUILD}" == "true" ]]; then
+        echo "Performing clean build: deleting markers and build directories..."
+        rm -rf /app/build /app/ros2_ws/{build,install,log} /*.marker || true
+    fi
     cd /app
     echo "Building ROS packages..."
     ./bootstrap_ros2_ws.sh
