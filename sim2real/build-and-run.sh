@@ -6,7 +6,8 @@ BUILD_TYPE="Release"
 BUILD_DIR="/app/build"
 LOG_FILE="/app/build.log"
 CONTAINER_NAME="sim2real-cat_sim2real-1"
-BINARY_NAME="run_policy ens4" # Adjust ethernet interface as needed
+BINARY_NAME="run_policy"
+BINARY_ARGV="ens4" # Separated so that it can be passed to gdb as well
 # BINARY_NAME="sdk_stand_example ens4"
 export CLICOLOR=1
 export CLICOLOR_FORCE=1
@@ -90,9 +91,9 @@ else
     chmod -R 777 /app/tracy-profiles
 
     if [[ "${BUILD_TYPE}" = "Debug" ]]; then
-        gdb ${BUILD_DIR}/src/$BINARY_NAME
+        gdb --args ${BUILD_DIR}/src/$BINARY_NAME $BINARY_ARGV
     else
-        ${BUILD_DIR}/src/$BINARY_NAME
+        ${BUILD_DIR}/src/$BINARY_NAME $BINARY_ARGV
     fi
 
     echo "Do not forget to source /app/ros2_ws/install/setup.bash"
