@@ -30,6 +30,16 @@ fi
 rosdep install --from-paths src --ignore-src -r -y
 sudo apt-get install -y libyaml-cpp-dev libboost-all-dev ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan
 
-colcon build --symlink-install
+FIRST_BUILD_MARKER=/colcon-ros2_ws_clean_build.marker
+COLCON_ARGS=() # To prevent duplication
+if [[ ! -f "${FIRST_BUILD_MARKER}" ]]; then
+    echo "First script run inside docker, cleaning cmake cache and installing marker..."
+    rm -rf $BASE_DIR/ros2_ws/{build,install,log}
+    colcon build --cmake-clean-cache "${COLCON_ARGS[@]}"
+    touch "${FIRST_BUILD_MARKER}" # Only if build succeeded
+    echo "First build marker created at ${FIRST_BUILD_MARKER}"
+else
+    colcon build "${COLCON_ARGS[@]}"
+fi
 
 echo "ROS2 workspace bootstrap finished."
