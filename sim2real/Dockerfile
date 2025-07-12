@@ -4,7 +4,7 @@ FROM ros:$ROS_DISTRO-ros-core-noble
 
 RUN printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4
 # Essential stuff
-RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl vim libtbb-dev dbus libeigen3-dev sudo iputils-ping unzip wget iproute2 libzstd-dev zstd locales curl dbus dbus-x11 x11-apps xauth tree netcat-openbsd libboost-all-dev libyaml-cpp-dev
+RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl vim libtbb-dev dbus libeigen3-dev tmux sudo iputils-ping unzip wget iproute2 libzstd-dev zstd locales curl dbus dbus-x11 x11-apps xauth tree netcat-openbsd libboost-all-dev libyaml-cpp-dev
 
 # Need to build from source due to arm64 on Go2 Jetson
 RUN apt-get update -y && apt-get install -y build-essential cmake git python3 python3-pip python3-venv libopenblas-dev libomp-dev libopenmpi-dev ninja-build libyaml-dev libjpeg-dev libpng-dev
