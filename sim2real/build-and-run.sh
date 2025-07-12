@@ -56,7 +56,7 @@ if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
         COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose --progress plain build --builder multiarch-builder-${CONTAINER_NAME}
     else
         echo "Starting non-multiarch build."
-        COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose --progress plain build -f compose.yml -f compose.no-multiarch.yml
+        COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose --progress plain -f compose.yml -f compose.no-multiarch.yml build
     fi
     rm -rf ./build || true # Reset build to a clean state, as build cache can cause confusing issues when changing installed deps in the Dockerfile.
     rm -rf ./ros2_ws/{build,install,log} || true # Same for ROS workspace
