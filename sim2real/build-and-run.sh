@@ -4,6 +4,7 @@ set -exo pipefail
 # Default build type
 BUILD_TYPE="Release"
 CLEAN_BUILD=false
+SKIP_MULTIARCH_DOCKER_BUILD=false
 BUILD_DIR="/app/build"
 LOG_FILE="/app/build.log"
 CONTAINER_NAME="sim2real-cat_sim2real-1"
@@ -20,6 +21,10 @@ while [[ "$#" -gt 0 ]]; do
             CLEAN_BUILD=true
             shift
             ;;
+        --no-multiarch-docker-build)
+        SKIP_MULTIARCH_BUILD=true
+        shift
+        ;;
         --build-type=*)
             BUILD_TYPE="${1#*=}"
             shift
@@ -37,17 +42,22 @@ done
         
 if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
     echo "Host (no docker) detected."
-    echo "Installing qemu emulation for arm64 builds..."
-    docker run --privileged --rm tonistiigi/binfmt --install all
-    echo "Creating buildx builder for multiarch builds if not exists..."
-    if ! docker buildx inspect multiarch-builder-${CONTAINER_NAME} >/dev/null 2>&1; then
-        echo "Creating multiarch builder…"
-        docker buildx create --name multiarch-builder-${CONTAINER_NAME} --driver docker-container --bootstrap
+    if [[ "$SKIP_MULTIARCH_BUILD" == false ]]; then
+        echo "Installing qemu emulation for arm64 builds..."
+        docker run --privileged --rm tonistiigi/binfmt --install all
+        echo "Creating buildx builder for multiarch builds if not exists..."
+        if ! docker buildx inspect multiarch-builder-${CONTAINER_NAME} >/dev/null 2>&1; then
+            echo "Creating multiarch builder…"
+            docker buildx create --name multiarch-builder-${CONTAINER_NAME} --driver docker-container --bootstrap
+        else
+            echo "multiarch builder already exists, skipping creation."
+        fi 
+        echo "Starting multiarch build..."
+        COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose --progress plain build --builder multiarch-builder-${CONTAINER_NAME}
     else
-        echo "multiarch builder already exists, skipping creation."
-    fi 
-    echo "Starting build..."
-    COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose --progress plain build --builder multiarch-builder-${CONTAINER_NAME}
+        echo "Starting non-multiarch build."
+        COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose --progress plain build
+    fi
     rm -rf ./build || true # Reset build to a clean state, as build cache can cause confusing issues when changing installed deps in the Dockerfile.
     rm -rf ./ros2_ws/{build,install,log} || true # Same for ROS workspace
     docker compose up -d
