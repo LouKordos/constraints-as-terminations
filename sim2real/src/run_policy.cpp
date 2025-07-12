@@ -742,10 +742,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     robot_state_subscriber.reset(new unitree::robot::ChannelSubscriber<unitree_go::msg::dds_::LowState_>(robot_state_topic));
     robot_state_subscriber->InitChannel(std::bind(&robot_state_message_handler, std::placeholders::_1), 1);
 
-    unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::HeightMap_> height_map_subscriber;
-    std::string height_map_topic {"rt/utlidar/height_map_array"};
-    height_map_subscriber.reset(new unitree::robot::ChannelSubscriber<unitree_go::msg::dds_::HeightMap_>(height_map_topic));
-    height_map_subscriber->InitChannel(std::bind(&height_map_handler, std::placeholders::_1), 1);
+    // unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::HeightMap_> height_map_subscriber;
+    // std::string height_map_topic {"rt/utlidar/height_map_array"};
+    // height_map_subscriber.reset(new unitree::robot::ChannelSubscriber<unitree_go::msg::dds_::HeightMap_>(height_map_topic));
+    // height_map_subscriber->InitChannel(std::bind(&height_map_handler, std::placeholders::_1), 1);
 
     std::string zmq_endpoint = "tcp://*:6969";
 	std::thread vel_cmd_listener_thread(vel_command_listener, zmq_endpoint);
@@ -779,7 +779,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
 
     logger->debug("Closing robot channels...");
     robot_state_subscriber->CloseChannel();
-    height_map_subscriber->CloseChannel();
+    // height_map_subscriber->CloseChannel();
     lowcmd_publisher->CloseChannel();
     logger->debug("Closed robot channels.");
 
