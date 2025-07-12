@@ -16,8 +16,17 @@ vcs import < go2_robot/dependencies.repos
 git clone --recurse-submodules https://github.com/HesaiTechnology/HesaiLidar_ROS_2.0.git HesaiLidar_ROS_2.0 || (cd HesaiLidar_ROS_2.0 && git pull)
 
 cd $BASE_DIR/ros2_ws
-sudo rosdep init || true
-rosdep update
+ROSDEP_MARKER=/rosdep-bootstrap-ros-ws.marker
+if [[ ! -f "${ROSDEP_MARKER}" ]]; then
+    echo "${ROSDEP_MARKER} missing, initializing and updating rosdep..."
+    sudo rosdep init || true
+    rosdep update
+    touch "${ROSDEP_MARKER}"
+    echo "Rosdep marker created at ${ROSDEP_MARKER}"
+else
+    echo "Found marker at ${ROSDEP_MARKER}, skipping rosdep init and update."
+fi
+
 rosdep install --from-paths src --ignore-src -r -y
 sudo apt-get install -y libyaml-cpp-dev libboost-all-dev ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan
 
