@@ -56,7 +56,7 @@ else
     cd /app
     echo "Building ROS packages..."
     ./bootstrap_ros2_ws.sh
-    source ./ros2_ws/install/setup.bash
+    # source ./ros2_ws/install/setup.bash
     echo "Building main codebase..."
     time cmake -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -S . -B ${BUILD_DIR}
     if [[ ! -f "/tracy-for-capture-built.marker" ]]; then
