@@ -14,6 +14,7 @@ cd $BASE_DIR/ros2_ws/src/third_party # For custom code, use ros2_ws/src/
 git clone -b humble https://github.com/Unitree-Go2-Robot/go2_robot.git go2_robot || (cd go2_robot && git pull)
 vcs import < go2_robot/dependencies.repos
 git clone --recurse-submodules https://github.com/HesaiTechnology/HesaiLidar_ROS_2.0.git HesaiLidar_ROS_2.0 || (cd HesaiLidar_ROS_2.0 && git pull)
+# git clone https://github.com/unitreerobotics/unitree_ros2 || (cd unitree_ros2 && git pull) # Provided by go2_robot.git
 
 cd $BASE_DIR/ros2_ws
 ROSDEP_MARKER=/rosdep-bootstrap-ros-ws.marker
