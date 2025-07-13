@@ -87,7 +87,7 @@ ENV ROS_DOMAIN_ID=69
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 COPY . /app
-COPY .vimrc ~/.vimrc
+COPY .vimrc /root/.vimrc
 WORKDIR /app
 
 # Using CMD instead of ENTRYPOINT here so that docker-compose.yml for vs code can override it.
