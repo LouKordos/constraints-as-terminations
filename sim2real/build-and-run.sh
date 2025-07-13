@@ -106,6 +106,28 @@ else
     /tracy-for-capture/capture/build/tracy-capture -o /app/tracy-profiles/$(date '+%Y-%m-%d-%H-%M-%S').tracy > "$TRACY_LOG_FILE" 2>&1 & 
     TRACY_PID=$!
     echo "Tracy capture started with PID $TRACY_PID. Logs are being written to $TRACY_LOG_FILE"
+
+    BAG_TS="$(date -u +'%Y-%m-%d_%H-%M-%S')"
+    BAG_DIR="/app/logs/bags/utc_${BAG_TS}"
+    LOG_DIR="/app/logs/bags/utc_${BAG_TS}"
+    mkdir -p "${BAG_DIR}" "${LOG_DIR}"
+
+    # Launch recorder in isolated subshell:
+    (
+        export ROS_DOMAIN_ID=0
+        set +x
+        source /opt/ros/jazzy/setup.bash
+        set -x
+        cd "${BAG_DIR}"
+        exec ros2 bag record --output "${BAG_DIR}/bag" /tf /tf_static /joint_states /lowstate /lowcmd /pointcloud /robot_description /initialpose > "${LOG_DIR}/ros2_bag_${BAG_TS}.log" 2>&1
+    ) &
+    BAG_PID=$!
+
+    # Ensure recorder is cleanly stopped on any exit (SIGINT, ERR, EXIT):
+    trap 'echo "Stopping ROS2 recorder (PID $BAG_PID)…"; kill -SIGINT "$BAG_PID"' EXIT
+
+    echo "→ Recording ROS2 topics to ${BAG_DIR} (PID $BAG_PID)"
+
     chmod -R 777 /app/logs
     chmod -R 777 /app/tracy-profiles
 
@@ -114,7 +136,6 @@ else
     else
         ${BUILD_DIR}/src/$BINARY_NAME $BINARY_ARGV
     fi
-
     echo "Remember to source /app/ros2_ws/install/setup.bash if you are working with ROS custom packages! bashrc already sources /opt/ros/jazzy/setup.bash"
     echo "Also remember to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."
 fi
