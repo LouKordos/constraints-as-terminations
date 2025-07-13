@@ -83,6 +83,7 @@
         "source_location": "cpp",
         "future": "cpp",
         "stdfloat": "cpp",
-        "multi_span": "cpp"
+        "multi_span": "cpp",
+        "csignal": "cpp"
     }
 }
