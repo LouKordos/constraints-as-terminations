@@ -43,7 +43,7 @@ RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake -G Ninja --compile-no-warnin
 RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake --build . --target install
 
 # ROS2 stuff
-RUN apt-get update -y && apt-get install -y ros-dev-tools ros-$ROS_DISTRO-desktop ros-$ROS_DISTRO-rosidl-generator-dds-idl ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan
+RUN apt-get update -y && apt-get install -y ros-dev-tools ros-$ROS_DISTRO-desktop ros-$ROS_DISTRO-rmw-cyclonedds-cpp ros-$ROS_DISTRO-rosidl-generator-dds-idl ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan
 
 # Set this AFTER libtorch due to compiler bug in gcc14!
 ENV CC=gcc-14
@@ -79,14 +79,12 @@ ENV DOCKER_FLAG_FOR_RUN_SCRIPT=1
 RUN rosdep init
 RUN rosdep update
 RUN echo '' >> /root/.bashrc
-RUN echo 'source /opt/ros/jazzy/setup.bash' >> ~/.bashrc
+# RUN echo 'source /opt/ros/jazzy/setup.bash' >> ~/.bashrc
 RUN echo '# Remind user to source custom ROS2 workspace' >> /root/.bashrc
 RUN echo 'echo "Remember to source /app/ros2_ws/install/setup.bash if you are working with ROS custom packages! (bashrc already sources /opt/ros/jazzy/setup.bash)"' >> /root/.bashrc
 RUN echo 'echo "Also remember to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."' >> /root/.bashrc
 ENV ROS_DOMAIN_ID=69
-
-# IMPORTANT NOTE: Installing ros-$ROS_DISTRO-rmw-cyclonedds-cpp causes weird errors in run_policy.cpp, likely because it is incompatible with the cyclonedds version used by the unitree SDK. Do not install, ros2_ws handles it
-# ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 COPY . /app
 COPY .vimrc ~/.vimrc

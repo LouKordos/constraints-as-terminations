@@ -31,10 +31,10 @@
 #include <unitree/common/thread/thread.hpp>
 #include <unitree/robot/b2/motion_switcher/motion_switcher_client.hpp>
 
-#include <sensor_msgs/msg/joint_state.hpp>
-#include <sensor_msgs/msg/imu.hpp>
-#include <std_msgs/msg/float32_multi_array.hpp>
-#include <rclcpp/clock.hpp>
+// #include <sensor_msgs/msg/joint_state.hpp>
+// #include <sensor_msgs/msg/imu.hpp>
+// #include <std_msgs/msg/float32_multi_array.hpp>
+// #include <rclcpp/clock.hpp>
 
 #include <zmq.hpp>
 
@@ -57,7 +57,7 @@ std::ostream& operator<<(std::ostream& os, const std::atomic<T>& v) {
 
 #include <timed_atomic.hpp>
 #include <stamped_robot_state.hpp>
-#include <async_rosbag_logger.hpp>
+// #include <async_rosbag_logger.hpp>
 #include <history_buffer.hpp>
 
 std::shared_ptr<spdlog::logger> logger {nullptr};
@@ -591,24 +591,24 @@ void robot_state_message_handler(const void *message) {
 
     check_state_safety_limits(stamped_state);
 
-    {ZoneScopedN("rosbag_logging");
-        RawSample rs;
-        rs.stamp = rclcpp::Clock().now();
-        rs.joint_pos = stamped_state.joint_pos;
-        rs.joint_vel = stamped_state.joint_vel;
-        rs.joint_tau = stamped_state.joint_torque;
-        rs.quat_wxyz = {stamped_state.quat_body_to_world_wxyz[0], stamped_state.quat_body_to_world_wxyz[1], stamped_state.quat_body_to_world_wxyz[2]};
-        rs.body_gyro  = stamped_state.body_angular_velocity;
-        rs.proj_grav  = stamped_state.projected_gravity;
+    // {ZoneScopedN("rosbag_logging");
+    //     RawSample rs;
+    //     rs.stamp = rclcpp::Clock().now();
+    //     rs.joint_pos = stamped_state.joint_pos;
+    //     rs.joint_vel = stamped_state.joint_vel;
+    //     rs.joint_tau = stamped_state.joint_torque;
+    //     rs.quat_wxyz = {stamped_state.quat_body_to_world_wxyz[0], stamped_state.quat_body_to_world_wxyz[1], stamped_state.quat_body_to_world_wxyz[2]};
+    //     rs.body_gyro  = stamped_state.body_angular_velocity;
+    //     rs.proj_grav  = stamped_state.projected_gravity;
 
-        if (auto a = global_current_action_isaac_order.try_load_for(atomic_op_timeout))
-            rs.action = a.value();
-        if (auto p = pd_setpoint_sdk_order.try_load_for(atomic_op_timeout))
-            rs.pd_target = p.value();
+    //     if (auto a = global_current_action_isaac_order.try_load_for(atomic_op_timeout))
+    //         rs.action = a.value();
+    //     if (auto p = pd_setpoint_sdk_order.try_load_for(atomic_op_timeout))
+    //         rs.pd_target = p.value();
 
-        std::transform(stamped_state.foot_forces_raw.begin(), stamped_state.foot_forces_raw.end(), rs.foot_force_raw_adc.begin(), [](int16_t v){ return static_cast<float>(v); });
-        AsyncRosbagLogger::instance().enqueue(rs);
-    }
+    //     std::transform(stamped_state.foot_forces_raw.begin(), stamped_state.foot_forces_raw.end(), rs.foot_force_raw_adc.begin(), [](int16_t v){ return static_cast<float>(v); });
+    //     AsyncRosbagLogger::instance().enqueue(rs);
+    // }
 
     if(false) {
         logger->debug(
@@ -735,7 +735,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     logger->info("Using checkpoint at {}", checkpoint_path.string());
 
     logger->debug("Setting up robot communication.");
-    AsyncRosbagLogger::instance().open((logdir_path / "rosbag").string());
+    // AsyncRosbagLogger::instance().open((logdir_path / "rosbag").string());
     unitree::robot::ChannelFactory::Instance()->Init(0, argv[1]);
     unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::LowState_> robot_state_subscriber;
     std::string robot_state_topic {"rt/lowstate"};
@@ -784,7 +784,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     logger->debug("Closed robot channels.");
 
     if(vel_cmd_listener_thread.joinable()) vel_cmd_listener_thread.join();
-    AsyncRosbagLogger::instance().shutdown();
+    // AsyncRosbagLogger::instance().shutdown();
     logger->debug("Flushing logs...");
     logger->flush();
     spdlog::shutdown();
