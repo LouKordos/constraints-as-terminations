@@ -111,7 +111,6 @@ else
     BAG_DIR="/app/logs/bags/utc_${BAG_TS}"
     LOG_DIR="/app/logs/bags/utc_${BAG_TS}"
     mkdir -p "${BAG_DIR}" "${LOG_DIR}"
-
     # Launch recorder in isolated subshell:
     (
         export ROS_DOMAIN_ID=0
@@ -122,10 +121,7 @@ else
         exec ros2 bag record --output "${BAG_DIR}/bag" /tf /tf_static /joint_states /lowstate /lowcmd /pointcloud /robot_description /initialpose > "${LOG_DIR}/ros2_bag_${BAG_TS}.log" 2>&1
     ) &
     BAG_PID=$!
-
-    # Ensure recorder is cleanly stopped on any exit (SIGINT, ERR, EXIT):
     trap 'echo "Stopping ROS2 recorder (PID $BAG_PID)…"; kill -SIGINT "$BAG_PID"' EXIT
-
     echo "→ Recording ROS2 topics to ${BAG_DIR} (PID $BAG_PID)"
 
     chmod -R 777 /app/logs
