@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e pipefail
 
-ROS_DISTRO=jazzy
 source /opt/ros/$ROS_DISTRO/setup.bash
 set -x # After verbose source
 
