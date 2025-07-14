@@ -162,7 +162,8 @@ int query_motion_status(unitree::robot::b2::MotionSwitcherClient &msc)
     int motionStatus;
     int32_t ret = msc.CheckMode(robotForm, motionName);
     if(ret != 0) {
-        logger->warn("CheckMode failed. Error code: {}", ret);
+        logger->warn("CheckMode failed, exiting. Error code: {}", ret);
+        exit_flag.store(true);
     }
     if(motionName.empty())
     {
