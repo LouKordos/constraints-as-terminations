@@ -541,8 +541,6 @@ void check_state_safety_limits(const stamped_robot_state &robot_state) {
             logger->error("Joint velocity for index {} out of bounds, velocity={}, limit={}", i, robot_state.joint_vel[i], joint_vel_abs_limit);
         }
     }
-
-    // TODO: Put robot into damping mode
 }
 
 void robot_state_message_handler(const void *message) {
