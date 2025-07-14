@@ -26,7 +26,6 @@
 #include <unitree/robot/channel/channel_publisher.hpp>
 #include <unitree/robot/channel/channel_subscriber.hpp>
 #include <unitree/idl/go2/LowState_.hpp>
-#include <unitree/idl/ros2/String_.hpp>
 #include <unitree/idl/go2/HeightMap_.hpp>
 #include <unitree/idl/go2/LowCmd_.hpp>
 #include <unitree/common/thread/thread.hpp>
@@ -630,11 +629,6 @@ void height_map_handler(const void *message) {
     // logger->debug("Heightmap res={}\twidth={}\theight={}\torigin_x={}\torigin_y={}", height_map.resolution(), height_map.width(), height_map.height(), height_map.origin()[0], height_map.origin()[1]);
 }
 
-void fault_handler(const void *message) {
-    std_msgs::msg::dds_::String_ fault_json = *(std_msgs::msg::dds_::String_*)message;
-    logger->debug("Fault JSON={}", fault_json.data());
-}
-
 void vel_command_listener(std::string endpoint)
 {
     zmq::context_t ctx{1};
@@ -753,11 +747,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     // std::string height_map_topic {"rt/utlidar/height_map_array"};
     // height_map_subscriber.reset(new unitree::robot::ChannelSubscriber<unitree_go::msg::dds_::HeightMap_>(height_map_topic));
     // height_map_subscriber->InitChannel(std::bind(&height_map_handler, std::placeholders::_1), 1);
-
-    unitree::robot::ChannelSubscriberPtr<std_msgs::msg::dds_::String_> fault_subscriber;
-    std::string fault_topic {"rt/errorlist"};
-    fault_subscriber.reset(new unitree::robot::ChannelSubscriber<std_msgs::msg::dds_::String_>(fault_topic));
-    fault_subscriber->InitChannel(std::bind(&fault_handler, std::placeholders::_1), 1);
 
     std::string zmq_endpoint = "tcp://*:6969";
 	std::thread vel_cmd_listener_thread(vel_command_listener, zmq_endpoint);
