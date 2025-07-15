@@ -4,7 +4,7 @@ FROM ros:$ROS_DISTRO-ros-core
 ENV ROS_DISTRO=$ROS_DISTRO
 RUN printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4
 # Essential stuff
-RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl vim libtbb-dev dbus libeigen3-dev tmux sudo iputils-ping unzip wget iproute2 libzstd-dev zstd locales curl dbus dbus-x11 x11-apps xauth tree net-tools cyclonedds-tools netcat-openbsd libboost-all-dev libyaml-cpp-dev
+RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl vim libtbb-dev dbus git-lfs libeigen3-dev libboost-python-dev libboost-numpy-dev libpcl-dev python3-dev python3-numpy python3-matplotlib libgoogle-glog-dev tmux sudo iputils-ping unzip wget iproute2 libzstd-dev zstd locales curl dbus dbus-x11 x11-apps xauth tree net-tools cyclonedds-tools netcat-openbsd libboost-all-dev libyaml-cpp-dev
 
 # Need to build from source due to arm64 on Go2 Jetson
 RUN apt-get update -y && apt-get install -y build-essential cmake git python3 python3-pip python3-venv libopenblas-dev libomp-dev libopenmpi-dev ninja-build libyaml-dev libjpeg-dev libpng-dev
@@ -71,6 +71,16 @@ WORKDIR /cppzmq/cppzmq/build
 RUN git checkout 3bcbd9dad2f57180aacd4b4aea292a74f0de7ef4
 RUN cmake -DCPPZMQ_BUILD_TESTS=OFF ..
 RUN make -j install
+
+# go2_odometry
+WORKDIR /inekf
+RUN git clone https://github.com/inria-paris-robotics-lab/invariant-ekf.git
+WORKDIR /inekf/invariant-ekf/build
+RUN git checkout 6047ef98b8984ad041ce10849b351df17de4dfe8
+# Patch minimum required CMakeLists.txt
+sed -E -i.bak 's#^(cmake_minimum_required\(\s*VERSION\s*)[0-9]+(\.[0-9]+)*#\1 3.20#' ../CMakeLists.txt
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_INTERFACE=ON -DPYTHON_DEB_LAYOUT=ON ..
+RUN make -j && make install
 
 # RUN AFTER ALL DEPENDENCY INSTALLATIONS!
 RUN ldconfig

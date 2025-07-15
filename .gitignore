@@ -43,3 +43,4 @@ sim2real/ros2_ws/**/build
 sim2real/ros2_ws/**/install
 sim2real/ros2_ws/**/log
 sim2real/ros2_ws/src/third_party
+sim2real/odom_alternative_ws
