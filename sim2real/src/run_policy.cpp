@@ -394,6 +394,7 @@ void run_control_loop(std::filesystem::path checkpoint_path) {
 	std::array<float, 3> vel_command_mag_limit = {2.0, 2.0, 1.0}; //vel_x, vel_y, omega_z    
 
     auto dt = std::chrono::milliseconds{20};
+    auto start_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     while(!exit_flag.load()) {
         ZoneScoped;
         FrameMarkNamed("run_control_loop");
@@ -427,6 +428,11 @@ void run_control_loop(std::filesystem::path checkpoint_path) {
                 logger->warn("Had to clip vel_command[{}]={}, vel_command_mag_limit[i]={}", i, vel_command[i], vel_command_mag_limit[i]);
                 vel_command[i] = std::max(-vel_command_mag_limit[i], std::min(vel_command_mag_limit[i], vel_command[i]));
             }	
+        }
+
+        // Walk 3sec for testing
+        if(false && std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() - start_ms < 3000) {
+                vel_command[0] = 1.0f;
         }
 
         auto observation = construct_observation_tensor(robot_state, vel_command, previous_action, model_observation_dim == observation_dim_history, robot_state.counter == 0);
