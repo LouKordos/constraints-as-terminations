@@ -18,11 +18,15 @@ mkdir -p $BASE_DIR/ros2_ws/src/third_party # Use third_party for any external pa
 sudo chmod -R 777 $BASE_DIR/ros2_ws
 cd $BASE_DIR/ros2_ws/src/third_party # For custom code, use ros2_ws/src/
 
-# For /tf topic and improved Go2 ROS2 integration
+# For /tf topic and improved Go2 ROS2 integration, Odom
+# TODO: Use dependencies.repos and vcs
 git clone -b humble https://github.com/Unitree-Go2-Robot/go2_robot.git go2_robot || (cd go2_robot && git pull)
 vcs import < go2_robot/dependencies.repos
+git clone https://github.com/Ericsii/livox_ros_driver2/tree/feature/use-standard-unit || (cd livox_ros2_driver2 && git pull)
+git clone --recurse-submodules https://github.com/LouKordos/FAST_LIO_ROS2.git || (cd FAST_LIO_ROS2.git && git pull)
+git clone https://github.com/LouKordos/LiDAR_IMU_Init.git/ || (cd LiDAR_IMU_Init && git pull)
 git clone --recurse-submodules https://github.com/HesaiTechnology/HesaiLidar_ROS_2.0.git HesaiLidar_ROS_2.0 || (cd HesaiLidar_ROS_2.0 && git pull)
-# git clone https://github.com/unitreerobotics/unitree_ros2 || (cd unitree_ros2 && git pull) # Provided by go2_robot.git
+# git clone https://github.com/unitreerobotics/unitree_ros2 || (cd unitree_ros2 && git pull) # ROS2 integration provided by go2_robot.git
 
 cd $BASE_DIR/ros2_ws
 ROSDEP_MARKER=/rosdep-bootstrap-ros-ws.marker

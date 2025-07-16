@@ -84,6 +84,7 @@
         "future": "cpp",
         "stdfloat": "cpp",
         "multi_span": "cpp",
-        "csignal": "cpp"
+        "csignal": "cpp",
+        "*.inc": "cpp"
     }
 }
