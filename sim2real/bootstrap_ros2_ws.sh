@@ -8,14 +8,12 @@ BASE_DIR=/app # In case you want to run outside docker
 
 # For alternative odom, this will conflict with go2_bringup so do not run both at the time!:
 mkdir -p $BASE_DIR/odom_alternative_ws/src
-sudo chmod -R 777 $BASE_DIR/odom_alternative_ws
 cd $BASE_DIR/odom_alternative_ws/src
 git clone https://github.com/inria-paris-robotics-lab/go2_odometry.git
 git clone https://github.com/inria-paris-robotics-lab/go2_description.git
 git clone https://github.com/Unitree-Go2-Robot/unitree_go.git
 
 mkdir -p $BASE_DIR/ros2_ws/src/third_party # Use third_party for any external packages because it's ignored by git
-sudo chmod -R 777 $BASE_DIR/ros2_ws
 cd $BASE_DIR/ros2_ws/src/third_party # For custom code, use ros2_ws/src/
 
 # For /tf topic and improved Go2 ROS2 integration, Odom
@@ -61,5 +59,7 @@ if [[ ! -f "${FIRST_BUILD_MARKER}" ]]; then
 else
     colcon build "${COLCON_ARGS[@]}"
 fi
+
+chmod -R a+rwX $BASE_DIR/ros2_ws $BASE_DIR/odom_alternative_ws
 
 echo "ROS2 workspace bootstrap finished."
