@@ -17,8 +17,9 @@ mkdir -p $BASE_DIR/ros2_ws/src/third_party # Use third_party for any external pa
 cd $BASE_DIR/ros2_ws/src/third_party # For custom code, use ros2_ws/src/
 
 # For /tf topic and improved Go2 ROS2 integration, Odom
-# TODO: Use dependencies.repos and vcs
+# TODO: Use dependencies.repos and vcs, pin commits
 git clone -b humble https://github.com/Unitree-Go2-Robot/go2_robot.git go2_robot || (cd go2_robot && git pull)
+sed -i 's|https://github.com/Unitree-Go2-Robot/go2_driver.git|https://github.com/LouKordos/go2_driver.git|' go2_robot/dependencies.repos # Replacement with fork only needed until PR is merged
 vcs import < go2_robot/dependencies.repos
 git clone https://github.com/Ericsii/livox_ros_driver2/tree/feature/use-standard-unit || (cd livox_ros2_driver2 && git pull)
 git clone --recurse-submodules https://github.com/LouKordos/FAST_LIO_ROS2.git || (cd FAST_LIO_ROS2.git && git pull)
