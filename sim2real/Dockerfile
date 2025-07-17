@@ -72,6 +72,15 @@ RUN git checkout 3bcbd9dad2f57180aacd4b4aea292a74f0de7ef4
 RUN cmake -DCPPZMQ_BUILD_TESTS=OFF ..
 RUN make -j install
 
+WORKDIR /livox-sdk
+RUN git clone git clone https://github.com/Livox-SDK/Livox-SDK2.git
+RUN /livox-sdk/Livox-SDK2/build
+# Patches needed for C++23 build
+RUN sed -i '$s/^\(#include.*\)/\1\n#include <cstdint>/' ../sdk_core/logger_handler/file_manager.h
+RUN sed -i '$s/^\(#include.*\)/\1\n#include <cstdint>/' ../sdk_core/comm/define.h
+RUN cmake .. && make -j
+RUN make install
+
 # go2_odometry
 WORKDIR /inekf
 RUN git clone https://github.com/inria-paris-robotics-lab/invariant-ekf.git
