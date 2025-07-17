@@ -12,6 +12,8 @@ cd $BASE_DIR/odom_alternative_ws/src
 git clone https://github.com/inria-paris-robotics-lab/go2_odometry.git
 git clone https://github.com/inria-paris-robotics-lab/go2_description.git
 git clone https://github.com/Unitree-Go2-Robot/unitree_go.git
+# Lower foot contact threshold to finish initialization correctly
+sed -i "s|if np.min(f_contact) > 30|if np.min(f_contact) > 20|" src/go2_odometry/scripts/feet_to_odom_inekf.py
 
 mkdir -p $BASE_DIR/ros2_ws/src/third_party # Use third_party for any external packages because it's ignored by git
 cd $BASE_DIR/ros2_ws/src/third_party # For custom code, use ros2_ws/src/
