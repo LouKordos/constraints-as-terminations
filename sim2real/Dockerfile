@@ -90,9 +90,9 @@ RUN rosdep init
 RUN rosdep update
 RUN echo '' >> /root/.bashrc
 RUN echo 'eval "$(fzf --bash)"' >> /root/.bashrc
-# RUN echo 'source /opt/ros/jazzy/setup.bash' >> ~/.bashrc
+# RUN echo 'source /opt/ros/$ROS_DISTRO/setup.bash' >> ~/.bashrc
 RUN echo '# Remind user to source custom ROS2 workspace' >> /root/.bashrc
-RUN echo 'echo "Remember to source /app/ros2_ws/install/setup.bash if you are working with ROS custom packages! (bashrc already sources /opt/ros/jazzy/setup.bash)"' >> /root/.bashrc
+RUN echo 'echo "Remember to source /app/ros2_ws/install/setup.bash OR /app/odom_alternative_ws/install/setup.bash if you are working with ROS!"' >> /root/.bashrc
 RUN echo 'echo "Also remember to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."' >> /root/.bashrc
 ENV ROS_DOMAIN_ID=69
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
