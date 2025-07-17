@@ -87,7 +87,7 @@ RUN git clone https://github.com/inria-paris-robotics-lab/invariant-ekf.git
 WORKDIR /inekf/invariant-ekf/build
 RUN git checkout 6047ef98b8984ad041ce10849b351df17de4dfe8
 # Patch minimum required CMakeLists.txt
-sed -E -i.bak 's#^(cmake_minimum_required\(\s*VERSION\s*)[0-9]+(\.[0-9]+)*#\1 3.20#' ../CMakeLists.txt
+RUN sed -E -i.bak 's#^(cmake_minimum_required\(\s*VERSION\s*)[0-9]+(\.[0-9]+)*#\1 3.20#' ../CMakeLists.txt
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_INTERFACE=ON -DPYTHON_DEB_LAYOUT=ON ..
 RUN make -j && make install
 
