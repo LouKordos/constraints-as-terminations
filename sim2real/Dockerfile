@@ -43,7 +43,7 @@ RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake -G Ninja --compile-no-warnin
 RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake --build . --target install
 
 # ROS2 stuff
-RUN apt-get update -y && apt-get install -y ros-dev-tools ros-$ROS_DISTRO-desktop ros-$ROS_DISTRO-rmw-cyclonedds-cpp ros-$ROS_DISTRO-rosidl-generator-dds-idl ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan
+RUN apt-get update -y && apt-get install -y ros-dev-tools ros-$ROS_DISTRO-desktop ros-$ROS_DISTRO-rmw-cyclonedds-cpp ros-$ROS_DISTRO-rosidl-generator-dds-idl ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan ros-$ROS_DISTRO-eigenpy
 
 # Set this AFTER libtorch due to compiler bug in gcc14!
 ENV CC=gcc-14
@@ -89,7 +89,8 @@ RUN git checkout 6047ef98b8984ad041ce10849b351df17de4dfe8
 RUN python3 -m pip install --break-system-packages eigenpy
 # Patch minimum required CMakeLists.txt
 RUN sed -E -i.bak 's#^(cmake_minimum_required\(\s*VERSION\s*)[0-9]+(\.[0-9]+)*#\1 3.22#' ../CMakeLists.txt
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_INTERFACE=ON -DPYTHON_DEB_LAYOUT=ON ..
+# ROS path needed for ros-$ROS_DISTRO-eigenpy
+RUN CMAKE_PREFIX_PATH=/opt/ros/jazzy/:$CMAKE_PREFIX_PATH cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_INTERFACE=ON -DPYTHON_DEB_LAYOUT=ON ..
 RUN make -j && make install
 
 # RUN AFTER ALL DEPENDENCY INSTALLATIONS!
