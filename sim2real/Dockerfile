@@ -93,6 +93,14 @@ RUN sed -E -i.bak 's#^(cmake_minimum_required\(\s*VERSION\s*)[0-9]+(\.[0-9]+)*#\
 RUN CMAKE_PREFIX_PATH=/opt/ros/jazzy/:$CMAKE_PREFIX_PATH cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_INTERFACE=ON -DPYTHON_DEB_LAYOUT=ON ..
 RUN make -j && make install
 
+# Solver for LI-INIT
+WORKDIR /ceres
+RUN wget https://github.com/ceres-solver/ceres-solver/archive/refs/tags/2.0.0.tar.gz
+RUN tar -zxf 2.0.0.tar.gz
+WORKDIR /ceres/ceres-solver-2.0.0/build
+RUN cmake -DCMAKE_BUILD_TYPE=Release ./ceres-solver-2.0.0 && make -j
+RUN make install
+
 # RUN AFTER ALL DEPENDENCY INSTALLATIONS!
 RUN ldconfig
 ENV DOCKER_FLAG_FOR_RUN_SCRIPT=1
