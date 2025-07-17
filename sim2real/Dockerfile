@@ -86,7 +86,6 @@ WORKDIR /inekf
 RUN git clone https://github.com/inria-paris-robotics-lab/invariant-ekf.git
 WORKDIR /inekf/invariant-ekf/build
 RUN git checkout 6047ef98b8984ad041ce10849b351df17de4dfe8
-RUN python3 -m pip install --break-system-packages eigenpy
 # Patch minimum required CMakeLists.txt
 RUN sed -E -i.bak 's#^(cmake_minimum_required\(\s*VERSION\s*)[0-9]+(\.[0-9]+)*#\1 3.22#' ../CMakeLists.txt
 # ROS path needed for ros-$ROS_DISTRO-eigenpy
