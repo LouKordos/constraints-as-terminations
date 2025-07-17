@@ -76,8 +76,8 @@ WORKDIR /livox-sdk
 RUN git clone https://github.com/Livox-SDK/Livox-SDK2.git
 WORKDIR /livox-sdk/Livox-SDK2/build
 # Patches needed for C++23 build
-RUN sed -i '$s/^\(#include.*\)/\1\n#include <cstdint>/' ../sdk_core/logger_handler/file_manager.h
-RUN sed -i '$s/^\(#include.*\)/\1\n#include <cstdint>/' ../sdk_core/comm/define.h
+RUN sed -i '/^#include /a #include <cstdint>' ../sdk_core/logger_handler/file_manager.h
+RUN sed -i '/^#include /a #include <cstdint>' ../sdk_core/comm/define.h
 RUN cmake .. && make -j
 RUN make install
 
