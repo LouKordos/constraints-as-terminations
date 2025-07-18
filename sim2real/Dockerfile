@@ -97,7 +97,8 @@ WORKDIR /ceres
 RUN wget https://github.com/ceres-solver/ceres-solver/archive/refs/tags/2.0.0.tar.gz
 RUN tar -zxf 2.0.0.tar.gz
 WORKDIR /ceres/ceres-solver-2.0.0/build
-RUN cmake -DCMAKE_BUILD_TYPE=Release ./ceres-solver-2.0.0 && make -j
+# Jobs are memory hungry!
+RUN cmake -DCMAKE_BUILD_TYPE=Release .. && make -j8
 RUN make install
 
 # RUN AFTER ALL DEPENDENCY INSTALLATIONS!
