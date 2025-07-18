@@ -24,7 +24,7 @@ git clone -b humble https://github.com/Unitree-Go2-Robot/go2_robot.git go2_robot
 sed -i 's|https://github.com/Unitree-Go2-Robot/go2_driver.git|https://github.com/LouKordos/go2_driver.git|' go2_robot/dependencies.repos # Replacement with fork only needed until PR is merged
 vcs import < go2_robot/dependencies.repos
 git clone https://github.com/Ericsii/livox_ros_driver2 -b feature/use-standard-unit || (cd livox_ros_driver2 && git pull)
-git clone --recurse-submodules https://github.com/LouKordos/FAST_LIO_ROS2.git || (cd FAST_LIO_ROS2.git && git pull)
+git clone --recurse-submodules https://github.com/LouKordos/FAST_LIO_ROS2.git || (cd FAST_LIO_ROS2 && git pull)
 git clone https://github.com/LouKordos/LiDAR_IMU_Init.git/ || (cd LiDAR_IMU_Init && git pull)
 git clone --recurse-submodules https://github.com/HesaiTechnology/HesaiLidar_ROS_2.0.git HesaiLidar_ROS_2.0 || (cd HesaiLidar_ROS_2.0 && git pull)
 # git clone https://github.com/unitreerobotics/unitree_ros2 || (cd unitree_ros2 && git pull) # ROS2 integration provided by go2_robot.git
