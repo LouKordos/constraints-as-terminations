@@ -89,7 +89,7 @@ RUN git checkout 6047ef98b8984ad041ce10849b351df17de4dfe8
 # Patch minimum required CMakeLists.txt
 RUN sed -E -i.bak 's#^(cmake_minimum_required\(\s*VERSION\s*)[0-9]+(\.[0-9]+)*#\1 3.22#' ../CMakeLists.txt
 # ROS path needed for ros-$ROS_DISTRO-eigenpy
-RUN CMAKE_PREFIX_PATH=/opt/ros/jazzy/:$CMAKE_PREFIX_PATH cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_INTERFACE=ON -DPYTHON_DEB_LAYOUT=ON ..
+RUN CMAKE_PREFIX_PATH=/opt/ros/$ROS_DISTRO/:$CMAKE_PREFIX_PATH cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_INTERFACE=ON -DPYTHON_DEB_LAYOUT=ON ..
 RUN make -j && make install
 
 # Solver for LI-INIT

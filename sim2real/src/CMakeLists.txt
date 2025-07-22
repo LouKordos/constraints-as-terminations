@@ -39,14 +39,6 @@ find_package(cppzmq REQUIRED)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-# list(APPEND CMAKE_PREFIX_PATH "/opt/ros/jazzy")
-# find_package(rclcpp CONFIG REQUIRED)
-# find_package(sensor_msgs   CONFIG REQUIRED)
-# find_package(std_msgs      CONFIG REQUIRED)
-# find_package(geometry_msgs CONFIG REQUIRED)
-# find_package(rosbag2_cpp CONFIG REQUIRED)
-# find_package(rosbag2_storage_mcap CONFIG REQUIRED)
-
 add_executable(run_policy run_policy.cpp)
 target_include_directories(run_policy PUBLIC ${sensor_msgs_INCLUDE_DIRS} ${std_msgs_INCLUDE_DIRS} ${geometry_msgs_INCLUDE_DIRS})
 target_link_libraries(run_policy PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 atomic Threads::Threads "${TORCH_LIBRARIES}" cppzmq)

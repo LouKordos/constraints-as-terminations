@@ -115,7 +115,7 @@ else
     (
         export ROS_DOMAIN_ID=0
         set +x
-        source /opt/ros/jazzy/setup.bash
+        source /opt/ros/$ROS_DISTRO/setup.bash
         set -x
         cd "${BAG_DIR}"
         exec ros2 bag record --output "${BAG_DIR}/bag" /tf /tf_static /joint_states /lowstate /lowcmd /pointcloud /robot_description /initialpose /imu_lowstate /utlidar/imu /imu --regex "^/[oO]dom.*" > "${LOG_DIR}/ros2_bag_${BAG_TS}.log" 2>&1
@@ -132,6 +132,6 @@ else
     else
         ${BUILD_DIR}/src/$BINARY_NAME $BINARY_ARGV
     fi
-    echo "Remember to source /app/ros2_ws/install/setup.bash if you are working with ROS custom packages! bashrc already sources /opt/ros/jazzy/setup.bash"
+    echo "Remember to source /app/ros2_ws/install/setup.bash if you are working with ROS custom packages! bashrc already sources /opt/ros/$ROS_DISTRO/setup.bash"
     echo "Also remember to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."
 fi
