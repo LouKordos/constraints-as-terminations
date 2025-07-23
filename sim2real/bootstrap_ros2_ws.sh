@@ -14,6 +14,7 @@ git clone https://github.com/inria-paris-robotics-lab/go2_odometry.git || true #
 sed -i "s|if np.min(f_contact) > 30|if np.min(f_contact) > 20|" ./go2_odometry/scripts/feet_to_odom_inekf.py
 git clone https://github.com/inria-paris-robotics-lab/go2_description.git || (cd go2_description && git pull)
 git clone https://github.com/Unitree-Go2-Robot/unitree_go.git || (cd unitree_go && git pull)
+git clone https://github.com/LouKordos/elevation_mapping_cupy.git -b ros2_humble || (cd elevation_mapping_cupy && git pull)
 
 mkdir -p $BASE_DIR/ros2_ws/src/third_party # Use third_party for any external packages because it's ignored by git
 cd $BASE_DIR/ros2_ws/src/third_party # For custom code, use ros2_ws/src/
@@ -42,17 +43,26 @@ else
     echo "Found marker at ${ROSDEP_MARKER}, skipping rosdep init and update."
 fi
 
-rosdep install --from-paths src --ignore-src -r -y
+rosdep install --from-paths $BASE_DIR/ros2_ws/src --ignore-src -r -y
+rosdep install --from-paths $BASE_DIR/odom_alternative_ws/src --ignore-src -r -y
+
+export CMAKE_EXPORT_COMPILE_COMMANDS=ON
+COLCON_ARGS=(--cmake-args "-DCMAKE_BUILD_TYPE=Release" "-DBUILD_TESTING=OFF" "-DCMAKE_CXX_FLAGS="-Wl,--allow-shlib-undefined"" -Wall -Wextra -Wpedantic -Wshadow --packages-skip convex_plane_decomposition convex_plane_decomposition_ros --parallel-workers $(nproc))
+FIRST_BUILD_MARKER=/colcon-ros2_ws_clean_build.marker
 
 if [[ -d "${BASE_DIR}/odom_alternative_ws" ]]; then
-    rosdep install --from-paths $BASE_DIR/odom_alternative_ws/src --ignore-src -r -y
-    cd $BASE_DIR/odom_alternative_ws
-    colcon build
-    cd $BASE_DIR/ros2_ws
+    if [[ ! -f "${FIRST_BUILD_MARKER}" ]]; then
+        echo "First script run inside docker, cleaning cmake cache and installing marker..."
+        rm -rf $BASE_DIR/odom_alternative_ws/{build,install,log}
+        cd $BASE_DIR/odom_alternative_ws
+        colcon build --cmake-clean-cache "${COLCON_ARGS[@]}"
+    else
+        colcon build "${COLCON_ARGS[@]}"
+    fi
 fi
 
-FIRST_BUILD_MARKER=/colcon-ros2_ws_clean_build.marker
-COLCON_ARGS=() # To prevent duplication
+cd $BASE_DIR/ros2_ws
+
 if [[ ! -f "${FIRST_BUILD_MARKER}" ]]; then
     echo "First script run inside docker, cleaning cmake cache and installing marker..."
     rm -rf $BASE_DIR/ros2_ws/{build,install,log}
