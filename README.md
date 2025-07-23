@@ -56,6 +56,8 @@ There are two workspaces created by `bootstrap_ros2_ws.sh`, one is for using [ht
 
 Using `go2_robot` is currently not tested because it relies on Fast-LIO2 and LI-INIT for odometry, which is currently not working properly with whe Unitree L1 LIDAR, so you need a supported third party LIDAR. If you do have it, you can use `ros2_ws` to initialize your LIDAR, test FAST-LIO2 to ensure odometry works, then configure `elevation_mapping_cupy` with the published odom frame and lidar topic.
 
+TODO: Switch to one workspace to simplify the setup and avoid duplicate packages (currently not possible due to naming conflicts in `go2_odometry`. If this persists, switch to shared underlay and only have two separate workspaces for packages that are not common)
+
 Important: If you run the ROS nodes first, this will cause issues. Unitree Go2 publishes odometry and some other topics only when high level control mode is enabled, and disables them once you want to control the actuators directly. Follow the steps below to set everything up:
 
 1. **In a new terminal without ROS sourced**: Run `build-and-run.sh` inside the docker container as a first step, so that the robot disables the publishers for these topics. Ensure the robot is standing in place or following velocity commands correctly.
