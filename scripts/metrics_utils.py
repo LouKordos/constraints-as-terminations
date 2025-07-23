@@ -313,14 +313,27 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
         gait_symmetry_summary_per_dof[dof]["rear_left_rear_right"] = total_variation_distance(pmf("RL"), pmf("RR"))
         gait_symmetry_summary_per_dof[dof]["front_left_rear_left"] = total_variation_distance(pmf("FL"), pmf("RL"))
         gait_symmetry_summary_per_dof[dof]["front_right_rear_right"] = total_variation_distance(pmf("FR"), pmf("RR"))
+        # New diagonal comparisons
+        gait_symmetry_summary_per_dof[dof]["front_left_rear_right"] = total_variation_distance(pmf("FL"), pmf("RR"))
+        gait_symmetry_summary_per_dof[dof]["front_right_rear_left"] = total_variation_distance(pmf("FR"), pmf("RL"))
+
+    # Define all comparison keys, including the new ones
+    comparison_keys = (
+        "front_left_front_right", "rear_left_rear_right",
+        "front_left_rear_left", "front_right_rear_right",
+        "front_left_rear_right", "front_right_rear_left"
+    )
 
     average_symmetry_tvd = {
         k: float(np.mean([gait_symmetry_summary_per_dof[d][k] for d in dofs]))
-        for k in ("front_left_front_right","rear_left_rear_right", "front_left_rear_left","front_right_rear_right")
+        for k in comparison_keys
     }
+
     axis_symmetry_tvd = {
         "left_vs_right": float(np.mean([average_symmetry_tvd["front_left_front_right"], average_symmetry_tvd["rear_left_rear_right"]])),
-        "front_vs_rear": float(np.mean([average_symmetry_tvd["front_left_rear_left"],   average_symmetry_tvd["front_right_rear_right"]])),
+        "front_vs_rear": float(np.mean([average_symmetry_tvd["front_left_rear_left"], average_symmetry_tvd["front_right_rear_right"]])),
+        # New diagonal axis summary
+        "diagonal": float(np.mean([average_symmetry_tvd["front_left_rear_right"], average_symmetry_tvd["front_right_rear_left"]])),
     }
 
     return {
