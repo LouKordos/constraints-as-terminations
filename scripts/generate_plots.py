@@ -2298,15 +2298,18 @@ def _plot_foot_velocity_time_series_stance_focused(
         pickle_subdir = os.path.join(pickle_dir, subfolder_prefix, component_label.lower().replace(" ", "_").replace("/", "_"))
         os.makedirs(pickle_subdir, exist_ok=True)
 
+    # MODIFICATION: Define a color list to use for all feet consistently.
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
     # ---------- per-foot grid (stance-focused line plot) ----------
     fig_grid, axes_grid = plt.subplots(2, 2, sharex=True, figsize=FIGSIZE)
-    # fig_grid.suptitle(f'Stance-Focused Foot {component_label} Velocity ({frame_label.replace("_", " ")})', fontsize=18)
     fig_grid.suptitle(f'Stance Foot {component_label} Vel. ({frame_label.replace("_", " ")}, {padding_steps} steps padding)', fontsize=18)
-
 
     for i, ax in enumerate(axes_grid.flat):
         foot_idx = i
-        # Ensure contact_state_array has data for this foot_idx
+        # MODIFICATION: Get the consistent color for the current foot.
+        foot_color = colors[foot_idx % len(colors)]
+
         if foot_idx >= contact_state_array.shape[1]:
             ax.text(0.5, 0.5, "No data for this foot index", ha="center", va="center", transform=ax.transAxes)
             ax.set_title(f'{foot_labels[foot_idx]} (Error)', fontsize=16)
@@ -2318,37 +2321,33 @@ def _plot_foot_velocity_time_series_stance_focused(
         first_stance_span_for_legend = True
         plotted_anything = False
 
-        if not stance_segments: # No stance phases for this foot
+        if not stance_segments:
             ax.text(0.5, 0.5, "No stance data", ha="center", va="center", transform=ax.transAxes)
         
         for s_start, s_end in stance_segments:
             s_pad_start = max(0, s_start - padding_steps)
-            # s_pad_end needs to be relative to sim_times length, and also velocity_data length
             s_pad_end = min(min(len(sim_times), velocity_data.shape[0]), s_end + padding_steps)
 
-
-            if s_pad_start >= s_pad_end: # Skip if padded segment is empty or invalid
+            if s_pad_start >= s_pad_end:
                 continue
 
             times_to_plot = sim_times[s_pad_start:s_pad_end]
-            # Ensure velocity_data has data for this foot_idx
             if foot_idx >= velocity_data.shape[1]:
-                continue # Should not happen if contact_state_array check passed, but defensive
+                continue
             
             data_to_plot = velocity_data[s_pad_start:s_pad_end, foot_idx]
             
-            if times_to_plot.size == 0 or data_to_plot.size == 0: # Skip if no data after padding
+            if times_to_plot.size == 0 or data_to_plot.size == 0:
                 continue
-
-            ax.plot(times_to_plot, data_to_plot, label=f'{component_label}_{foot_labels[foot_idx]}' if first_segment_in_plot else None)
+            
+            # MODIFICATION: Use the pre-defined foot_color in the plot call.
+            ax.plot(times_to_plot, data_to_plot, color=foot_color, label=f'{component_label}_{foot_labels[foot_idx]}' if first_segment_in_plot else None)
             first_segment_in_plot = False
             plotted_anything = True
 
-            # Highlight the actual stance phase within the padded segment
-            # Ensure s_start and s_end-1 are valid indices for sim_times
             if s_start < len(sim_times) and s_end > 0 and s_start < s_end:
-                actual_s_end_time_idx = min(s_end - 1, len(sim_times) - 1) # s_end is exclusive, so use s_end-1
-                if actual_s_end_time_idx >= s_start : # Ensure valid span
+                actual_s_end_time_idx = min(s_end - 1, len(sim_times) - 1)
+                if actual_s_end_time_idx >= s_start :
                      ax.axvspan(sim_times[s_start], sim_times[actual_s_end_time_idx], color='gray', alpha=0.3, label='stance phase' if first_stance_span_for_legend else None)
                      if first_stance_span_for_legend:
                          first_stance_span_for_legend = False
@@ -2357,28 +2356,26 @@ def _plot_foot_velocity_time_series_stance_focused(
         ax.set_title(f'{foot_labels[foot_idx]}', fontsize=16)
         ax.set_ylabel(rf'Velocity {component_label} ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
         
-        if plotted_anything or not first_stance_span_for_legend: # Add legend if plots were made or if stance highlight was added
+        if plotted_anything or not first_stance_span_for_legend:
              ax.legend(loc='best')
-
 
     axes_grid[-1, 0].set_xlabel(r'Time ($\text{s}$)')
     axes_grid[-1, 1].set_xlabel(r'Time ($\text{s}$)')
     
     pdf_grid_path = os.path.join(plot_subdir, f'line_grid_stance_focused.pdf')
     fig_grid.savefig(pdf_grid_path, dpi=600)
-    if pickle_subdir: # Check again if pickle_subdir is valid
+    if pickle_subdir:
         with open(os.path.join(pickle_subdir, f'line_grid_stance_focused.pickle'), 'wb') as f:
             pickle.dump(fig_grid, f)
     plt.close(fig_grid)
 
     # ---------- overview (stance-focused line plot) ----------
     fig_ov, ax_ov = plt.subplots(figsize=FIGSIZE)
-    # ax_ov.set_title(f'Stance-Focused Foot {component_label} Velocity ({frame_label.replace("_", " ")}) Overview', fontsize=18)
     ax_ov.set_title(f'Stance Foot {component_label} Vel. ({frame_label.replace("_", " ")}, {padding_steps} steps padding) Overview', fontsize=18)
 
-
     for foot_idx, lbl in enumerate(foot_labels):
-        if foot_idx >= contact_state_array.shape[1]: continue # Skip if no data for this foot
+        foot_color = colors[foot_idx % len(colors)]
+        if foot_idx >= contact_state_array.shape[1]: continue
 
         stance_segments = compute_stance_segments(contact_state_array[:, foot_idx].astype(bool))
         first_segment_for_foot = True
@@ -2386,17 +2383,15 @@ def _plot_foot_velocity_time_series_stance_focused(
             s_pad_start = max(0, s_start - padding_steps)
             s_pad_end = min(min(len(sim_times), velocity_data.shape[0]), s_end + padding_steps)
 
-
             if s_pad_start >= s_pad_end: continue
             if foot_idx >= velocity_data.shape[1]: continue
-
 
             times_to_plot = sim_times[s_pad_start:s_pad_end]
             data_to_plot = velocity_data[s_pad_start:s_pad_end, foot_idx]
 
             if times_to_plot.size == 0 or data_to_plot.size == 0: continue
             
-            ax_ov.plot(times_to_plot, data_to_plot, label=lbl if first_segment_for_foot else None, alpha=0.7)
+            ax_ov.plot(times_to_plot, data_to_plot, color=foot_color, label=lbl if first_segment_for_foot else None, alpha=0.7)
             first_segment_for_foot = False
             
     draw_resets(ax_ov, reset_times)
@@ -2406,7 +2401,7 @@ def _plot_foot_velocity_time_series_stance_focused(
     
     pdf_ov_path = os.path.join(plot_subdir, f'line_overview_stance_focused.pdf')
     fig_ov.savefig(pdf_ov_path, dpi=600)
-    if pickle_subdir: # Check again
+    if pickle_subdir:
         with open(os.path.join(pickle_subdir, f'line_overview_stance_focused.pickle'), 'wb') as f:
             pickle.dump(fig_ov, f)
     plt.close(fig_ov)
