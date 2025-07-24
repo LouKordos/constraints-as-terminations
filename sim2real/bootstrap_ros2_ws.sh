@@ -14,7 +14,7 @@ git clone https://github.com/inria-paris-robotics-lab/go2_odometry.git || true #
 sed -i "s|if np.min(f_contact) > 30|if np.min(f_contact) > 20|" ./go2_odometry/scripts/feet_to_odom_inekf.py
 git clone https://github.com/inria-paris-robotics-lab/go2_description.git || (cd go2_description && git pull)
 git clone https://github.com/Unitree-Go2-Robot/unitree_go.git || (cd unitree_go && git pull)
-git clone https://github.com/LouKordos/elevation_mapping_cupy.git -b ros2_humble || (cd elevation_mapping_cupy && git pull)
+# git clone https://github.com/LouKordos/elevation_mapping_cupy.git -b ros2_humble || (cd elevation_mapping_cupy && git pull)
 
 mkdir -p $BASE_DIR/ros2_ws/src/third_party # Use third_party for any external packages because it's ignored by git
 cd $BASE_DIR/ros2_ws/src/third_party # For custom code, use ros2_ws/src/
@@ -47,7 +47,15 @@ rosdep install --from-paths $BASE_DIR/ros2_ws/src --ignore-src -r -y
 rosdep install --from-paths $BASE_DIR/odom_alternative_ws/src --ignore-src -r -y
 
 export CMAKE_EXPORT_COMPILE_COMMANDS=ON
-COLCON_ARGS=(--cmake-args "-DCMAKE_BUILD_TYPE=Release" "-DBUILD_TESTING=OFF" "-DCMAKE_CXX_FLAGS="-Wl,--allow-shlib-undefined"" -Wall -Wextra -Wpedantic -Wshadow --packages-skip convex_plane_decomposition convex_plane_decomposition_ros --parallel-workers $(nproc))
+COLCON_ARGS=(
+    --cmake-args
+    "-DCMAKE_BUILD_TYPE=Release"
+    "-DBUILD_TESTING=OFF"
+    "-DPYTHON_EXECUTABLE=$(which python3)"
+    "-DCMAKE_CXX_FLAGS=-Wl,--allow-shlib-undefined -Wall -Wextra -Wpedantic -Wshadow"
+    --packages-skip convex_plane_decomposition convex_plane_decomposition_ros
+    --parallel-workers $(nproc)
+)
 FIRST_BUILD_MARKER=/colcon-ros2_ws_clean_build.marker
 
 if [[ -d "${BASE_DIR}/odom_alternative_ws" ]]; then
