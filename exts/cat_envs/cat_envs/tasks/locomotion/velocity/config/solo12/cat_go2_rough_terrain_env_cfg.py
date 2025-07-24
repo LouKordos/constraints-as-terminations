@@ -819,17 +819,18 @@ class CurriculumCfg:
     )
     '''
 
-    # power = CurrTerm(
-    #     func=curriculums.update_reward_weight_linear,
-    #     params={
-    #         "term_name": "minimize_power",
-    #         "num_steps_from_start_step": 3000,
-    #         "start_at_step": 15000 * 10,
-    #         "start_weight": 0.0,
-    #         "end_weight": 0.4 * 0.02 # Instead of setting scaling_factor=0.02 because ppo.py overrides it
+    
+    power = CurrTerm(
+        func=curriculums.update_reward_weight_linear,
+        params={
+            "term_name": "minimize_power",
+            "num_steps_from_start_step": 3000,
+            "start_at_step": 15000 * 10,
+            "start_weight": 0.0,
+            "end_weight": 0.4 * 0.02 # Instead of setting scaling_factor=0.02 because ppo.py overrides it
 
-    #     }
-    # )
+        }
+    )
 
     terrain_levels = CurrTerm(func=terrain_levels_with_ray_caster_refresh)
     # terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)

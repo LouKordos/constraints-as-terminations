@@ -335,7 +335,7 @@ def PPO(envs, ppo_cfg, run_path):
         # To determine how many samples the threshold metric has on average, check the Episode_Termination category in wandb.
         total_resets_over_rollout = sum(sum(done_count for (key, done_count) in info.items() if key.startswith("Episode_Termination/")) for info in ep_infos)
 
-        ADAPTIVE_CURR_ALGORITHM = "deprl"
+        ADAPTIVE_CURR_ALGORITHM = "none" # deprl,simple,none
         if ADAPTIVE_CURR_ALGORITHM.lower() == "simple":
             simple_curr_lambda = 0.97
             delta_alpha_init_simple_algo = 9e-5
