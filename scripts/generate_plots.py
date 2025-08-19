@@ -38,22 +38,22 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 plt.style.use(['science','ieee'])
 
 plt.rcParams.update({
-    'font.size': 12,
-    'axes.labelsize': 14,
-    'axes.titlesize': 16,
-    'xtick.labelsize': 12,
-    'ytick.labelsize': 12,
-    'legend.fontsize': 12,
-    'figure.titlesize': 18,
+    'font.size': 14,
+    'axes.labelsize': 18,
+    'axes.titlesize': 18,
+    'xtick.labelsize': 14,
+    'ytick.labelsize': 14,
+    'legend.fontsize': 14,
+    'figure.titlesize': 22,
     'figure.constrained_layout.use': True,
     'xtick.minor.visible': True,
     'ytick.minor.visible': True,
-    'axes.grid': True,
-    'grid.linestyle': '--',
+    # 'axes.grid': True, # RWTH doesn't want grid apparently
+    # 'grid.linestyle': '--',
 })
 
-# Patch to  minor plots
-Axes.grid = partialmethod(Axes.grid, which='both') # type: ignore
+# # Patch to minor plots
+# Axes.grid = partialmethod(Axes.grid, which='both') # type: ignore
 
 from metrics_utils import (
     compute_energy_arrays,
@@ -227,7 +227,7 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
     T, F = contact_states.shape
     assert sim_times.shape[0] == T, "sim_times length must match contact_states"
 
-    fig, ax = plt.subplots(figsize=(180 if sim_times[0] == 0.0 else 24, F * 1.2))
+    fig, ax = plt.subplots(figsize=(180 if sim_times[0] == 0.0 else 16, F * 1.2))
     ax.set_xlabel(r'Time ($\text{s}$)')
     ax.set_title('Gait Diagram with Air and Contact Times (white text = contact/stance phase, black text = air/swing phase)', fontsize=18)
 
@@ -264,7 +264,7 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
     ax.set_yticklabels(foot_labels)
     ax.margins(x=0.005)
     ax.set_ylim(-spacing * 0.5, (F - 1) * spacing + spacing)
-    ax.legend(loc='upper right', ncol=1)
+    # ax.legend(loc='upper right', ncol=1)
     fig.savefig(output_path, dpi=600)
     return fig
 
@@ -312,7 +312,7 @@ def _plot_body_frame_foot_position_heatmap(foot_positions_body_frame: np.ndarray
 
     fig, ax = plt.subplots(figsize=FIGSIZE)
     
-    ax.set_title("Foot-position occupancy hexbin (body frame, CoM, top-down)", fontsize=28)
+    ax.set_title("Foot-position occupancy hexbin (body frame, CoM, top-down)", fontsize=32)
     if len(x) == 0:
         ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
     else:
@@ -331,9 +331,9 @@ def _plot_body_frame_foot_position_heatmap(foot_positions_body_frame: np.ndarray
         cb.ax.tick_params(labelsize=20)
 
         # ax.set_aspect('equal', adjustable='box')
-        ax.set_xlabel(r"Body-X ($\text{m}$)", fontsize=22)
-        ax.set_ylabel(r"Body-Y ($\text{m}$)", fontsize=22)
-        ax.tick_params(axis='both', which='major', labelsize=20)
+        ax.set_xlabel(r"Body-X ($\text{m}$)", fontsize=24)
+        ax.set_ylabel(r"Body-Y ($\text{m}$)", fontsize=24)
+        ax.tick_params(axis='both', which='major', labelsize=22)
 
     pdf_dir = os.path.join(output_dir, "foot_com_positions_body_frame", "heatmap")
     os.makedirs(pdf_dir, exist_ok=True)
@@ -869,7 +869,7 @@ def _plot_body_frame_foot_position_xy_grid(
         ax.set_title(lbl)
         ax.set_xlabel(r"Body-X ($\text{m}$)")
         ax.set_ylabel(r"Body-Y ($\text{m}$)")
-        ax.legend()
+        ax.legend(loc='upper right', fontsize=14)
         ax.grid(True)
 
     pdf_dir = os.path.join(output_dir, "foot_com_positions_body_frame", "xy_trajectory")
@@ -905,7 +905,7 @@ def _plot_body_frame_foot_position_xy_overview(
     ax.set_xlabel(r"Body-X ($\text{m}$)")
     ax.set_ylabel(r"Body-Y ($\text{m}$)")
     # ax.set_aspect('equal', adjustable='box')
-    ax.legend()
+    ax.legend(loc='upper right', fontsize=14)
     ax.grid(True)
 
     pdf_dir = os.path.join(output_dir, "foot_com_positions_body_frame", "xy_trajectory")
@@ -950,7 +950,7 @@ def _plot_body_frame_foot_position_xy_single(
     ax.set_xlabel(r"Body-X ($\text{m}$)")
     ax.set_ylabel(r"Body-Y ($\text{m}$)")
     # ax.set_aspect('equal', adjustable='box')
-    ax.legend()
+    ax.legend(loc='upper right', fontsize=14)
     ax.grid(True)
 
     safe_lbl = foot_label.replace(" ", "_")
@@ -989,7 +989,7 @@ def _plot_foot_position_time_series(
         draw_resets(ax, reset_times)
         ax.set_title(f'Foot {axis_label} ({frame_label.replace("_", " ")}) {foot_labels[i]} {"(CoM)" if frame_label == "body_frame" else "(toe tip)"}', fontsize=18)
         ax.set_ylabel(rf'{axis_label} ($\text{{m}}$)')
-        ax.legend()
+        ax.legend(loc='upper right', fontsize=14)
     axes[-1, 0].set_xlabel(r'Time ($\text{s}$)')
 
     subdir = os.path.join(output_dir, subfolder)
@@ -1039,7 +1039,7 @@ def _plot_foot_velocity_time_series(
         draw_resets(ax, reset_times)
         ax.set_title(f'Foot {axis_label} Velocity ({frame_label.replace("_", " ")}) {foot_labels[i]}', fontsize=18)
         ax.set_ylabel(rf'Velocity {axis_label} ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
-        ax.legend()
+        ax.legend(loc='upper right', fontsize=14)
     axes[-1, 0].set_xlabel(r'Time ($\text{s}$)')
 
     subdir = os.path.join(output_dir, subfolder)
@@ -1092,7 +1092,7 @@ def _plot_foot_velocity_time_series_single(
     ax.set_title(f'Foot {axis_label} Velocity ({frame_label.replace("_", " ")}) {foot_label}', fontsize=18)
     ax.set_ylabel(rf'Velocity {axis_label} ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
     ax.set_xlabel(r'Time ($\text{s}$)')
-    ax.legend()
+    ax.legend(loc='upper right', fontsize=14)
 
     subdir = os.path.join(output_dir, subfolder)
     os.makedirs(subdir, exist_ok=True)
@@ -1127,7 +1127,7 @@ def _plot_foot_velocity_magnitude_time_series(
         draw_resets(ax, reset_times)
         ax.set_title(f'Foot Velocity Magnitude ({frame_label.replace("_", " ")}) {foot_labels[i]}', fontsize=18)
         ax.set_ylabel(rf'Velocity Magnitude ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
-        ax.legend()
+        ax.legend(loc='upper right', fontsize=14)
     axes[-1, 0].set_xlabel(r'Time ($\text{s}$)')
 
     subdir = os.path.join(output_dir, subfolder)
@@ -1178,7 +1178,7 @@ def _plot_foot_velocity_magnitude_time_series_single(
     ax.set_title(f'Foot Velocity Magnitude ({frame_label.replace("_", " ")}) {foot_label}', fontsize=18)
     ax.set_ylabel(rf'Velocity Magnitude ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
     ax.set_xlabel(r'Time ($\text{s}$)')
-    ax.legend()
+    ax.legend(loc='upper right', fontsize=14)
 
     subdir = os.path.join(output_dir, subfolder)
     os.makedirs(subdir, exist_ok=True)
@@ -1289,8 +1289,9 @@ def _plot_foot_contact_force_per_foot(sim_times, contact_forces_array, foot_labe
             first = False
 
         ax.set_title(f"Foot contact force magnitude {foot_labels[i]}", fontsize=20)
+        ax.set_xlabel(r'Time ($\text{s}$)')
         ax.set_ylabel(r'Force ($\text{N}$)')
-        ax.legend()
+        ax.legend(loc='upper right', fontsize=14)
     pdf = os.path.join(output_dir, "foot_contact_forces",'foot_contact_force_grid.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
@@ -1300,7 +1301,7 @@ def _plot_foot_contact_force_per_foot(sim_times, contact_forces_array, foot_labe
 
 def _plot_hist_contact_forces_grid(contact_forces_array, foot_labels, output_dir, pickle_dir, FIGSIZE):
     """
-    Plots a 2×2 grid of histograms of contact forces for each foot, showing only forces > 0 N.
+    Plots a 2x2 grid of histograms of contact forces for each foot, showing only forces > 0 N.
     """
     fig, axes = plt.subplots(2, 2, figsize=FIGSIZE)
     fig.suptitle("Histogram of Foot Contact Forces", fontsize=22)
@@ -1353,7 +1354,7 @@ def _plot_hist_contact_forces_overview(contact_forces_array, foot_labels, output
     ax.set_title("Histogram of Foot Contact Forces", fontsize=20)
     ax.set_xlabel(r"Force ($\text{N}$)")
     ax.set_ylabel("Frequency")
-    ax.legend(loc='upper right', fontsize=12)
+    ax.legend(loc='upper right', fontsize=14)
     
     pdf_path = os.path.join(output_dir, "foot_contact_forces", "hist_contact_forces_overview.pdf")
     os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
@@ -1495,7 +1496,7 @@ def _plot_cumulative_power_abs(sim_times, cumulative_power, reset_times, output_
     ax.set_xlabel(r'Time ($\text{s}$)')
     ax.set_ylabel(r'Power ($\text{W}$)')
     ax.set_title('Instantaneous cumulative power (unsigned)', fontsize=20)
-    ax.legend()
+    ax.legend(loc='upper right', fontsize=14)
     pdf = os.path.join(output_dir, "aggregates", 'cumulative_power_absolute.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
@@ -1510,7 +1511,7 @@ def _plot_cumulative_power_signed(sim_times, cumulative_power, reset_times, outp
     ax.set_xlabel(r'Time ($\text{s}$)')
     ax.set_ylabel(r'Power ($\text{W}$)')
     ax.set_title('Instantaneous Cumulative Power (signed)', fontsize=20)
-    ax.legend()
+    ax.legend(loc='upper right', fontsize=14)
     pdf = os.path.join(output_dir, "aggregates", 'cumulative_power_signed.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
@@ -1525,7 +1526,7 @@ def _plot_combined_energy(sim_times, combined_energy, reset_times, output_dir, p
     ax.set_xlabel(r'Time ($\text{s}$)')
     ax.set_ylabel(r'Energy ($\text{J}$)')
     ax.set_title('Total Cumulative Joint Energy', fontsize=20)
-    ax.legend()
+    ax.legend(loc='upper right', fontsize=14)
     pdf = os.path.join(output_dir, "aggregates", 'combined_energy_overview.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
@@ -1540,7 +1541,7 @@ def _plot_reward_time_series(sim_times, reward_array, reset_times, output_dir, p
     ax.set_xlabel(r'Time ($\text{s}$)')
     ax.set_ylabel('Reward (-)')
     ax.set_title('Reward at each time step', fontsize=20)
-    ax.legend()
+    ax.legend(loc='upper right', fontsize=14)
     pdf = os.path.join(output_dir, "aggregates", 'reward_time_series.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
@@ -1555,7 +1556,7 @@ def _plot_cumulative_reward(sim_times, reward_array, reset_times, output_dir, pi
     ax.set_xlabel(r'Time ($\text{s}$)')
     ax.set_ylabel('Cumulative reward (-)')
     ax.set_title('Cumulative reward', fontsize=20)
-    ax.legend()
+    ax.legend(loc='upper right', fontsize=14)
     pdf = os.path.join(output_dir, "aggregates", 'cumulative_reward.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
@@ -1581,7 +1582,7 @@ def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_time
     ax.set_ylabel('Cost of Transport (-)')
     ax.set_title('Instantaneous Cost of Transport', fontsize=20)
     ax.set_ylim(0, 6)
-    ax.legend()
+    ax.legend(loc='upper right', fontsize=14)
     pdf = os.path.join(output_dir, "aggregates", "cost_of_transport", 'cost_of_transport_over_time.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig.savefig(pdf, dpi=600)
@@ -1684,7 +1685,7 @@ def _plot_total_base_overview(sim_times, base_position_array, base_orientation_a
             draw_resets(ax, reset_times)
         ax.set_title(title, fontsize=20)
         ax.set_xlabel(r'Time ($\text{s}$)')
-        ax.legend()
+        ax.legend(loc='upper right', fontsize=14)
     pdf = os.path.join(output_dir, "base_kinematics", 'base_overview_world.pdf')
     os.makedirs(os.path.dirname(pdf), exist_ok=True)
     fig_overview.savefig(pdf, dpi=600)
@@ -2020,7 +2021,7 @@ def _plot_foot_velocity_vs_height_overview(
     ax.set_xlabel(r"Foot Height (contact frame) ($\text{m}$)")
     ax.set_ylabel(r"Foot Velocity (world frame) ($\text{m} \cdot \text{s}^{-1}$)")
     ax.grid(True)
-    ax.legend()
+    ax.legend(loc='upper right', fontsize=14)
 
     subfolder = "foot_velocity_vs_height"
     pdf_path = os.path.join(output_dir, subfolder, "foot_velocity_vs_height_overview.pdf")
@@ -2357,7 +2358,7 @@ def _plot_foot_velocity_time_series_stance_focused(
         ax.set_ylabel(rf'Velocity {component_label} ($\text{{m}} \cdot \text{{s}}^{{-1}})$')
         
         if plotted_anything or not first_stance_span_for_legend:
-             ax.legend(loc='best')
+             ax.legend(loc='upper right', fontsize=14)
 
     axes_grid[-1, 0].set_xlabel(r'Time ($\text{s}$)')
     axes_grid[-1, 1].set_xlabel(r'Time ($\text{s}$)')
@@ -2429,7 +2430,7 @@ def _plot_joint_phase_line_overview(
     ax.set_ylabel(ylabel, fontsize=22)
     ax.tick_params(axis='both', which='major', labelsize=20)
     ax.grid(True)
-    ax.legend()
+    ax.legend(loc='upper right', fontsize=14)
 
     os.makedirs(output_dir, exist_ok=True)
     pdf_path = os.path.join(output_dir, "overview_line.pdf")
