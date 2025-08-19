@@ -324,7 +324,8 @@ def main():
     # This allows more constraints to be added or removed without leading to issues in this eval script.
     constraint_bounds = load_constraint_bounds(os.path.join(args.run_dir, 'params'))
     env_cfg.constraints.foot_contact_force.params["limit"] = constraint_bounds["foot_contact_force"][1]
-    env_cfg.constraints.front_hfe_position.params["limit"] = constraint_bounds["RL_thigh_joint"][1]
+    if "RL_thigh_joint" in constraint_bounds: # For runs that do not use style constraints
+        env_cfg.constraints.front_hfe_position.params["limit"] = constraint_bounds["RL_thigh_joint"][1]
 
     total_sim_steps = args.random_sim_step_length + len(fixed_command_scenarios) * fixed_command_sim_steps
     env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array")
