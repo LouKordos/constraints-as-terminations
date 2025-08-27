@@ -4,7 +4,7 @@ import re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker # <<< IMPORTED for y-tick resolution
+import matplotlib.ticker as mticker
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -25,9 +25,9 @@ plt.rcParams.update({
 
 def parse_single_run_data(json_path: Path) -> Optional[pd.DataFrame]:
     """
-    Parses a single metrics_summary.json file and prints the extracted data.
+    Parses a single metrics_summary.json file for PLOTTING data and prints the extracted data.
     """
-    print(f"      - Attempting to parse {json_path.name}...")
+    print(f"      - Parsing plot data from {json_path.name}...")
     try:
         with open(json_path, 'r') as f:
             data = json.load(f)
@@ -52,30 +52,65 @@ def parse_single_run_data(json_path: Path) -> Optional[pd.DataFrame]:
                 except (ValueError, TypeError):
                     continue
         if not records:
-            print(f"      - ⚠️ Warning: No valid CoT data points found in file.")
+            print(f"      - ⚠️ Warning: No valid CoT sweep data points found in file.")
             return None
         
         df = pd.DataFrame(records)
-        print(f"      - ✅ Successfully parsed {len(df)} data points:")
-        print(df.to_string(index=False).replace('\n', '\n      - '))
+        print(f"      - ✅ Successfully parsed {len(df)} CoT sweep data points.")
         return df
         
     except (json.JSONDecodeError, FileNotFoundError) as e:
         print(f"      - ❌ Error reading or parsing file: {e}")
         return None
 
-def find_and_parse_runs(base_dir: Path, start_dt: Optional[datetime], end_dt: Optional[datetime]) -> list[pd.DataFrame]:
+# <<< UPDATED: This function now correctly handles the nested violation dictionaries
+def parse_top_level_stats(json_path: Path) -> Optional[dict]:
+    """Parses a single metrics_summary.json file for top-level summary STATISTICS."""
+    try:
+        with open(json_path, 'r') as f:
+            data = json.load(f)
+        
+        stats = {}
+        stats['rms_error_x'] = data.get('base_linear_velocity_x_rms_error', np.nan)
+        stats['rms_error_y'] = data.get('base_linear_velocity_y_rms_error', np.nan)
+        
+        violations = data.get('constraint_violations_percent', {})
+        
+        # Process Torque Violations
+        torque_violations_dict = violations.get('joint_torque') if isinstance(violations, dict) else None
+        if isinstance(torque_violations_dict, dict) and torque_violations_dict:
+            # Find the single maximum violation value among all joints
+            stats['violation_torque'] = max(torque_violations_dict.values())
+        else:
+            stats['violation_torque'] = np.nan
+
+        # Process Acceleration Violations
+        accel_violations_dict = violations.get('joint_acceleration') if isinstance(violations, dict) else None
+        if isinstance(accel_violations_dict, dict) and accel_violations_dict:
+            # Find the single maximum violation value among all joints
+            stats['violation_accel'] = max(accel_violations_dict.values())
+        else:
+            stats['violation_accel'] = np.nan
+            
+        return stats
+    except (json.JSONDecodeError, FileNotFoundError):
+        return None
+
+
+def find_and_parse_runs(base_dir: Path, start_dt: Optional[datetime], end_dt: Optional[datetime]) -> tuple[list[pd.DataFrame], list[dict]]:
     """
-    Finds valid runs within a datetime range and parses their JSON data.
+    Finds valid runs, parses their JSON data for both plotting and summary stats.
+    Returns a tuple: (list_of_plot_dataframes, list_of_summary_stats_dicts)
     """
-    run_dataframes = []
+    plot_dataframes = []
+    summary_stats_list = []
     run_dir_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$')
+    
     for run_dir in sorted(base_dir.iterdir()):
         if run_dir.is_dir() and run_dir_pattern.match(run_dir.name):
             try:
                 dir_dt = datetime.strptime(run_dir.name, '%Y-%m-%d-%H-%M-%S')
                 if (start_dt and dir_dt < start_dt) or (end_dt and dir_dt > end_dt):
-                    print(f"   -> Skipping directory {run_dir.name} (outside datetime range).")
                     continue
             except ValueError:
                 continue
@@ -99,12 +134,71 @@ def find_and_parse_runs(base_dir: Path, start_dt: Optional[datetime], end_dt: Op
             
             json_file_path = latest_eval_dir / 'metrics_summary.json'
             if json_file_path.exists():
-                df = parse_single_run_data(json_file_path)
-                if df is not None:
-                    run_dataframes.append(df)
+                plot_df = parse_single_run_data(json_file_path)
+                if plot_df is not None:
+                    plot_dataframes.append(plot_df)
+                
+                stats_dict = parse_top_level_stats(json_file_path)
+                if stats_dict is not None:
+                    summary_stats_list.append(stats_dict)
             else:
                 print(f"      - ⚠️ Warning: 'metrics_summary.json' not found. Skipping run.")
-    return run_dataframes
+    return plot_dataframes, summary_stats_list
+
+# <<< UPDATED: Changed labels in metrics_map to be more descriptive
+def analyze_and_print_summary_stats(stats_list: list[dict], run_dfs: list[pd.DataFrame], series_label: str):
+    """Calculates mean and 95% CI for summary metrics and prints them."""
+    if not stats_list and not run_dfs:
+        return
+
+    print(f"\n   --- Summary Statistics for Series: '{series_label}' ---")
+    
+    # --- 1. Calculate CoT from the filtered velocity sweep data ---
+    if run_dfs:
+        full_cot_df = pd.concat(run_dfs, ignore_index=True)
+        filtered_cot = full_cot_df[full_cot_df['velocity'].between(0.6, 1.6)]['cot']
+        
+        n_cot = len(filtered_cot)
+        if n_cot > 0:
+            mean_cot = filtered_cot.mean()
+            if n_cot > 1:
+                std_cot = filtered_cot.std()
+                margin_of_error_cot = 1.96 * (std_cot / np.sqrt(n_cot))
+                print(f"      {'Mean CoT (velocities 0.6-1.6)':<40}: {mean_cot:.4f} ± {margin_of_error_cot:.4f}  (95% CI, n={n_cot})")
+            else:
+                print(f"      {'Mean CoT (velocities 0.6-1.6)':<40}: {mean_cot:.4f}  (n=1, CI not applicable)")
+        else:
+            print(f"      {'Mean CoT (velocities 0.6-1.6)':<40}: Not available in range")
+    
+    # --- 2. Calculate other top-level statistics ---
+    if stats_list:
+        stats_df = pd.DataFrame(stats_list)
+        stats_df['rms_error_xy_mean'] = stats_df[['rms_error_x', 'rms_error_y']].mean(axis=1)
+
+        metrics_map = {
+            'violation_torque': 'Max Constraint Violation (Torque %)',
+            'violation_accel': 'Max Constraint Violation (Accel %)',
+            'rms_error_x': 'Base Velocity RMS Error (X)',
+            'rms_error_y': 'Base Velocity RMS Error (Y)',
+            'rms_error_xy_mean': 'Mean Base Velocity RMS Error (X,Y)'
+        }
+
+        for key, name in metrics_map.items():
+            data_series = stats_df[key].dropna()
+            n = len(data_series)
+            
+            if n == 0:
+                print(f"      {name:<40}: Not available")
+                continue
+            
+            mean_val = data_series.mean()
+            if n > 1:
+                std_val = data_series.std()
+                margin_of_error = 1.96 * (std_val / np.sqrt(n))
+                print(f"      {name:<40}: {mean_val:.4f} ± {margin_of_error:.4f}  (95% CI, n={n})")
+            else:
+                print(f"      {name:<40}: {mean_val:.4f}  (n=1, CI not applicable)")
+
 
 def process_and_align_data(run_dataframes: list[pd.DataFrame]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if not run_dataframes:
@@ -120,7 +214,10 @@ def plot_comparison(plot_data: list, output_file: str, plot_baseline: bool):
     fig, ax = plt.subplots(figsize=(12, 8))
     colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
     for i, series_data in enumerate(plot_data):
-        label, velocities, means, std_errs = series_data.values()
+        label = series_data['label']
+        velocities = series_data['velocities']
+        means = series_data['means']
+        std_errs = series_data['std_errs']
         color = colors[i % len(colors)]
         if velocities.size == 0:
             print(f"   ⚠️ Warning: No data to plot for series '{label}'. Skipping.")
@@ -137,13 +234,11 @@ def plot_comparison(plot_data: list, output_file: str, plot_baseline: bool):
         baseline_color_index = len(plot_data) % len(colors)
         ax.plot(baseline_velocities, baseline_cot, label='Baseline (Ref. Paper)', color=colors[baseline_color_index], linestyle='--', marker='s', linewidth=2.5, markersize=8)
     
-    # <<< UPDATED: Changed title
     ax.set_title('Cost of Transport Velocity Sweep', fontsize=34)
     ax.set_xlabel('Commanded Velocity (m/s)')
     ax.set_ylabel('Cost of Transport')
     ax.legend()
     
-    # <<< NEW: Increase the number of ticks on the y-axis
     ax.yaxis.set_major_locator(mticker.MaxNLocator(nbins=10, prune='both'))
 
     print(f"💾 Saving plot to '{output_file}'...")
@@ -162,7 +257,7 @@ def parse_flexible_datetime(dt_str: str, is_end_date: bool = False) -> datetime:
         return dt_obj
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate a CI plot for Cost of Transport from local JSON files.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(description="Generate a CI plot and summary statistics from local JSON files.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("base_dir", type=str, help="The base directory containing all training run folders.")
     parser.add_argument("--labels", type=str, nargs='+', required=True, help="Labels for each experiment series (e.g., 'V1' 'V2').")
     parser.add_argument("--start_dates", type=str, nargs='+', required=True, help="Start date/datetime for each series: 'YYYY-MM-DD' or 'YYYY-MM-DD-HH-MM-SS'.")
@@ -195,12 +290,15 @@ def main():
         except ValueError:
             print(f"❌ Error: Invalid date/datetime format for series '{label}'. Use 'YYYY-MM-DD' or 'YYYY-MM-DD-HH-MM-SS'.")
             continue
-
-        run_dfs = find_and_parse_runs(base_path, start_dt, end_dt)
-        if not run_dfs:
+        
+        run_dfs, summary_stats = find_and_parse_runs(base_path, start_dt, end_dt)
+        
+        if not run_dfs and not summary_stats:
             print(f"   ❌ No valid runs found for series '{label}' in the given datetime range.")
         else:
-            print(f"   📊 Found {len(run_dfs)} valid runs to aggregate for series '{label}'.")
+            print(f"   📊 Found data from {len(summary_stats)} valid runs to aggregate for series '{label}'.")
+
+        analyze_and_print_summary_stats(summary_stats, run_dfs, label)
 
         velocities, means, std_errs = process_and_align_data(run_dfs)
         plot_data_list.append({'label': label, 'velocities': velocities, 'means': means, 'std_errs': std_errs})
