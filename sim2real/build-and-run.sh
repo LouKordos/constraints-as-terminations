@@ -70,7 +70,7 @@ else
     echo "Docker detected."
     if [[ "${CLEAN_BUILD}" == "true" ]]; then
         echo "Performing clean build: deleting markers and build directories..."
-        rm -rf /app/build /app/ros2_ws/{build,install,log} /*.marker || true
+        rm -rf /app/build /app/ros2_ws/{build,install,log} /app/odom_alternative_ws/{build,install,log} /*.marker || true
     fi
     cd /app
     echo "Building ROS packages..."
