@@ -53,7 +53,8 @@ TODO: Switch to one workspace to simplify the setup and avoid duplicate packages
 
 For deploying on the real robot, the `sim2real` directory is relevant. It uses docker containers for ROS and you should build and run using `build-and-run.sh`. Check the options inside the script. 
 
-NOTE: This script is responsible for building both the docker container and the actual code base, so you simply run it after cloning once and then inside the container again.
+NOTE: `build-and-run.sh` is responsible for building both the docker container and the actual code base, so you simply run it after cloning once and then inside the container again.
+NOTE: Run `xhost +local:docker` on the host (outside docker) if GUI applications do not open properly from within the docker container.
 
 For communication with Go2, you need to `export ROS_DOMAIN_ID=0` and source the workspace (as the docker bashrc already tells you to). Also set up your network and ensure you can ping the robot: [https://support.unitree.com/home/en/developer/Quick_start](https://support.unitree.com/home/en/developer/Quick_start).
 
@@ -73,6 +74,14 @@ Using `go2_robot` is currently not tested because it relies on Fast-LIO2 and LI-
 4. `ros2 launch go2_odometry go2_odometry_switch.launch.py`, open rviz and ensure `/tf` and the `/odom` frame work properly.
 5. `python3 rewrite_lidar_frame.py` (Hacky script to adjust lidar data frame for use with the go2_odometry URDF, will need adjustments with LIDAR other than Unitree L1)
 6. Inspect `/tf`, pointcloud, robot model, odometry in RViz2 on workstation
+
+For integration with the MID360 LIDAR (elevation mapping and Fast-LIO2 LIDAR-inertial odometry):
+1. Ensure it's on the same subnet as the robot (`192.168.123.xxx`, can be done with [Livox Viewer 2](https://www.livoxtech.com/downloads)) and that you can ping it.
+2. Test it using [Livox Viewer 2](https://www.livoxtech.com/downloads).
+3. Adjust the `/app/ros2_ws/src/third_party/livox_ros_driver2/config/MID360_config.json` to specify the correct host IP (onboard Jetson or workstation), as well as the LIDAR IP.
+4. Change extrinsics in `/ros2_ws/src/go2_livox_bringup/` depending on how and where you mounted the lidar on top of the robot.
+5. **DO NOT FORGET TO REBUILD THE ROS WORKSPACE** since the config file needs to be installed again (or use a symlink install).
+6. Next, ensure you can see the lidar point cloud when running `ros2 launch livox_ros_driver2 rviz_MID360_launch.py`.
 
 ## Running CaT (original repo, outdated)
 
