@@ -13,6 +13,7 @@ git clone https://github.com/inria-paris-robotics-lab/go2_odometry.git || (cd go
 # Lower foot contact threshold to finish initialization correctly (OBSOLETE DUE TO UPSTREAM CHANGES)
 # sed -i "s|if np.min(f_contact) > 30|if np.min(f_contact) > 20|" ./go2_odometry/scripts/feet_to_odom_inekf.py
 git clone https://github.com/inria-paris-robotics-lab/go2_description.git || (cd go2_description && git pull)
+git clone https://github.com/Ericsii/livox_ros_driver2 -b feature/use-standard-unit || (cd livox_ros_driver2 && git pull)
 git clone https://github.com/Unitree-Go2-Robot/unitree_go.git || (cd unitree_go && git pull)
 # git clone https://github.com/LouKordos/elevation_mapping_cupy.git -b ros2_humble || (cd elevation_mapping_cupy && git pull)
 
@@ -57,6 +58,8 @@ COLCON_ARGS=(
     --parallel-workers $(nproc)
 )
 FIRST_BUILD_MARKER=/colcon-ros2_ws_clean_build.marker
+
+cd $BASE_DIR/odom_alternative_ws/
 
 if [[ -d "${BASE_DIR}/odom_alternative_ws" ]]; then
     if [[ ! -f "${FIRST_BUILD_MARKER}" ]]; then

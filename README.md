@@ -44,12 +44,14 @@ Training and isaac lab related tasks were tested without docker, by using `creat
 
 ### Sim2Real
 
-TODO: Integrate elevation_mapping_cupy into docker container (issue is that it wants humble and Ubuntu 22.04 and interferes with some other packages like `numpy < 2.0` requirement)
-TODO: Use 2x realsense in go2 boxes with elevation_mapping_cupy, one in front one in back
-TODO: Use livox mid360 with LI-INIT and Fast-LIO2 for more accurate odometry
-TODO: Use livox mid360 for elevation_mapping_cupy
-TODO: Explain that separate elevation_mapping_cupy is needed due to nupmy compat issues, just run both and use same ROS_DOMAIN_ID
-TODO: Switch to one workspace to simplify the setup and avoid duplicate packages (currently not possible due to naming conflicts in `go2_odometry`. If this persists, switch to shared underlay and only have two separate workspaces for packages that are not common)
+##### TODO
+- Integrate elevation_mapping_cupy into docker container (issue is that it wants humble and Ubuntu 22.04 and interferes with some other packages like `numpy < 2.0` requirement)
+- Use 2x realsense in go2 boxes with elevation_mapping_cupy, one in front one in back
+- Use livox mid360 with LI-INIT and Fast-LIO2 for more accurate odometry
+- Use livox mid360 for elevation_mapping_cupy
+- Explain that separate elevation_mapping_cupy is needed due to nupmy compat issues, just run both and use same ROS_DOMAIN_ID
+- Switch to one workspace to simplify the setup and avoid duplicate packages (currently not possible due to naming conflicts in `go2_odometry`. If this persists, switch to shared underlay and only have two separate workspaces for packages that are not common)
+- Switch to Fast-LIO2 with mid360, adjust go2_livox_bringup to replcae go2_odometry or merge fast-lio2 with go2_odometry
 
 For deploying on the real robot, the `sim2real` directory is relevant. It uses docker containers for ROS and you should build and run using `build-and-run.sh`. Check the options inside the script. 
 
@@ -69,11 +71,15 @@ Using `go2_robot` is currently not tested because it relies on Fast-LIO2 and LI-
 **Important:** If you run the ROS nodes first, this will cause issues. The Unitree Go2 publishes odometry and some other topics only when high level control mode is enabled (low level control mode **disabled**), and disables them once you want to control the actuators directly. Follow the steps below to set everything up:
 
 1. **In a new terminal without ROS sourced**: Run `build-and-run.sh` inside the docker container as a first step, so that the robot disables the publishers for these topics. Ensure the robot is standing in place or following velocity commands correctly.
-2. In a separate terminal, source ROS2, run `colcon build` inside `/app/odom_alternative_ws`, `source /app/odom_alternative_ws/install/setup.bash`, `export ROS_DOMAIN_ID=0` so that go2 topics become visible
-3. Ensure you see `/lowstate` under `ros2 topic list`
-4. `ros2 launch go2_odometry go2_odometry_switch.launch.py`, open rviz and ensure `/tf` and the `/odom` frame work properly.
-5. `python3 rewrite_lidar_frame.py` (Hacky script to adjust lidar data frame for use with the go2_odometry URDF, will need adjustments with LIDAR other than Unitree L1)
-6. Inspect `/tf`, pointcloud, robot model, odometry in RViz2 on workstation
+2. To set up the MID360 LIDAR (used for elevation mapping and Fast-LIO2 LIDAR-inertial odometry), ensure the lidar is on the same subnet as the robot (`192.168.123.xxx`, can be done with [Livox Viewer 2](https://www.livoxtech.com/downloads)) and that you can ping it.
+2. Ensure data readouts work properly using [Livox Viewer 2](https://www.livoxtech.com/downloads).
+3. Adjust the `/app/ros2_ws/src/third_party/livox_ros_driver2/config/MID360_config.json` to specify the correct host IP (onboard Jetson or workstation), as well as the LIDAR IP.
+4. Change extrinsics in `/ros2_ws/src/go2_livox_bringup/launch/livox.launch.py` depending on how and where you mounted the lidar on top of the robot. This will create a static transform publisher to define where the lidar is relative to the base link
+6. Run `bootstrap_ros2_ws.sh` again.
+3. `export ROS_DOMAIN_ID=0` so that Go2 topics become visible
+4. Ensure you see `/lowstate` and under `ros2 topic list`
+5. Run `ros2 launch go2_livox_bringup bringup.launch.py`, open rviz2 and ensure `/tf` and the `/odom` frame work properly.
+6. Inspect `/tf`, livox pointcloud, robot model, odometry in RViz2 on workstation
 
 For integration with the MID360 LIDAR (elevation mapping and Fast-LIO2 LIDAR-inertial odometry):
 1. Ensure it's on the same subnet as the robot (`192.168.123.xxx`, can be done with [Livox Viewer 2](https://www.livoxtech.com/downloads)) and that you can ping it.
