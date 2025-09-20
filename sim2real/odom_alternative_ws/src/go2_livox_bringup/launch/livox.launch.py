@@ -13,6 +13,13 @@ def generate_launch_description():
         # Static transform from base to the livox_frame
         # Update these arguments with your measured physical offsets!
         # args: 'x y z yaw pitch roll parent_frame child_frame' (meters and radians)
+        Node(                                                                                                                                                                            
+            package='tf2_ros',                                                                                                                                                          
+            executable='static_transform_publisher',                                                                                                                                    
+            name='base_to_livox_static_transform',                                                                                                                                      
+            arguments=['0.34', '0.0', '0.15', '0', '0.7854', '0', 'base', 'livox_frame'],                                                                                               
+            output='screen',                                                                                                                                                            
+        ),
 
         # Livox MID360 Driver Node
         Node(
