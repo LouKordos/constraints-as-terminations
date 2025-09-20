@@ -40,7 +40,7 @@ RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake -G Ninja --compile-no-warnin
       -DCMAKE_CUDA_FLAGS="-Wno-error" \
       -DCMAKE_INSTALL_PREFIX=/torch/libtorch \
       ..
-RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake --build . --target install
+RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake --build . --target install -j12
 
 # ROS2 stuff
 RUN apt-get update -y && apt-get install -y ros-dev-tools ros-$ROS_DISTRO-desktop ros-$ROS_DISTRO-rmw-cyclonedds-cpp ros-$ROS_DISTRO-rosidl-generator-dds-idl ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan ros-$ROS_DISTRO-eigenpy
