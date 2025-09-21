@@ -35,6 +35,7 @@ cd $BASE_DIR/ros2_ws
 ROSDEP_MARKER=/rosdep-bootstrap-ros-ws.marker
 if [[ ! -f "${ROSDEP_MARKER}" ]]; then
     echo "${ROSDEP_MARKER} missing, initializing and updating rosdep..."
+    apt-get update -y
     apt-get install -y libyaml-cpp-dev libboost-all-dev ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan
     rosdep init || true
     rosdep update
