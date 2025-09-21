@@ -118,7 +118,7 @@ else
         source /opt/ros/$ROS_DISTRO/setup.bash
         set -x
         cd "${BAG_DIR}"
-        exec ros2 bag record --output "${BAG_DIR}/bag" /tf /tf_static /joint_states /lowstate /lowcmd /pointcloud /robot_description /initialpose /imu_lowstate /utlidar/imu /imu --regex "^/[oO]dom.*" > "${LOG_DIR}/ros2_bag_${BAG_TS}.log" 2>&1
+        exec ros2 bag record --output "${BAG_DIR}/bag" /tf /tf_static /joint_states /lowstate /lowcmd /pointcloud /robot_description /initialpose /imu_lowstate /utlidar/imu /imu /odometry/filtered /livox/lidar /livox/imu /statistics /elevation_map_points /elevation_mapping_node/elevation_map_filter /elevation_mapping_node/elevation_map_raw --regex "^/[oO]dom.*" > "${LOG_DIR}/ros2_bag_${BAG_TS}.log" 2>&1
     ) &
     BAG_PID=$!
     trap 'echo "Stopping ROS2 recorder (PID $BAG_PID)…"; kill -SIGINT "$BAG_PID"' EXIT
