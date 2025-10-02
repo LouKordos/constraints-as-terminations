@@ -254,7 +254,11 @@ def generate_summary_report(
             if not full_cot_df.empty:
                 filtered_cot = full_cot_df[full_cot_df['velocity'].between(min_vel, max_vel)]['cot']
                 if not filtered_cot.empty:
-                    json_df.loc[0, 'mean_cot_filtered'] = filtered_cot.mean()
+                    # Use a new column to avoid potential SettingWithCopyWarning
+                    json_df_copy = json_df.copy()
+                    json_df_copy.loc[0, 'mean_cot_filtered'] = filtered_cot.mean()
+                    json_df = json_df_copy
+
 
         stats_df = pd.concat([wandb_df, json_df], axis=1)
 
@@ -294,7 +298,6 @@ def plot_timeseries(plot_data: List[Dict], metric_name: str, output_path: Path):
     fig, ax = plt.subplots(figsize=(12, 8))
     colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
     
-    # --- CHANGE: Conditional line thickness and improved labels ---
     linewidth = 2.0 if metric_name == "Curriculum/terrain_levels" else 1.5
     label_map = {
         "Curriculum/terrain_levels": "Terrain Level",
@@ -317,13 +320,12 @@ def plot_timeseries(plot_data: List[Dict], metric_name: str, output_path: Path):
         else:
              logging.debug(f"Series '{data['label']}' has only one run. Plotting line only.")
 
-    title = f'{metric_name} Progression' if len(plot_data) == 1 else f'{metric_name} Comparison'
+    title = f'{ylabel} Progression'
     ax.set_title(title, fontsize=34)
     ax.set_xlabel('Iteration')
     ax.set_ylabel(ylabel)
     ax.legend()
     
-    # --- CHANGE: Limit y-axis for energy plot ---
     if metric_name == "Episode/EnergyConsumed":
         ax.set_ylim(0, 2000)
     
@@ -392,7 +394,7 @@ def main():
     parser.add_argument("--end_times", type=str, nargs='+', required=True, help="End date/datetime for each series.")
     
     # Data source and metrics
-    parser.add_argument("--base_dir", type=str, required=True, help="Base directory containing local training run folders.")
+    parser.add_argument("--base_dirs", type=str, nargs='+', required=True, help="Base directory for local files for each series.")
     parser.add_argument("--wandb_plot_metric", type=str, default="Curriculum/terrain_levels", help="Primary WandB metric for a time-series plot.")
     parser.add_argument("--min_iterations", type=int, default=500, help="Minimum data points for a wandb run to be included.")
     parser.add_argument("--cot_velocity_range", type=float, nargs=2, default=[0.6, 1.6], help="Min and max velocity for CoT summary statistic and plot.")
@@ -404,8 +406,8 @@ def main():
 
     args = parser.parse_args()
     num_series = len(args.labels)
-    if not (num_series == len(args.projects) == len(args.start_times) == len(args.end_times)):
-        parser.error("The number of --labels, --projects, --start_times, and --end_times must be the same.")
+    if not (num_series == len(args.projects) == len(args.start_times) == len(args.end_times) == len(args.base_dirs)):
+        parser.error("The number of --labels, --projects, --start_times, --end_times, and --base_dirs must be the same.")
 
     for i in range(num_series):
         try:
@@ -422,22 +424,25 @@ def main():
     for arg, value in sorted(vars(args).items()): logging.info(f"  --{arg}: {value}")
 
     setup_plotting_style()
-    base_path = Path(args.base_dir)
-    if not base_path.is_dir():
-        logging.error(f"The specified base directory does not exist: {args.base_dir}"); sys.exit(1)
-        
     wandb_summary_metrics = ["Curriculum/terrain_levels", "Episode/MaxJointPos", "Episode/MaxAirTime", "Episode/EnergyConsumed"]
     all_metrics_to_plot = sorted(list(set([args.wandb_plot_metric] + wandb_summary_metrics)))
     all_series_data = {}
 
     for i in range(num_series):
-        label, project = args.labels[i], args.projects[i]
+        label = args.labels[i]
+        project = args.projects[i]
         start_dt = parse_flexible_datetime(args.start_times[i])
         end_dt = parse_flexible_datetime(args.end_times[i], is_end_date=True)
-        
+        base_path = Path(args.base_dirs[i])
+
         logging.info(f"\n{'='*20} Processing Series {i+1}/{num_series}: '{label}' {'='*20}")
         logging.info(f"Time range: {start_dt} to {end_dt}")
+        logging.info(f"Local data path: {base_path}")
 
+        if not base_path.is_dir():
+            logging.error(f"The specified base directory for series '{label}' does not exist: {base_path}")
+            sys.exit(1)
+        
         wandb_run_dfs, wandb_summaries = fetch_wandb_data(project, start_dt, end_dt, all_metrics_to_plot, args.min_iterations)
         cot_dfs, json_summaries = find_and_parse_json_data(base_path, start_dt, end_dt)
         
@@ -451,7 +456,6 @@ def main():
     # --- Generate Outputs ---
     generate_summary_report(all_series_data, args.cot_velocity_range, output_dir)
     
-    # Generate all wandb plots
     for metric in all_metrics_to_plot:
         plot_data_for_metric = []
         for label, series_data in all_series_data.items():
@@ -460,11 +464,9 @@ def main():
             plot_data_for_metric.append({'label': label, 'iterations': iters, 'means': means, 'std_errs': stderrs})
         plot_timeseries(plot_data_for_metric, metric, output_dir)
 
-    # Generate CoT plot
     cot_plot_data = []
     min_vel, max_vel = args.cot_velocity_range
     for label, series_data in all_series_data.items():
-        # --- CHANGE: Filter CoT dataframes before plotting ---
         filtered_dfs = [df[df['velocity'].between(min_vel, max_vel)] for df in series_data['cot_dfs']]
         vels, means, stderrs = align_cot_data([df for df in filtered_dfs if not df.empty])
         cot_plot_data.append({'label': label, 'velocities': vels, 'means': means, 'std_errs': stderrs})
