@@ -311,7 +311,7 @@ class ObservationsCfg:
         height_map = ObsTerm(
             func=height_map_grid,
             params={"asset_cfg": SceneEntityCfg("ray_caster")},
-            noise=Unoise(n_min=-0.01, n_max=0.01),
+            noise=Unoise(n_min=-0.02, n_max=0.02),
             scale=1.0,
         )
 
@@ -577,15 +577,15 @@ class EventCfg:
     )
 
     # set pushing every step, as only some of the environments are chosen as in the isaacgym cat version
-    # push_robot = EventTerm(
-    #     # Standard push_by_setting_velocity also works, but interestingly results
-    #     # in a different gait
-    #     func=events.push_by_setting_velocity_with_random_envs,
-    #     mode="interval",
-    #     is_global_time=True,
-    #     interval_range_s=(0.0, 0.005),
-    #     params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
-    # )
+    push_robot = EventTerm(
+        # Standard push_by_setting_velocity also works, but interestingly results
+        # in a different gait
+        func=events.push_by_setting_velocity_with_random_envs,
+        mode="interval",
+        is_global_time=True,
+        interval_range_s=(0.0, 0.005),
+        params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
+    )
 
 
 @configclass
@@ -819,13 +819,12 @@ class CurriculumCfg:
     )
     '''
 
-    
     power = CurrTerm(
         func=curriculums.update_reward_weight_linear,
         params={
             "term_name": "minimize_power",
-            "num_steps_from_start_step": 3000,
-            "start_at_step": 15000 * 10,
+            "num_steps_from_start_step": 300000,
+            "start_at_step": 0,
             "start_weight": 0.0,
             "end_weight": 0.4 * 0.02 # Instead of setting scaling_factor=0.02 because ppo.py overrides it
 
