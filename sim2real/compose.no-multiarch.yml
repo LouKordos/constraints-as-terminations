@@ -1,0 +1,4 @@
+services:
+  cat_sim2real:
+    build:
+      platforms: !reset []

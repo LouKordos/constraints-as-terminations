@@ -6,6 +6,7 @@ import yaml
 import numpy as np
 import torch
 import time
+import zmq
 from functools import partial
 import sys
 sys.stdout.reconfigure(line_buffering=True)
@@ -251,6 +252,7 @@ def main():
     from isaaclab.utils.dict import print_dict
     from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
     from cat_envs.tasks.utils.cleanrl.ppo import Agent
+    from cat_envs.tasks.utils.cleanrl.ppo import ActorWithRMS
     from cat_envs.tasks.locomotion.velocity.config.solo12.cat_go2_rough_terrain_env_cfg import height_map_grid
     from isaaclab.managers import EventTermCfg
     from isaaclab.utils.math import euler_xyz_from_quat, quat_rotate_inverse
@@ -299,9 +301,19 @@ def main():
         ("pure_spin", torch.tensor([0.0, 0.0, 0.5], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         # ("slow_walk_x_flat_terrain", torch.tensor([0.1, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         # ("slow_walk_y_flat_terrain", torch.tensor([0.0, 0.1, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("medium_walk_x_flat_terrain", torch.tensor([0.5, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        # ("medium_walk_x_flat_terrain", torch.tensor([0.5, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("cot_sweep_walk_x_flat_terrain_0.2", torch.tensor([0.2, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("cot_sweep_walk_x_flat_terrain_0.4", torch.tensor([0.4, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("cot_sweep_walk_x_flat_terrain_0.6", torch.tensor([0.6, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("cot_sweep_walk_x_flat_terrain_0.8", torch.tensor([0.8, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("cot_sweep_walk_x_flat_terrain_1.0", torch.tensor([1.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("cot_sweep_walk_x_flat_terrain_1.2", torch.tensor([1.2, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("cot_sweep_walk_x_flat_terrain_1.4", torch.tensor([1.4, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("cot_sweep_walk_x_flat_terrain_1.6", torch.tensor([1.6, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("cot_sweep_walk_x_flat_terrain_1.8", torch.tensor([1.8, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("cot_sweep_walk_x_flat_terrain_2.0", torch.tensor([2.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         # ("medium_walk_y_flat_terrain", torch.tensor([0.0, 0.5, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("fast_walk_x_flat_terrain", torch.tensor([1.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        # ("fast_walk_x_flat_terrain", torch.tensor([1.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         # ("fast_walk_y_flat_terrain", torch.tensor([0.0, 1.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("very_fast_walk_x_flat_terrain", torch.tensor([2.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         # ("slow_walk_x_uneven_terrain", torch.tensor([0.1, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
@@ -322,7 +334,8 @@ def main():
     # This allows more constraints to be added or removed without leading to issues in this eval script.
     constraint_bounds = load_constraint_bounds(os.path.join(args.run_dir, 'params'))
     env_cfg.constraints.foot_contact_force.params["limit"] = constraint_bounds["foot_contact_force"][1]
-    env_cfg.constraints.front_hfe_position.params["limit"] = constraint_bounds["RL_thigh_joint"][1]
+    if "RL_thigh_joint" in constraint_bounds: # For runs that do not use style constraints
+        env_cfg.constraints.front_hfe_position.params["limit"] = constraint_bounds["RL_thigh_joint"][1]
 
     total_sim_steps = args.random_sim_step_length + len(fixed_command_scenarios) * fixed_command_sim_steps
     env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array")
@@ -334,6 +347,7 @@ def main():
 
     policy_agent = Agent(env).to(device)
     policy_agent.load_state_dict(model_state)
+    actor_with_rms = ActorWithRMS(policy_agent)
 
     robot = env.unwrapped.scene["robot"]
     vel_term = env.unwrapped.command_manager.get_term("base_velocity")
@@ -392,6 +406,13 @@ def main():
         print(f"Starting ffmpeg process={' '.join(ffmpeg_cmd)}")
         ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdout=ffmpeg_process_logfile, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, bufsize=4*1024*1024)
 
+    CPP_INFERENCE = False # Allows testing C++ inference in devcontainer (test_pytorch_policy.cpp) in simulation
+    if CPP_INFERENCE:
+        print("NOTE: C++ inference selected, connecting to 127.0.0.1:5555 via zmq...")
+        ctx = zmq.Context()
+        socket = ctx.socket(zmq.REQ)
+        socket.connect("tcp://127.0.0.1:5555")
+
     for t in tqdm(range(total_sim_steps)):
         # These should only ever run at the end of eval / after random sampling because set_fixed_velocity_command breaks random command sampling!
         if t >= args.random_sim_step_length and (t-args.random_sim_step_length) % fixed_command_sim_steps == 0:
@@ -407,7 +428,14 @@ def main():
 
         with torch.no_grad():
             inference_start = time.perf_counter_ns()
-            action, _, _, _, _ = policy_agent.get_action_and_value(policy_agent.obs_rms(policy_observation, update=False), use_deterministic_policy=True)
+            # action, _, _, _, _ = policy_agent.get_action_and_value(policy_agent.obs_rms(policy_observation, update=False), use_deterministic_policy=True)
+            if CPP_INFERENCE:
+                socket.send(policy_observation.cpu().numpy().tobytes())
+                action_np = np.frombuffer(socket.recv(), dtype=np.float32).reshape(1,12).copy()
+                action = torch.from_numpy(action_np)
+            else:
+                action = actor_with_rms(policy_observation)
+
             inference_end = time.perf_counter_ns()
             inference_duration_us = (inference_end - inference_start) / 1e+3
             inference_durations.append(inference_duration_us)

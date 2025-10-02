@@ -89,6 +89,8 @@ def height_map_grid(env, asset_cfg: SceneEntityCfg):
     # 4) compute local coordinates, then the height = z_hit - z_base
     local = hits_clean - base_expanded_to_match_shape_world_frame # [E, R, 3]
     height = local[..., 2] # [E, R]
+    # height = torch.ones_like(height) * -0.33
+    # print(height.mean().item())
     #test_offset = torch.ones_like(height) * 0.03
     #height += test_offset
     # height = torch.zeros_like(height)
@@ -165,7 +167,7 @@ class MySceneCfg(InteractiveSceneCfg):
         update_period=0.0,  # will override in __post_init__
         offset=RayCasterCfg.OffsetCfg(pos=(0.2, 0.0, 0.5)),  # 0.5 m above base
         mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
-        attach_yaw_only=True,  # keep sensor level (no pitch/roll with body). This is a gross oversimplification but the original paper also used a grid of heights around the robot
+        attach_yaw_only=True, # keep sensor level (no pitch/roll with body). This is a gross oversimplification but the original paper also used a grid of heights around the robot
         pattern_cfg=patterns.GridPatternCfg( # Grid pattern shoots down vertical rays to retrieve hight at each grid point. Needs adjustments to be more realistic, such as using e.g. LIDARConfig
             size=[1, 0.8], # see Fig. 3 in paper for grid layout, I tried approximating it visually here
             resolution=0.08,
@@ -309,7 +311,7 @@ class ObservationsCfg:
         height_map = ObsTerm(
             func=height_map_grid,
             params={"asset_cfg": SceneEntityCfg("ray_caster")},
-            noise=Unoise(n_min=-0.01, n_max=0.01),
+            noise=Unoise(n_min=-0.02, n_max=0.02),
             scale=1.0,
         )
 
@@ -575,15 +577,15 @@ class EventCfg:
     )
 
     # set pushing every step, as only some of the environments are chosen as in the isaacgym cat version
-    # push_robot = EventTerm(
-    #     # Standard push_by_setting_velocity also works, but interestingly results
-    #     # in a different gait
-    #     func=events.push_by_setting_velocity_with_random_envs,
-    #     mode="interval",
-    #     is_global_time=True,
-    #     interval_range_s=(0.0, 0.005),
-    #     params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
-    # )
+    push_robot = EventTerm(
+        # Standard push_by_setting_velocity also works, but interestingly results
+        # in a different gait
+        func=events.push_by_setting_velocity_with_random_envs,
+        mode="interval",
+        is_global_time=True,
+        interval_range_s=(0.0, 0.005),
+        params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
+    )
 
 
 @configclass
@@ -607,7 +609,7 @@ class RewardsCfg:
     minimize_power = RewTerm(
         func=rewards.joint_power,
         weight=0.0, # Updated by curriculum
-        params={"scaling_factor": 0.02} # May be updated in ppo.py, check carefully!
+        params={"scaling_factor": 1.0 } # Set to 1.0 in ppo.py anyway
     )
 
 # Never forget to also add a curriculum term for each added constraint
@@ -817,16 +819,17 @@ class CurriculumCfg:
     )
     '''
 
-    # power = CurrTerm(
-    #     func=curriculums.update_reward_weight_linear,
-    #     params={
-    #         "term_name": "minimize_power",
-    #         "num_steps_from_start_step": 3000,
-    #         "start_at_step": 15000 * 10,
-    #         "start_weight": 0.0,
-    #         "end_weight": 0.4
-    #     }
-    # )
+    power = CurrTerm(
+        func=curriculums.update_reward_weight_linear,
+        params={
+            "term_name": "minimize_power",
+            "num_steps_from_start_step": 300000,
+            "start_at_step": 0,
+            "start_weight": 0.0,
+            "end_weight": 0.4 * 0.02 # Instead of setting scaling_factor=0.02 because ppo.py overrides it
+
+        }
+    )
 
     terrain_levels = CurrTerm(func=terrain_levels_with_ray_caster_refresh)
     # terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)

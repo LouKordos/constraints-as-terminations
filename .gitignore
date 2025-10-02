@@ -1,7 +1,7 @@
 videos
 /isaacgymenvs/logs
 *train_dir*
-*wandb*
+wandb
 *ige_logs*
 *.egg-info
 /.vs
@@ -36,3 +36,14 @@ runs*
 constraints-as-terminations-logs-and-runs.tar.zst
 job.*.out
 job.*.err
+sim2real/build
+sim2real/build.log
+sim2real/tracy-profiles
+sim2real/ros2_ws/**/build
+sim2real/ros2_ws/**/install
+sim2real/ros2_ws/**/log
+sim2real/ros2_ws/src/third_party
+sim2real/odom_alternative_ws/**/build
+sim2real/odom_alternative_ws/**/install
+sim2real/odom_alternative_ws/**/log
+sim2real/odom_alternative_ws/src/third_party
