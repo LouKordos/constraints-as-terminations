@@ -56,6 +56,7 @@ Training and isaac lab related tasks were tested without docker, by using `creat
 For deploying on the real robot, the `sim2real` directory is relevant. It uses docker containers for ROS and you should build and run using `build-and-run.sh`. Check the options inside the script. 
 
 NOTE: `build-and-run.sh` is responsible for building both the docker container and the actual code base, so you simply run it after cloning once and then inside the container again.
+
 NOTE: Run `xhost +local:docker` on the host (outside docker) if GUI applications do not open properly from within the docker container.
 
 For communication with Go2, you need to `export ROS_DOMAIN_ID=0` and source the workspace (as the docker bashrc already tells you to). Also set up your network and ensure you can ping the robot: [https://support.unitree.com/home/en/developer/Quick_start](https://support.unitree.com/home/en/developer/Quick_start).
@@ -73,21 +74,23 @@ Using `go2_robot` is currently not tested because it relies on Fast-LIO2 and LI-
 1. **In a new terminal without ROS sourced**: Run `build-and-run.sh` inside the docker container as a first step, so that the robot disables the publishers for these topics. Ensure the robot is standing in place or following velocity commands correctly.
 2. To set up the MID360 LIDAR (used for elevation mapping and Fast-LIO2 LIDAR-inertial odometry), ensure the lidar is on the same subnet as the robot (`192.168.123.xxx`, can be done with [Livox Viewer 2](https://www.livoxtech.com/downloads)) and that you can ping it.
 2. Ensure data readouts work properly using [Livox Viewer 2](https://www.livoxtech.com/downloads).
-3. Adjust the `/app/ros2_ws/src/third_party/livox_ros_driver2/config/MID360_config.json` to specify the correct host IP (onboard Jetson or workstation), as well as the LIDAR IP.
-4. Change extrinsics in `/ros2_ws/src/go2_livox_bringup/launch/livox.launch.py` depending on how and where you mounted the lidar on top of the robot. This will create a static transform publisher to define where the lidar is relative to the base link
+3. Adjust the `/app/odom_alternative_ws/src/third_party/livox_ros_driver2/config/MID360_config.json` AND `/app/ros2_ws/src/third_party/livox_ros_driver2/config/MID360_config.json` to specify the correct host IP (onboard Jetson or workstation), as well as the LIDAR IP.
+4. Change extrinsics in `/app/odom_alternative_ws/src/go2_livox_bringup/launch/livox.launch.py` depending on how and where you mounted the lidar on top of the robot. This will create a static transform publisher to define where the lidar is relative to the base link
 6. Run `bootstrap_ros2_ws.sh` again.
 3. `export ROS_DOMAIN_ID=0` so that Go2 topics become visible
+4. `source /app/odom_alternative_ws/install/setup.bash`
 4. Ensure you see `/lowstate` and under `ros2 topic list`
-5. Run `ros2 launch go2_livox_bringup bringup.launch.py`, open rviz2 and ensure `/tf` and the `/odom` frame work properly.
+5. Run `ros2 launch go2_livox_bringup bringup.launch.py | grep -v "Failed to parse type hash for topic"`
+7. Open rviz2 and ensure `/tf` and the `/odom` frame work properly.
 6. Inspect `/tf`, livox pointcloud, robot model, odometry in RViz2 on workstation
 
-For integration with the MID360 LIDAR (elevation mapping and Fast-LIO2 LIDAR-inertial odometry):
-1. Ensure it's on the same subnet as the robot (`192.168.123.xxx`, can be done with [Livox Viewer 2](https://www.livoxtech.com/downloads)) and that you can ping it.
-2. Test it using [Livox Viewer 2](https://www.livoxtech.com/downloads).
-3. Adjust the `/app/ros2_ws/src/third_party/livox_ros_driver2/config/MID360_config.json` to specify the correct host IP (onboard Jetson or workstation), as well as the LIDAR IP.
-4. Change extrinsics in `/ros2_ws/src/go2_livox_bringup/` depending on how and where you mounted the lidar on top of the robot.
-5. **DO NOT FORGET TO REBUILD THE ROS WORKSPACE** since the config file needs to be installed again (or use a symlink install).
-6. Next, ensure you can see the lidar point cloud when running `ros2 launch livox_ros_driver2 rviz_MID360_launch.py`.
+### Elevation Mapping
+This is a WIP, I will add more detailed instructions when everything is working properly. Right now, clone my [fork](https://github.com/LouKordos/elevation_mapping_cupy/tree/ros2_humble) **and `git checkout ros2_humble`**, then build the docker container. Inside the docker shell:
+
+1. `export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`
+2. `export ROS_DOMAIN_ID=0`
+3. `ros2 topic list` to ensure that you see all the robot topics
+4. `ros2 launch elevation_mapping_cupy elevation_mapping_go2.launch.py use_python_node:=false`
 
 ## Running CaT (original repo, outdated)
 
