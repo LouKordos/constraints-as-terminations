@@ -430,9 +430,11 @@ void run_control_loop(std::filesystem::path checkpoint_path) {
             }	
         }
 
-        // Walk 3sec for testing
-        if(false && std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() - start_ms < 3000) {
-                vel_command[0] = 1.0f;
+        const bool walk_a_bit = false;
+        if(walk_a_bit) {logger->warn("ROBOT WILL WALK SOON!");}
+        auto time_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        if(walk_a_bit && time_now_ms - start_ms > 30000 && time_now_ms - start_ms < 35000) {
+            vel_command[0] = 1.0f;
         }
 
         auto observation = construct_observation_tensor(robot_state, vel_command, previous_action, model_observation_dim == observation_dim_history, robot_state.counter == 0);
