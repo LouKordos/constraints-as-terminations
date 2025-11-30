@@ -85,12 +85,12 @@ Using `go2_robot` is currently not tested because it relies on Fast-LIO2 and LI-
 6. Inspect `/tf`, livox pointcloud, robot model, odometry in RViz2 on workstation
 
 ### Elevation Mapping
-This is a WIP, I will add more detailed instructions when everything is working properly. Right now, clone my [fork](https://github.com/LouKordos/elevation_mapping_cupy/tree/ros2_humble) **and `git checkout ros2_humble`**, then build the docker container. Inside the docker shell:
+This is a WIP, I will add more detailed instructions when everything is working properly. For the time being, clone my [fork](https://github.com/LouKordos/elevation_mapping_cupy/tree/ros2_humble) **and `git checkout ros2_humble`**, then build the docker container. Inside the docker shell:
 
 1. `export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`
 2. `export ROS_DOMAIN_ID=0`
-3. `ros2 topic list` to ensure that you see all the robot topics
-4. `ros2 launch elevation_mapping_cupy elevation_mapping_go2.launch.py use_python_node:=false`
+3. `ros2 topic list` to ensure that you see all the robot topics. If not visible, add multicast route for network interface, set CYCLONEDDS_URI to config file specfiying which network interface to use, stop and start ros2 daemon
+4. `./src/elevation_mapping_cupy/docker/build.sh && source in.tall/setup.bash && ros2 launch elevation_mapping_cupy elevation_mapping_go2.launch.py use_python_node:=false`
 
 ## Running CaT (original repo, outdated)
 
