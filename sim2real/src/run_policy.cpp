@@ -1,3 +1,4 @@
+
 #include <print>
 #include <iostream>
 #include <memory>
@@ -11,6 +12,8 @@
 #include <format>
 #include <filesystem>
 #include <sstream>
+#include <cstdint>
+#include <cstring>
 
 #include <signal.h>
 #include <stdlib.h>
@@ -100,6 +103,243 @@ static constexpr int sdk_to_isaac_idx[12] = {
 /*11*/10  // RL_calf → Isaac[10]
 };
 
+std::atomic<bool> exit_flag {false};
+static_assert(std::atomic<bool>::is_always_lock_free, "atomic bool is not lock free.");
+
+void exit_handler([[maybe_unused]] int s) {
+    exit_flag.store(true);
+    logger->error("----------------------------------\nSIGNAL CAUGHT; EXIT FLAG SET!\n------------------------------------");
+}
+
+// --- Elevation Map Configuration ---
+const int elevation_grid_width = 13;
+const int elevation_grid_height = 11;
+const int elevation_grid_total_size = elevation_grid_width * elevation_grid_height;
+const float elevation_grid_resolution = 0.08f;
+const float elevation_sensor_offset_x = 0.2f;
+const float elevation_fill_value = -0.27f; // Must match Python fill_value_body_frame
+
+// Global storage for the policy. Initialized with fill value to ensure safety if read before first ZMQ message.
+timed_atomic<std::vector<float>> global_elevation_map_filtered{
+    std::vector<float>(elevation_grid_total_size, elevation_fill_value)
+};
+
+// Binary formats matching Python struct.pack
+// Alignment forced to 1 byte to match Python's standard packing
+#pragma pack(push, 1) 
+struct ElevationFileHeader {
+    uint8_t version;       // 1
+    float resolution;      // 0.08
+    float sensor_off_x;    // 0.2
+    uint16_t num_x;        // 13
+    uint16_t num_y;        // 11
+    uint8_t reserved[67];  // Padding
+};
+
+struct ElevationFrameHeader {
+    double timestamp;      // Unix time
+    uint8_t layer_id;      // 0=elev, 1=min, 2=smooth
+    float valid_ratio;     // 0.0-1.0
+    float pose[7];         // x, y, z, qx, qy, qz, qw
+    uint8_t reserved[32];  // Padding
+};
+#pragma pack(pop)
+
+class ElevationMapProcessor {
+public:
+    ElevationMapProcessor(std::string log_directory, std::string layer_name, int layer_id) 
+        : zmq_context_(1), zmq_socket_(zmq_context_, zmq::socket_type::sub), layer_identifier_(layer_id) 
+    {
+        // Min Filter Relative Layer -> Port 6973 (Base 6972 + 1)
+        std::string remote_endpoint = "tcp://192.168.123.224:6973"; 
+        
+        try {
+            zmq_socket_.connect(remote_endpoint);
+            zmq_socket_.set(zmq::sockopt::subscribe, ""); 
+            logger->info("ElevationMapProcessor subscribed to {} for layer '{}'", remote_endpoint, layer_name);
+        } catch (const zmq::error_t& e) {
+            logger->error("ZMQ Connection failed: {}", e.what());
+            exit_flag.store(true);
+            return;
+        }
+
+        std::string timestamp_str = std::format("{:%Y-%m-%dT%H-%M-%S.000000}", std::chrono::system_clock::now());
+        std::string raw_filename = log_directory + timestamp_str + "_" + layer_name + "_raw.bin";
+        std::string filtered_filename = log_directory + timestamp_str + "_" + layer_name + "_filtered.bin";
+
+        file_stream_raw_.open(raw_filename, std::ios::binary);
+        file_stream_filtered_.open(filtered_filename, std::ios::binary);
+
+        if (!file_stream_raw_.is_open() || !file_stream_filtered_.is_open()) {
+            logger->error("Critical: Failed to open elevation binary log files.");
+            exit_flag.store(true);
+            return;
+        }
+
+        ElevationFileHeader static_header;
+        std::memset(&static_header, 0, sizeof(static_header));
+        static_header.version = 1;
+        static_header.resolution = elevation_grid_resolution;
+        static_header.sensor_off_x = elevation_sensor_offset_x;
+        static_header.num_x = elevation_grid_width;
+        static_header.num_y = elevation_grid_height;
+
+        file_stream_raw_.write(reinterpret_cast<const char*>(&static_header), sizeof(static_header));
+        file_stream_filtered_.write(reinterpret_cast<const char*>(&static_header), sizeof(static_header));
+        
+        if (file_stream_raw_.fail() || file_stream_filtered_.fail()) {
+            logger->error("Critical: Failed to write headers to elevation log files.");
+            exit_flag.store(true);
+            return;
+        }
+
+        processing_thread_ = std::thread(&ElevationMapProcessor::processing_loop, this);
+    }
+
+    ~ElevationMapProcessor() {
+        if (processing_thread_.joinable()) {
+            logger->info("Joining elevation map data processing thread...");
+            processing_thread_.join();
+            logger->info("Joined elevation map data processing thread...");
+        }
+        if (file_stream_raw_.is_open()) file_stream_raw_.close();
+        if (file_stream_filtered_.is_open()) file_stream_filtered_.close();
+    }
+
+private:
+    zmq::context_t zmq_context_;
+    zmq::socket_t zmq_socket_;
+    int layer_identifier_;
+    std::ofstream file_stream_raw_, file_stream_filtered_;
+    std::thread processing_thread_;
+    std::vector<float> raw_data_buffer_ = std::vector<float>(elevation_grid_total_size);
+    std::vector<float> filtered_data_buffer_ = std::vector<float>(elevation_grid_total_size);
+
+    void apply_masked_spatial_filter(const std::vector<float>& input, std::vector<float>& output) {
+        for (int y = 0; y < elevation_grid_height; ++y) {
+            for (int x = 0; x < elevation_grid_width; ++x) {
+                int current_idx = y * elevation_grid_width + x;
+                double val = static_cast<double>(input[current_idx]);
+
+                if (std::abs(val - elevation_fill_value) < 1e-5) {
+                    output[current_idx] = elevation_fill_value;
+                    continue;
+                }
+
+                double accumulator = 0.0;
+                int valid_neighbor_count = 0;
+
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        int ny = y + dy;
+                        int nx = x + dx;
+
+                        if (nx >= 0 && nx < elevation_grid_width && ny >= 0 && ny < elevation_grid_height) {
+                            double neighbor_val = static_cast<double>(input[ny * elevation_grid_width + nx]);
+                            if (std::abs(neighbor_val - elevation_fill_value) > 1e-5) {
+                                accumulator += neighbor_val;
+                                valid_neighbor_count++;
+                            }
+                        }
+                    }
+                }
+
+                // Average valid neighbors (including self), or fallback to self if isolated
+                output[current_idx] = (valid_neighbor_count > 0) ? static_cast<float>(accumulator / valid_neighbor_count) : static_cast<float>(val);
+            }
+        }
+    }
+
+    void processing_loop() {
+        // The controller (this process) must run to move the robot, which allows the external Odometry node to generate valid data. 
+        // The external Elevation Map node depends on Odometry. // This Processor depends on the Elevation Map ZMQ stream. 
+        // If we enforce the 500ms timeout immediately, this process dies before the external pipeline starts. 
+        // Solution: Wait for the external pipeline to warm up while the main thread keeps the robot standing.
+        logger->info("ElevationMapProcessor: Waiting for external Odom/Mapping pipeline to warm up...");
+        auto start_wait = std::chrono::steady_clock::now();
+        while(std::chrono::steady_clock::now() - start_wait < std::chrono::seconds(30)) { if(exit_flag.load()) {return;} std::this_thread::sleep_for(std::chrono::milliseconds(100)); } 
+        logger->info("ElevationMapProcessor: Warmup complete. Enforcing ZMQ timeouts now."); 
+        
+        zmq::pollitem_t poll_items[] = { { static_cast<void*>(zmq_socket_), 0, ZMQ_POLLIN, 0 } };
+        auto safety_timeout = std::chrono::milliseconds{500};
+
+        while (!exit_flag.load()) {
+            ZoneScopedN("ElevationProcessingLoop");
+            
+            int rc = zmq::poll(poll_items, 1, safety_timeout);
+            if (rc == 0) {
+                exit_flag.store(true);
+                logger->error("Critical: Elevation map ZMQ timeout (>500ms). Stopping robot for safety.");
+                continue;
+            }
+
+            zmq::message_t zmq_msg;
+            if (!zmq_socket_.recv(zmq_msg, zmq::recv_flags::none)) {
+                exit_flag.store(true);
+                logger->error("Critical: ZMQ recv failed.");
+                break;
+            }
+            size_t expected_size = sizeof(double) + sizeof(float) * elevation_grid_total_size; // Adjusted message format to include timestamp as well so that python and C++ recording are synchronized
+            if (zmq_msg.size() != expected_size) {
+                exit_flag.store(true);
+                logger->error("Critical: Elevation payload size mismatch. Expected {}, got {}", expected_size, zmq_msg.size());
+                break;
+            }
+
+            // Parse timestamp and elevation map data separetely
+            double source_timestamp;
+            std::memcpy(&source_timestamp, zmq_msg.data(), sizeof(double));
+            const auto* elevation_data_start = static_cast<const std::byte*>(zmq_msg.data()) + sizeof(double);
+            std::memcpy(raw_data_buffer_.data(), elevation_data_start, elevation_grid_total_size * sizeof(float));
+
+            auto robot_state_result = global_robot_state.try_load_for(std::chrono::microseconds(100));
+            if (!robot_state_result.has_value()) {
+                 logger->error("Critical: Failed to load robot state for elevation header construction.");
+                 exit_flag.store(true);
+                 break;
+            }
+            stamped_robot_state current_state = robot_state_result.value();
+            
+            ElevationFrameHeader frame_header;
+            std::memset(&frame_header, 0, sizeof(frame_header));
+            //frame_header.timestamp = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+            frame_header.timestamp = source_timestamp;
+            frame_header.layer_id = layer_identifier_;
+            
+            int valid_cell_count = 0;
+            for (float v : raw_data_buffer_) {
+                if (std::abs(v - elevation_fill_value) > 1e-5) valid_cell_count++;
+            }
+            frame_header.valid_ratio = static_cast<float>(valid_cell_count) / elevation_grid_total_size;
+
+            frame_header.pose[0] = -69.0f; // x
+            frame_header.pose[1] = -69.0f; // y
+            frame_header.pose[2] = -69.0f; // z
+            frame_header.pose[3] = current_state.quat_body_to_world_wxyz[1]; // qx
+            frame_header.pose[4] = current_state.quat_body_to_world_wxyz[2]; // qy
+            frame_header.pose[5] = current_state.quat_body_to_world_wxyz[3]; // qz
+            frame_header.pose[6] = current_state.quat_body_to_world_wxyz[0]; // qw
+
+            apply_masked_spatial_filter(raw_data_buffer_, filtered_data_buffer_);
+            if(!global_elevation_map_filtered.try_store_for(filtered_data_buffer_, std::chrono::microseconds(100))) {
+                logger->error("Critical: Failed to update global elevation map atomic.");
+                exit_flag.store(true);
+                break;
+            }
+
+            file_stream_raw_.write(reinterpret_cast<char*>(&frame_header), sizeof(frame_header));
+            file_stream_raw_.write(reinterpret_cast<char*>(raw_data_buffer_.data()), elevation_grid_total_size * sizeof(float));
+            file_stream_filtered_.write(reinterpret_cast<char*>(&frame_header), sizeof(frame_header));
+            file_stream_filtered_.write(reinterpret_cast<char*>(filtered_data_buffer_.data()), elevation_grid_total_size * sizeof(float));
+            if (file_stream_raw_.fail() || file_stream_filtered_.fail()) {
+                logger->error("Critical: Binary file write failed (disk full or permission?).");
+                exit_flag.store(true);
+                break;
+            }
+        }
+    }
+};
+
 // Helper: format each element with `fmt_spec` and join with `sep`
 template<typename Range>
 std::string join_formatted(const Range& values, std::string_view fmt_spec = "{:.4f}", std::string_view sep = ",")
@@ -111,14 +351,6 @@ std::string join_formatted(const Range& values, std::string_view fmt_spec = "{:.
     }
 
     return fmt::format("{}", fmt::join(formatted, sep));
-}
-
-std::atomic<bool> exit_flag {false};
-static_assert(std::atomic<bool>::is_always_lock_free, "atomic bool is not lock free.");
-
-void exit_handler([[maybe_unused]] int s) {
-    exit_flag.store(true);
-    logger->error("----------------------------------\nSIGNAL CAUGHT; EXIT FLAG SET!\n------------------------------------");
 }
 
 // Taken from unitree_go2_sdk stand_example
@@ -334,10 +566,23 @@ torch::Tensor construct_observation_tensor(const stamped_robot_state& robot_stat
     const int prev_action_start_index = use_history ? (9 + 2 * history_length * num_joints) : (33);
     observation.slice(1, prev_action_start_index, prev_action_start_index + num_joints).copy_(prev_action);
 
-    // TODO: Height map values might need transformation because of how they were defined in isaac lab env
-    // TODO: Replace with real height map data
-    const int height_map_start = prev_action_start_index + num_joints;
-    observation.slice(1, height_map_start, obs_dim).fill_(-0.33f);
+    const int height_map_start_index = prev_action_start_index + num_joints;
+    const bool use_hardcoded_heights = true;
+    if(use_hardcoded_heights) {
+        observation.slice(1, height_map_start_index, obs_dim).fill_(-0.31f);
+    }
+    else {
+        auto elevation_data_result = global_elevation_map_filtered.try_load_for(std::chrono::microseconds(50));
+        if (elevation_data_result.has_value()) {
+            std::vector<float> map_vector = elevation_data_result.value();
+            auto map_tensor_cpu = torch::from_blob(map_vector.data(), {1, elevation_grid_total_size}, opts); // Creates view but lives until end of scope, so copy in next line is sufficient
+            observation.slice(1, height_map_start_index, height_map_start_index + elevation_grid_total_size).copy_(map_tensor_cpu);
+        } else {
+            logger->error("Critical: Failed to load global elevation map in observation construction.");
+            exit_flag.store(true);
+            observation.slice(1, height_map_start_index, height_map_start_index + elevation_grid_total_size).fill_(elevation_fill_value);
+        }
+    }
 
     return observation;
 }
@@ -345,7 +590,7 @@ torch::Tensor construct_observation_tensor(const stamped_robot_state& robot_stat
 // Uses timed_atomic to guarantee that each operation only takes a limited amount of time.
 // This allows estop / sigint to be noticed below a certain duration.
 // Of course this is not proper safety, but this is hard to achieve with the Go2 robot.
-void run_control_loop(std::filesystem::path checkpoint_path) {
+void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::path logdir_path) {
     logger->debug("Starting main control loop.");
     logger->debug("Loading torch model...");
 
@@ -392,6 +637,13 @@ void run_control_loop(std::filesystem::path checkpoint_path) {
     }
 
 	std::array<float, 3> vel_command_mag_limit = {2.0, 2.0, 1.0}; //vel_x, vel_y, omega_z    
+
+    // We start the thread here because the 25sec inside processing_loop should only start after the startup procedure is done
+    std::unique_ptr<ElevationMapProcessor> elevation_processor = std::make_unique<ElevationMapProcessor>(
+        logdir_path.string(),
+        "min_filter_rel",
+        1 // Min Filter Layer (ID 1)
+    );
 
     auto dt = std::chrono::milliseconds{20};
     auto start_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -776,7 +1028,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     }
 
     // TODO: Infer input dimension and set global variable
-    run_control_loop(checkpoint_path);
+    run_control_loop(checkpoint_path, logdir_path);
 
     // logger->info("Enabling damping mode...");
     // enable_damping_mode();
@@ -799,3 +1051,4 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
 
     return 0;
 }
+
