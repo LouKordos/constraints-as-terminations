@@ -1,4 +1,3 @@
-
 #include <print>
 #include <iostream>
 #include <memory>
@@ -118,10 +117,11 @@ const int elevation_grid_total_size = elevation_grid_width * elevation_grid_heig
 const float elevation_grid_resolution = 0.08f;
 const float elevation_sensor_offset_x = 0.2f;
 const float elevation_fill_value = -0.27f; // Must match Python fill_value_body_frame
+const float hardcoded_elevation = -0.31f;
 
 // Global storage for the policy. Initialized with fill value to ensure safety if read before first ZMQ message.
 timed_atomic<std::vector<float>> global_elevation_map_filtered{
-    std::vector<float>(elevation_grid_total_size, elevation_fill_value)
+    std::vector<float>(elevation_grid_total_size, hardcoded_elevation) // Use same as in construct_observation_tensor with hardcoded for the period of time where the robot is still standing without receiving any zmq data
 };
 
 // Binary formats matching Python struct.pack
@@ -255,9 +255,10 @@ private:
         // The external Elevation Map node depends on Odometry. // This Processor depends on the Elevation Map ZMQ stream. 
         // If we enforce the 500ms timeout immediately, this process dies before the external pipeline starts. 
         // Solution: Wait for the external pipeline to warm up while the main thread keeps the robot standing.
-        logger->info("ElevationMapProcessor: Waiting for external Odom/Mapping pipeline to warm up...");
+        auto wait_seconds = std::chrono::seconds(50);
+        logger->info("ElevationMapProcessor: Waiting {}sec for external Odom/Mapping pipeline to warm up...", wait_seconds.count());
         auto start_wait = std::chrono::steady_clock::now();
-        while(std::chrono::steady_clock::now() - start_wait < std::chrono::seconds(30)) { if(exit_flag.load()) {return;} std::this_thread::sleep_for(std::chrono::milliseconds(100)); } 
+        while(std::chrono::steady_clock::now() - start_wait < wait_seconds) { if(exit_flag.load()) {return;} std::this_thread::sleep_for(std::chrono::milliseconds(100)); } 
         logger->info("ElevationMapProcessor: Warmup complete. Enforcing ZMQ timeouts now."); 
         
         zmq::pollitem_t poll_items[] = { { static_cast<void*>(zmq_socket_), 0, ZMQ_POLLIN, 0 } };
@@ -320,7 +321,18 @@ private:
             frame_header.pose[5] = current_state.quat_body_to_world_wxyz[3]; // qz
             frame_header.pose[6] = current_state.quat_body_to_world_wxyz[0]; // qw
 
-            apply_masked_spatial_filter(raw_data_buffer_, filtered_data_buffer_);
+            // IMPORTANT: CHANGE THIS IF YOU WANT FILTERING
+            // Since the values are received at the desired 8cmx8cm spacing, filtering would be way too coarse
+            // for obstacles like steps etc., so it needs to be done as a smooth_filter on the elevation_mapping_cupy side
+            // with a higher resolution. This makes the smoothing kernel still allow for steep slopes of obstacles.
+            // It's also more performant because it runs in CuPy
+            const bool apply_filter = false;
+            if(apply_filter) {
+                apply_masked_spatial_filter(raw_data_buffer_, filtered_data_buffer_);
+            }
+            else {
+                filtered_data_buffer_ = raw_data_buffer_;
+            }
             if(!global_elevation_map_filtered.try_store_for(filtered_data_buffer_, std::chrono::microseconds(100))) {
                 logger->error("Critical: Failed to update global elevation map atomic.");
                 exit_flag.store(true);
@@ -567,9 +579,9 @@ torch::Tensor construct_observation_tensor(const stamped_robot_state& robot_stat
     observation.slice(1, prev_action_start_index, prev_action_start_index + num_joints).copy_(prev_action);
 
     const int height_map_start_index = prev_action_start_index + num_joints;
-    const bool use_hardcoded_heights = true;
+    const bool use_hardcoded_heights = false;
     if(use_hardcoded_heights) {
-        observation.slice(1, height_map_start_index, obs_dim).fill_(-0.31f);
+        observation.slice(1, height_map_start_index, obs_dim).fill_(hardcoded_elevation);
     }
     else {
         auto elevation_data_result = global_elevation_map_filtered.try_load_for(std::chrono::microseconds(50));
@@ -682,11 +694,11 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
             }	
         }
 
-        const bool walk_a_bit = false;
+        const bool walk_a_bit = true;
         if(walk_a_bit) {logger->warn("ROBOT WILL WALK SOON!");}
         auto time_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        if(walk_a_bit && time_now_ms - start_ms > 30000 && time_now_ms - start_ms < 35000) {
-            vel_command[0] = 1.0f;
+        if(walk_a_bit && time_now_ms - start_ms > 55000 && time_now_ms - start_ms < 60000) {
+            vel_command[0] = 0.7f;
         }
 
         auto observation = construct_observation_tensor(robot_state, vel_command, previous_action, model_observation_dim == observation_dim_history, robot_state.counter == 0);
