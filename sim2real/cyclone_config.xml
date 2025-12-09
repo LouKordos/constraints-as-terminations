@@ -1,0 +1,11 @@
+<CycloneDDS>
+  <Domain>
+    <General>
+      <!-- Use only the USB-Ethernet interface to talk to the robot -->
+      <NetworkInterfaceAddress>enx9c69d3002c7a</NetworkInterfaceAddress>
+      <!-- Force packets to stay on the directly connected subnet
+           instead of going via the default route / other NICs -->
+      <DontRoute>true</DontRoute>
+    </General>
+  </Domain>
+</CycloneDDS>
