@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <time.h>
 
 #include <tracy/Tracy.hpp>
 // #define TRACY_NO_CONTEXT_SWITCH
@@ -163,7 +164,7 @@ public:
             return;
         }
 
-        std::string timestamp_str = std::format("{:%Y-%m-%dT%H-%M-%S.000000}", std::chrono::system_clock::now());
+        std::string timestamp_str = std::format("{:%Y-%m-%dT%H-%M-%S.000}Z", std::chrono::system_clock::now());
         std::string raw_filename = log_directory + timestamp_str + "_" + layer_name + "_raw.bin";
         std::string filtered_filename = log_directory + timestamp_str + "_" + layer_name + "_filtered.bin";
 
@@ -965,6 +966,10 @@ void vel_command_listener(std::string endpoint)
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
 {
+    // Forces all standard libs to use UTC
+    setenv("TZ", "", 1);
+    tzset();
+
     auto run_timestamp_utc = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
     std::filesystem::path logdir_path {"/app/logs/utc_" + std::format("{:%Y-%m-%d-%H-%M-%S}", run_timestamp_utc) + "/"};
     std::error_code ec;
