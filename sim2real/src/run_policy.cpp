@@ -293,6 +293,11 @@ private:
             const auto* elevation_data_start = static_cast<const std::byte*>(zmq_msg.data()) + sizeof(double);
             std::memcpy(raw_data_buffer_.data(), elevation_data_start, elevation_grid_total_size * sizeof(float));
 
+            for(float v : raw_data_buffer_) {
+                float temporary_elevation_offset = 0.0; // Ground appears this many cm closer to test if slipping occurs more infrequently
+                v += temporary_elevation_offset;
+            }
+
             auto robot_state_result = global_robot_state.try_load_for(std::chrono::microseconds(100));
             if (!robot_state_result.has_value()) {
                  logger->error("Critical: Failed to load robot state for elevation header construction.");
