@@ -20,6 +20,9 @@
 #include <unistd.h>
 #include <time.h>
 
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 #include <tracy/Tracy.hpp>
 // #define TRACY_NO_CONTEXT_SWITCH
 #define TRACY_NO_SYSTEM_TRACING
@@ -117,42 +120,24 @@ const int elevation_grid_height = 11;
 const int elevation_grid_total_size = elevation_grid_width * elevation_grid_height;
 const float elevation_grid_resolution = 0.08f;
 const float elevation_sensor_offset_x = 0.2f;
-const float elevation_fill_value = -0.27f; // Must match Python fill_value_body_frame
+const float elevation_fill_value = -0.27f; 
 const float hardcoded_elevation = -0.31f;
 
-// Global storage for the policy. Initialized with fill value to ensure safety if read before first ZMQ message.
 timed_atomic<std::vector<float>> global_elevation_map_filtered{
-    std::vector<float>(elevation_grid_total_size, hardcoded_elevation) // Use same as in construct_observation_tensor with hardcoded for the period of time where the robot is still standing without receiving any zmq data
+    std::vector<float>(elevation_grid_total_size, hardcoded_elevation)
 };
 
-// Binary formats matching Python struct.pack
-// Alignment forced to 1 byte to match Python's standard packing
-#pragma pack(push, 1) 
-struct ElevationFileHeader {
-    uint8_t version;       // 1
-    float resolution;      // 0.08
-    float sensor_off_x;    // 0.2
-    uint16_t num_x;        // 13
-    uint16_t num_y;        // 11
-    uint8_t reserved[67];  // Padding
+struct LogEntry {
+    bool is_raw;
+    std::string json_payload;
 };
-
-struct ElevationFrameHeader {
-    double timestamp;      // Unix time
-    uint8_t layer_id;      // 0=elev, 1=min, 2=smooth
-    float valid_ratio;     // 0.0-1.0
-    float pose[7];         // x, y, z, qx, qy, qz, qw
-    uint8_t reserved[32];  // Padding
-};
-#pragma pack(pop)
 
 class ElevationMapProcessor {
 public:
     ElevationMapProcessor(std::string log_directory, std::string layer_name, int layer_id) 
-        : zmq_context_(1), zmq_socket_(zmq_context_, zmq::socket_type::sub), layer_identifier_(layer_id) 
+        : zmq_context_(1), zmq_socket_(zmq_context_, zmq::socket_type::sub), layer_identifier_(layer_id), layer_name_(layer_name)
     {
-        // Min Filter Relative Layer -> Port 6973 (Base 6972 + 1)
-        std::string remote_endpoint = "tcp://192.168.123.224:6973"; 
+        std::string remote_endpoint = "tcp://192.168.123.224:6975"; 
         
         try {
             zmq_socket_.connect(remote_endpoint);
@@ -164,45 +149,54 @@ public:
             return;
         }
 
-        std::string timestamp_str = std::format("{:%Y-%m-%dT%H-%M-%S.000}Z", std::chrono::system_clock::now());
-        std::string raw_filename = log_directory + timestamp_str + "_" + layer_name + "_raw.bin";
-        std::string filtered_filename = log_directory + timestamp_str + "_" + layer_name + "_filtered.bin";
-
-        file_stream_raw_.open(raw_filename, std::ios::binary);
-        file_stream_filtered_.open(filtered_filename, std::ios::binary);
-
-        if (!file_stream_raw_.is_open() || !file_stream_filtered_.is_open()) {
-            logger->error("Critical: Failed to open elevation binary log files.");
-            exit_flag.store(true);
-            return;
-        }
-
-        ElevationFileHeader static_header;
-        std::memset(&static_header, 0, sizeof(static_header));
-        static_header.version = 1;
-        static_header.resolution = elevation_grid_resolution;
-        static_header.sensor_off_x = elevation_sensor_offset_x;
-        static_header.num_x = elevation_grid_width;
-        static_header.num_y = elevation_grid_height;
-
-        file_stream_raw_.write(reinterpret_cast<const char*>(&static_header), sizeof(static_header));
-        file_stream_filtered_.write(reinterpret_cast<const char*>(&static_header), sizeof(static_header));
+        std::string timestamp_str = std::format("{:%Y-%m-%dT%H-%M-%S}", std::chrono::system_clock::now());
         
-        if (file_stream_raw_.fail() || file_stream_filtered_.fail()) {
-            logger->error("Critical: Failed to write headers to elevation log files.");
-            exit_flag.store(true);
-            return;
+        std::string filename_raw = log_directory + timestamp_str + "_" + layer_name + "_cpp_raw.jsonl";
+        file_stream_raw_.open(filename_raw);
+        if (!file_stream_raw_.is_open()) {
+            logger->error("Critical: Failed to open RAW elevation log file: {}", filename_raw);
+            exit_flag.store(true); return;
         }
 
+        std::string filename_filtered = log_directory + timestamp_str + "_" + layer_name + "_cpp_filtered.jsonl";
+        file_stream_filtered_.open(filename_filtered);
+        if (!file_stream_filtered_.is_open()) {
+            logger->error("Critical: Failed to open FILTERED elevation log file: {}", filename_filtered);
+            exit_flag.store(true); return;
+        }
+
+        json metadata;
+        metadata["type"] = "metadata";
+        metadata["version"] = 3;
+        metadata["config"] = {
+            {"resolution", elevation_grid_resolution},
+            {"sensor_offset_x", elevation_sensor_offset_x},
+            {"num_x", elevation_grid_width},
+            {"num_y", elevation_grid_height},
+            {"fill_value", elevation_fill_value}
+        };
+        std::string header = metadata.dump() + "\n";
+        file_stream_raw_ << header;
+        file_stream_filtered_ << header;
+        file_stream_raw_.flush();
+        file_stream_filtered_.flush();
+
+        logging_active_ = true;
+        logging_thread_ = std::thread(&ElevationMapProcessor::logging_loop, this);
         processing_thread_ = std::thread(&ElevationMapProcessor::processing_loop, this);
     }
 
     ~ElevationMapProcessor() {
         if (processing_thread_.joinable()) {
-            logger->info("Joining elevation map data processing thread...");
             processing_thread_.join();
-            logger->info("Joined elevation map data processing thread...");
         }
+
+        logging_active_ = false;
+        logging_cv_.notify_all();
+        if (logging_thread_.joinable()) {
+            logging_thread_.join();
+        }
+
         if (file_stream_raw_.is_open()) file_stream_raw_.close();
         if (file_stream_filtered_.is_open()) file_stream_filtered_.close();
     }
@@ -211,19 +205,30 @@ private:
     zmq::context_t zmq_context_;
     zmq::socket_t zmq_socket_;
     int layer_identifier_;
-    std::ofstream file_stream_raw_, file_stream_filtered_;
+    std::string layer_name_;
+    
+    std::ofstream file_stream_raw_;
+    std::ofstream file_stream_filtered_;
+    
     std::thread processing_thread_;
+    std::thread logging_thread_;
+    
     std::vector<float> raw_data_buffer_ = std::vector<float>(elevation_grid_total_size);
     std::vector<float> filtered_data_buffer_ = std::vector<float>(elevation_grid_total_size);
 
-    void apply_masked_spatial_filter(const std::vector<float>& input, std::vector<float>& output) {
+    std::atomic<bool> logging_active_{false};
+    std::queue<LogEntry> log_queue_;
+    std::mutex log_mutex_;
+    std::condition_variable logging_cv_;
+
+    void apply_masked_spatial_filter(const std::vector<float>& input, std::vector<float>& output, float current_fill_val) {
         for (int y = 0; y < elevation_grid_height; ++y) {
             for (int x = 0; x < elevation_grid_width; ++x) {
                 int current_idx = y * elevation_grid_width + x;
                 double val = static_cast<double>(input[current_idx]);
 
-                if (std::abs(val - elevation_fill_value) < 1e-5) {
-                    output[current_idx] = elevation_fill_value;
+                if (std::abs(val - current_fill_val) < 1e-5) {
+                    output[current_idx] = current_fill_val;
                     continue;
                 }
 
@@ -237,7 +242,7 @@ private:
 
                         if (nx >= 0 && nx < elevation_grid_width && ny >= 0 && ny < elevation_grid_height) {
                             double neighbor_val = static_cast<double>(input[ny * elevation_grid_width + nx]);
-                            if (std::abs(neighbor_val - elevation_fill_value) > 1e-5) {
+                            if (std::abs(neighbor_val - current_fill_val) > 1e-5) {
                                 accumulator += neighbor_val;
                                 valid_neighbor_count++;
                             }
@@ -245,17 +250,36 @@ private:
                     }
                 }
 
-                // Average valid neighbors (including self), or fallback to self if isolated
                 output[current_idx] = (valid_neighbor_count > 0) ? static_cast<float>(accumulator / valid_neighbor_count) : static_cast<float>(val);
             }
         }
     }
 
+    void logging_loop() {
+        while (logging_active_ || !log_queue_.empty()) {
+            std::unique_lock<std::mutex> lock(log_mutex_);
+            logging_cv_.wait(lock, [this] { return !log_queue_.empty() || !logging_active_; });
+
+            while (!log_queue_.empty()) {
+                LogEntry entry = std::move(log_queue_.front());
+                log_queue_.pop();
+                
+                lock.unlock(); 
+                
+                if (entry.is_raw && file_stream_raw_.is_open()) {
+                    file_stream_raw_ << entry.json_payload << "\n";
+                    file_stream_raw_.flush(); 
+                } else if (!entry.is_raw && file_stream_filtered_.is_open()) {
+                    file_stream_filtered_ << entry.json_payload << "\n";
+                    file_stream_filtered_.flush();
+                }
+
+                lock.lock();
+            }
+        }
+    }
+
     void processing_loop() {
-        // The controller (this process) must run to move the robot, which allows the external Odometry node to generate valid data. 
-        // The external Elevation Map node depends on Odometry. // This Processor depends on the Elevation Map ZMQ stream. 
-        // If we enforce the 500ms timeout immediately, this process dies before the external pipeline starts. 
-        // Solution: Wait for the external pipeline to warm up while the main thread keeps the robot standing.
         auto wait_seconds = std::chrono::seconds(50);
         logger->info("ElevationMapProcessor: Waiting {}sec for external Odom/Mapping pipeline to warm up...", wait_seconds.count());
         auto start_wait = std::chrono::steady_clock::now();
@@ -281,78 +305,106 @@ private:
                 logger->error("Critical: ZMQ recv failed.");
                 break;
             }
-            size_t expected_size = sizeof(double) + sizeof(float) * elevation_grid_total_size; // Adjusted message format to include timestamp as well so that python and C++ recording are synchronized
-            if (zmq_msg.size() != expected_size) {
+
+            std::string msg_str(static_cast<char*>(zmq_msg.data()), zmq_msg.size());
+            json parsed_json;
+            try {
+                parsed_json = json::parse(msg_str);
+            } catch (const json::parse_error& e) {
                 exit_flag.store(true);
-                logger->error("Critical: Elevation payload size mismatch. Expected {}, got {}", expected_size, zmq_msg.size());
+                logger->error("Critical: JSON Parse Error: {}", e.what());
                 break;
             }
 
-            // Parse timestamp and elevation map data separetely
-            double source_timestamp;
-            std::memcpy(&source_timestamp, zmq_msg.data(), sizeof(double));
-            const auto* elevation_data_start = static_cast<const std::byte*>(zmq_msg.data()) + sizeof(double);
-            std::memcpy(raw_data_buffer_.data(), elevation_data_start, elevation_grid_total_size * sizeof(float));
+            float current_fill_val = parsed_json.value("fill_value", elevation_fill_value);
 
-            for(float v : raw_data_buffer_) {
-                float temporary_elevation_offset = 0.0; // Ground appears this many cm closer to test if slipping occurs more infrequently
+            if(!parsed_json.contains("grid")) {
+                exit_flag.store(true);
+                logger->error("Critical: JSON missing 'grid' field.");
+                break;
+            }
+            raw_data_buffer_ = parsed_json["grid"].get<std::vector<float>>();
+            
+            if (raw_data_buffer_.size() != elevation_grid_total_size) {
+                 exit_flag.store(true);
+                 logger->error("Critical: Grid size mismatch. Expected {}, got {}", elevation_grid_total_size, raw_data_buffer_.size());
+                 break;
+            }
+
+            float temporary_elevation_offset = 0.0; 
+            for(float &v : raw_data_buffer_) {
                 v += temporary_elevation_offset;
             }
 
             auto robot_state_result = global_robot_state.try_load_for(std::chrono::microseconds(100));
             if (!robot_state_result.has_value()) {
-                 logger->error("Critical: Failed to load robot state for elevation header construction.");
                  exit_flag.store(true);
+                 logger->error("Critical: Failed to load robot state for elevation logging.");
                  break;
             }
             stamped_robot_state current_state = robot_state_result.value();
             
-            ElevationFrameHeader frame_header;
-            std::memset(&frame_header, 0, sizeof(frame_header));
-            //frame_header.timestamp = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
-            frame_header.timestamp = source_timestamp;
-            frame_header.layer_id = layer_identifier_;
-            
-            int valid_cell_count = 0;
-            for (float v : raw_data_buffer_) {
-                if (std::abs(v - elevation_fill_value) > 1e-5) valid_cell_count++;
-            }
-            frame_header.valid_ratio = static_cast<float>(valid_cell_count) / elevation_grid_total_size;
-
-            frame_header.pose[0] = -69.0f; // x
-            frame_header.pose[1] = -69.0f; // y
-            frame_header.pose[2] = -69.0f; // z
-            frame_header.pose[3] = current_state.quat_body_to_world_wxyz[1]; // qx
-            frame_header.pose[4] = current_state.quat_body_to_world_wxyz[2]; // qy
-            frame_header.pose[5] = current_state.quat_body_to_world_wxyz[3]; // qz
-            frame_header.pose[6] = current_state.quat_body_to_world_wxyz[0]; // qw
-
-            // IMPORTANT: CHANGE THIS IF YOU WANT FILTERING
-            // Since the values are received at the desired 8cmx8cm spacing, filtering would be way too coarse
-            // for obstacles like steps etc., so it needs to be done as a smooth_filter on the elevation_mapping_cupy side
-            // with a higher resolution. This makes the smoothing kernel still allow for steep slopes of obstacles.
-            // It's also more performant because it runs in CuPy
             const bool apply_filter = false;
             if(apply_filter) {
-                apply_masked_spatial_filter(raw_data_buffer_, filtered_data_buffer_);
+                apply_masked_spatial_filter(raw_data_buffer_, filtered_data_buffer_, current_fill_val);
             }
             else {
                 filtered_data_buffer_ = raw_data_buffer_;
             }
+
             if(!global_elevation_map_filtered.try_store_for(filtered_data_buffer_, std::chrono::microseconds(100))) {
                 logger->error("Critical: Failed to update global elevation map atomic.");
                 exit_flag.store(true);
                 break;
             }
 
-            file_stream_raw_.write(reinterpret_cast<char*>(&frame_header), sizeof(frame_header));
-            file_stream_raw_.write(reinterpret_cast<char*>(raw_data_buffer_.data()), elevation_grid_total_size * sizeof(float));
-            file_stream_filtered_.write(reinterpret_cast<char*>(&frame_header), sizeof(frame_header));
-            file_stream_filtered_.write(reinterpret_cast<char*>(filtered_data_buffer_.data()), elevation_grid_total_size * sizeof(float));
-            if (file_stream_raw_.fail() || file_stream_filtered_.fail()) {
-                logger->error("Critical: Binary file write failed (disk full or permission?).");
-                exit_flag.store(true);
-                break;
+            json frame_record;
+            if(parsed_json.contains("ts")) frame_record["ts"] = parsed_json["ts"];
+            frame_record["cpp_recv_ts"] = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+            frame_record["layer"] = layer_name_;
+
+            int valid_cell_count = 0;
+            for (const float &v : filtered_data_buffer_) {
+                if (std::abs(v - current_fill_val) > 1e-5) valid_cell_count++;
+            }
+            frame_record["valid"] = static_cast<float>(valid_cell_count) / elevation_grid_total_size;
+
+            float pos_x = 0.0, pos_y = 0.0, pos_z = 0.0;
+            if(parsed_json.contains("pose")) {
+                pos_x = parsed_json["pose"].value("x", 0.0f);
+                pos_y = parsed_json["pose"].value("y", 0.0f);
+                pos_z = parsed_json["pose"].value("z", 0.0f);
+            }
+            
+            frame_record["pose"] = {
+                {"x", pos_x}, {"y", pos_y}, {"z", pos_z},
+                {"qx", current_state.quat_body_to_world_wxyz[1]},
+                {"qy", current_state.quat_body_to_world_wxyz[2]},
+                {"qz", current_state.quat_body_to_world_wxyz[3]},
+                {"qw", current_state.quat_body_to_world_wxyz[0]}
+            };
+
+            if(parsed_json.contains("feet")) {
+                frame_record["feet"] = parsed_json["feet"]; 
+            } else {
+                frame_record["feet"] = nullptr;
+            }
+
+            {
+                json raw_frame = frame_record;
+                raw_frame["grid"] = raw_data_buffer_;
+                
+                std::lock_guard<std::mutex> lock(log_mutex_);
+                log_queue_.push({true, raw_frame.dump()});
+            }
+
+            {
+                frame_record["grid"] = filtered_data_buffer_;
+                
+                std::lock_guard<std::mutex> lock(log_mutex_);
+                log_queue_.push({false, frame_record.dump()});
+                
+                logging_cv_.notify_one();
             }
         }
     }
@@ -659,8 +711,8 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
     // We start the thread here because the 25sec inside processing_loop should only start after the startup procedure is done
     std::unique_ptr<ElevationMapProcessor> elevation_processor = std::make_unique<ElevationMapProcessor>(
         logdir_path.string(),
-        "min_filter_rel",
-        1 // Min Filter Layer (ID 1)
+        "smooth",
+        2 // Min Filter Layer (ID 1)
     );
 
     auto dt = std::chrono::milliseconds{20};
@@ -867,25 +919,6 @@ void robot_state_message_handler(const void *message) {
     global_robot_state.try_store_for(stamped_state, atomic_op_timeout);
 
     check_state_safety_limits(stamped_state);
-
-    // {ZoneScopedN("rosbag_logging");
-    //     RawSample rs;
-    //     rs.stamp = rclcpp::Clock().now();
-    //     rs.joint_pos = stamped_state.joint_pos;
-    //     rs.joint_vel = stamped_state.joint_vel;
-    //     rs.joint_tau = stamped_state.joint_torque;
-    //     rs.quat_wxyz = {stamped_state.quat_body_to_world_wxyz[0], stamped_state.quat_body_to_world_wxyz[1], stamped_state.quat_body_to_world_wxyz[2]};
-    //     rs.body_gyro  = stamped_state.body_angular_velocity;
-    //     rs.proj_grav  = stamped_state.projected_gravity;
-
-    //     if (auto a = global_current_action_isaac_order.try_load_for(atomic_op_timeout))
-    //         rs.action = a.value();
-    //     if (auto p = pd_setpoint_sdk_order.try_load_for(atomic_op_timeout))
-    //         rs.pd_target = p.value();
-
-    //     std::transform(stamped_state.foot_forces_raw.begin(), stamped_state.foot_forces_raw.end(), rs.foot_force_raw_adc.begin(), [](int16_t v){ return static_cast<float>(v); });
-    //     AsyncRosbagLogger::instance().enqueue(rs);
-    // }
 
     if(false) {
         logger->debug(
