@@ -716,10 +716,15 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
     );
 
     auto dt = std::chrono::milliseconds{20};
+    auto frequency_overrun_threshold = std::chrono::milliseconds{10};
     auto start_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto next_iteration_time = std::chrono::steady_clock::now();
+    static long long iteration_counter = 0;
+
     while(!exit_flag.load()) {
         ZoneScoped;
         FrameMarkNamed("run_control_loop");
+        next_iteration_time += dt;
 
         auto robot_state_res = global_robot_state.try_load_for(atomic_op_timeout);
         if(!robot_state_res.has_value()) {
@@ -792,7 +797,22 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
             logger->error("Failed to update global PD target within {}us, exiting.", atomic_op_timeout.count());
         }
         previous_action = current_action;
-        {std::this_thread::sleep_for(dt);} // Scoped to exclude from tracy profiling
+        iteration_counter++;
+        // Scoped to exclude in tracy profiling
+        {ZoneScopedN("SleepUntilNextCycle");
+            auto loop_end_time = std::chrono::steady_clock::now();
+            if(loop_end_time < next_iteration_time) {
+                std::this_thread::sleep_until(next_iteration_time);
+            }
+            else {
+                auto overrun = std::chrono::duration_cast<std::chrono::microseconds>(loop_end_time - next_iteration_time);
+                logger->error("Control deadline exceeded by {}us!", overrun.count());
+                if(overrun > frequency_overrun_threshold && iteration_counter > 5) { // Warm up first 5 iterations
+                    exit_flag.store(true);
+                    logger->error("Control loop frequency overrun exceeds threshold of {}ms, exiting for safety...", frequency_overrun_threshold.count());
+                }
+            }
+        }
     }
 }
 
