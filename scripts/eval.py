@@ -255,7 +255,7 @@ def main():
     from cat_envs.tasks.utils.cleanrl.ppo import ActorWithRMS
     from cat_envs.tasks.locomotion.velocity.config.solo12.cat_go2_rough_terrain_env_cfg import height_map_grid
     from isaaclab.managers import EventTermCfg
-    from isaaclab.utils.math import euler_xyz_from_quat, quat_rotate_inverse
+    from isaaclab.utils.math import euler_xyz_from_quat, quat_apply_inverse 
     from isaaclab.envs.mdp.observations import root_quat_w
     from isaaclab.managers import SceneEntityCfg
 
@@ -518,9 +518,9 @@ def main():
 
         linear_velocity_w = scene_robot_data.root_lin_vel_w[0]
         angular_velocity_w = scene_robot_data.root_ang_vel_w[0]
-        # The returned quat is (w, x, y, z) which is what quat_rotate_inverse expects.
-        linear_velocity_b = quat_rotate_inverse(quat_wxyz, linear_velocity_w.unsqueeze(0)).squeeze()
-        angular_velocity_b = quat_rotate_inverse(quat_wxyz, angular_velocity_w.unsqueeze(0)).squeeze()
+        # The returned quat is (w, x, y, z) which is what quat_apply_inverse expects.
+        linear_velocity_b = quat_apply_inverse(quat_wxyz, linear_velocity_w.unsqueeze(0)).squeeze()
+        angular_velocity_b = quat_apply_inverse(quat_wxyz, angular_velocity_w.unsqueeze(0)).squeeze()
         base_linear_velocity_buffer.append(linear_velocity_w.cpu().numpy())
         base_angular_velocity_buffer.append(angular_velocity_w.cpu().numpy())
         base_linear_velocity_body_buffer.append(linear_velocity_b.cpu().numpy())
@@ -539,7 +539,7 @@ def main():
         
         foot_velocities_world_t = torch.stack([scene_robot_data.body_link_vel_w[0, scene_robot_data.body_names.index(link), :3] for link in foot_links])
         quat_expanded = quat_wxyz.expand(4, -1)
-        foot_velocities_body_t = quat_rotate_inverse(quat_expanded, foot_velocities_world_t)
+        foot_velocities_body_t = quat_apply_inverse(quat_expanded, foot_velocities_world_t)
         foot_velocities_world_frame_buffer.append(foot_velocities_world_t.cpu().numpy())
         foot_velocities_body_frame_buffer.append(foot_velocities_body_t.cpu().numpy())
         
