@@ -50,7 +50,7 @@ import gymnasium as gym
 
 from isaaclab.envs import (DirectMARLEnvCfg, DirectRLEnvCfg, ManagerBasedRLEnvCfg)
 from isaaclab.utils.dict import print_dict
-from isaaclab.utils.io import dump_pickle, dump_yaml
+from isaaclab.utils.io import dump_yaml
 from isaaclab_tasks.utils.hydra import hydra_task_config
 from cat_envs.tasks.utils.cleanrl.ppo import PPO
 import cat_envs.tasks  # noqa: F401
@@ -154,8 +154,6 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # dump the configuration into log-directory
     dump_yaml(os.path.join(log_root_path, log_dir, "params", "env.yaml"), env_cfg)
     dump_yaml(os.path.join(log_root_path, log_dir, "params", "agent.yaml"), agent_cfg)
-    dump_pickle(os.path.join(log_root_path, log_dir, "params", "env.pkl"), env_cfg)
-    dump_pickle(os.path.join(log_root_path, log_dir, "params", "agent.pkl"), agent_cfg)
 
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
 

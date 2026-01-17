@@ -29,8 +29,7 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ContactSensorCfg
-from isaaclab.terrains import TerrainImporterCfg
-from isaaclab.terrains.terrain_generator_cfg import FlatPatchSamplingCfg
+from isaaclab.terrains import TerrainImporterCfg, FlatPatchSamplingCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
@@ -167,7 +166,7 @@ class MySceneCfg(InteractiveSceneCfg):
         update_period=0.0,  # will override in __post_init__
         offset=RayCasterCfg.OffsetCfg(pos=(0.2, 0.0, 0.5)),  # 0.5 m above base
         mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
-        attach_yaw_only=True, # keep sensor level (no pitch/roll with body). This is a gross oversimplification but the original paper also used a grid of heights around the robot
+        ray_alignment="yaw", # keep sensor level (no pitch/roll with body). This is a gross oversimplification but the original paper also used a grid of heights around the robot
         pattern_cfg=patterns.GridPatternCfg( # Grid pattern shoots down vertical rays to retrieve hight at each grid point. Needs adjustments to be more realistic, such as using e.g. LIDARConfig
             size=[1, 0.8], # see Fig. 3 in paper for grid layout, I tried approximating it visually here
             resolution=0.08,
@@ -183,7 +182,7 @@ class MySceneCfg(InteractiveSceneCfg):
         update_period=0.0,  # will override in __post_init__
         offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)),  # 1 m above base
         mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
-        attach_yaw_only=True,
+        ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
         debug_vis=True,
     )
@@ -936,7 +935,7 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
             update_period=self.sim.dt,
             offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)), # Starting point 1m above base, doesn't really matter
             mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
-            attach_yaw_only=True,
+            ray_alignment="yaw",
             pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
             debug_vis=True,
         )
@@ -945,7 +944,7 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
             update_period=self.sim.dt,
             offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)), # Starting point 1m above base, doesn't really matter
             mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
-            attach_yaw_only=True,
+            ray_alignment="yaw",
             pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
             debug_vis=True,
         )
@@ -954,7 +953,7 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
             update_period=self.sim.dt,
             offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)), # Starting point 1m above base, doesn't really matter
             mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
-            attach_yaw_only=True,
+            ray_alignment="yaw",
             pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
             debug_vis=True,
         )
@@ -963,7 +962,7 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
             update_period=self.sim.dt,
             offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)), # Starting point 1m above base, doesn't really matter
             mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
-            attach_yaw_only=True,
+            ray_alignment="yaw",
             pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
             debug_vis=True,
         )

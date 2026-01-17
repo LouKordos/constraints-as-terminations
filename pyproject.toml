@@ -1,16 +1,41 @@
 [project]
-requires-python = "==3.10"
+name = "cat-isaac-lab-env"
+version = "0.1.0"
+description = "Constraints as Terminations Isaac Lab"
+readme = "README.md"
+requires-python = "==3.11.*"
+
+dependencies = [
+    "torch==2.7.0",
+    "torchvision==0.22.0",
+    "isaacsim[all,extscache]==5.1.0",
+]
 
 [build-system]
-requires = ["setuptools", "toml"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Allows uv to automatically find these packages without needing the long --index-url flags every time you run a command.
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "nvidia"
+url = "https://pypi.nvidia.com"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+torchvision = { index = "pytorch" }
+isaacsim = { index = "nvidia" }
 
 [tool.isort]
-
 atomic = true
 profile = "black"
 line_length = 120
-py_version = 310
+py_version = 311
 skip_glob = ["docs/*", "logs/*"]
 group_by_package = true
 
@@ -57,12 +82,10 @@ known_isaaclabparty = [
     "isaaclab_assets"
 ]
 
-# Modify the following to include the package names of your first-party code
 known_firstparty = "cat_envs"
 known_local_folder = "config"
 
 [tool.pyright]
-
 exclude = [
     "**/__pycache__",
     "**/docs",
@@ -72,7 +95,7 @@ exclude = [
 ]
 
 typeCheckingMode = "basic"
-pythonVersion = "3.10"
+pythonVersion = "3.11"
 pythonPlatform = "Linux"
 enableTypeIgnoreComments = true
 
@@ -80,8 +103,9 @@ enableTypeIgnoreComments = true
 # Therefore, we have to ignore missing imports
 reportMissingImports = "none"
 # This is required to ignore for type checks of modules with stubs missing.
-reportMissingModuleSource = "none" # -> most common: prettytable in mdp managers
+reportMissingModuleSource = "none" 
 
-reportGeneralTypeIssues = "none"       # -> raises 218 errors (usage of literal MISSING in dataclasses)
-reportOptionalMemberAccess = "warning" # -> raises 8 errors
+reportGeneralTypeIssues = "none"       
+reportOptionalMemberAccess = "warning" 
 reportPrivateUsage = "warning"
+
