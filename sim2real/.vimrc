@@ -14,9 +14,13 @@ call plug#begin('~/.vim/plugged')
     Plug 'sainnhe/gruvbox-material'
     Plug 'sheerun/vim-polyglot'
     Plug 'jasonccox/vim-wayland-clipboard'
+    Plug 'ojroques/vim-oscyank', {'branch': 'main'}
 call plug#end()
 " Auto install missing plugins on startup
 autocmd VimEnter * if len(filter(values(g:plugs), '!isdirectory(v:val.dir)')) | PlugInstall --sync | source $MYVIMRC | endif
+
+" Fix lightline display
+set laststatus=2
 
 " For commenting using vim-commentary
 filetype plugin on
@@ -25,7 +29,7 @@ filetype plugin indent on
 if has('termguicolors')
     set termguicolors
 endif
-" ~/.vimrc  – RGB fallback just for screen*/tmux* terms
+" RGB fallback just for screen*/tmux* terms
 if !has('gui_running') && &term =~# '^\%(screen\|tmux\)'
     let &t_8f = "\<Esc>[38;2;%lu;%lu;%lum"
     let &t_8b = "\<Esc>[48;2;%lu;%lu;%lum"
@@ -42,7 +46,7 @@ function! s:TryGruvbox() abort
         augroup GruvboxOnce | autocmd! | augroup END
     endif
 endfunction
-" Run immediately (second–later starts) and after any PlugInstall
+" Run immediately and after any PlugInstall
 call s:TryGruvbox()
 augroup GruvboxOnce
     autocmd! User PlugLoaded ++once call s:TryGruvbox()
@@ -59,13 +63,73 @@ set expandtab
 set mouse=
 set timeoutlen=1000
 set ttimeoutlen=50
-
-" Always use the system clipboard for yank/delete/put
-set clipboard=unnamedplus,unnamed
-
 set hlsearch
 set incsearch
 set smartcase
+
+" ============================================================================
+" Clipboard routing policy
+"
+" Goals:
+"  1) Local desktop (no SSH, no tmux): normal system clipboard integration.
+"     - Under Wayland, vim-wayland-clipboard makes the + register work via wl-copy/wl-paste.
+"
+"  2) Any SSH session (with or without tmux): clipboard must follow the SSH client terminal.
+"     - Even if the remote machine has Wayland/X11, copying into the remote GUI clipboard is wrong.
+"     - Many servers/headless nodes have no clipboard provider at all (has('clipboard_working') == 0).
+"     - Therefore: use OSC52 to update the local/client clipboard.
+"
+"  3) Any tmux session (local or remote attach): clipboard must follow the currently attached terminal.
+"     - Therefore: avoid binding Vim to the host clipboard provider, emit OSC52 on yank/delete/change.
+"
+"  4) Cross-Vim-session yanks (yank -> quit -> reopen -> paste) must work on headless servers:
+"     - solved via viminfo persistence; increase < and s to avoid truncation.
+" ============================================================================
+
+let s:IsRemoteSsh = exists('$SSH_TTY') || exists('$SSH_CONNECTION')
+
+if exists('$TMUX') || s:IsRemoteSsh
+    set clipboard=
+else
+    set clipboard=unnamedplus,unnamed
+endif
+
+let g:oscyank_max_length = 0
+
+function! s:VimOsc52MaybeCopy(ev) abort
+    if !(exists('$TMUX') || (exists('$SSH_TTY') || exists('$SSH_CONNECTION')))
+        return
+    endif
+    if !exists('*OSCYankRegister')
+        return
+    endif
+    if index(['y', 'd', 'c'], get(a:ev, 'operator', '')) == -1
+        return
+    endif
+    let l:reg = get(a:ev, 'regname', '')
+    if empty(l:reg)
+        let l:reg = '"'
+    endif
+    if index(['"', '+', '*'], l:reg) == -1
+        return
+    endif
+    call OSCYankRegister(l:reg)
+endfunction
+
+augroup VimOsc52OnYank
+    autocmd!
+    autocmd TextYankPost * call s:VimOsc52MaybeCopy(v:event)
+augroup END
+
+" When no wl-copy or clipboard is present (e.g. on a server), vim uses .viminfo for pasting across sessions. Increase size to avoid truncating
+" '200    : Remember marks/cursor position for the last 200 edited files
+" f1      : Store global file marks (A-Z)
+" <       : Allow registers with up to this many lines to be saved
+" s       : max size per register in KiB (default is s10, which is too small for big yanks)
+" :100    : Remember the last 100 command-line commands
+" /100    : Remember the last 100 search history items
+" h       : Disable search highlighting when Vim starts
+set viminfo='200,f1,<30000,s5000,:100,/100,h
 
 " smartundo (more granular, see https://vi.stackexchange.com/questions/2376/how-to-change-undo-granularity-in-vim)
 function! s:start_delete(key)
@@ -103,7 +167,6 @@ augroup python_block_comments
   autocmd FileType python vnoremap <buffer> gc :call PythonBlockComment()<CR>gv
 augroup END
 
-" Global ranged function—no <SID> needed in ~/.vimrc
 function! PythonBlockComment() range
   let l:start = a:firstline
   let l:end   = a:lastline
@@ -140,3 +203,36 @@ exe 'set t_kB=' . nr2char(27) . '[Z'
 " Allow indenting with tab and shift-tab
 xnoremap <Tab> >gv
 xnoremap <S-Tab> <gv
+
+" ================================
+" Move lines like VS Code
+" Supports: Alt+Up / Alt+Down and Alt+K / Alt+J
+" ================================
+nnoremap <silent> <Plug>(MoveLineUp)   :m .-2<CR>==
+nnoremap <silent> <Plug>(MoveLineDown) :m .+1<CR>==
+inoremap <silent> <Plug>(MoveLineUp)   <Esc>:m .-2<CR>==gi
+inoremap <silent> <Plug>(MoveLineDown) <Esc>:m .+1<CR>==gi
+vnoremap <silent> <Plug>(MoveLineUp)   :m '<-2<CR>gv=gv
+vnoremap <silent> <Plug>(MoveLineDown) :m '>+1<CR>gv=gv
+
+" Alt+Arrow (terminal sends 1;3A/B)
+execute "set <F31>=\e[1;3A"
+execute "set <F32>=\e[1;3B"
+
+nmap <F31> <Plug>(MoveLineUp)
+nmap <F32> <Plug>(MoveLineDown)
+imap <F31> <Plug>(MoveLineUp)
+imap <F32> <Plug>(MoveLineDown)
+vmap <F31> <Plug>(MoveLineUp)
+vmap <F32> <Plug>(MoveLineDown)
+
+"  Alt+J/K as Meta (terminal sends ^[j / ^[k)
+execute "set <M-j>=\ej"
+execute "set <M-k>=\ek"
+
+nmap <M-k> <Plug>(MoveLineUp)
+nmap <M-j> <Plug>(MoveLineDown)
+imap <M-k> <Plug>(MoveLineUp)
+imap <M-j> <Plug>(MoveLineDown)
+vmap <M-k> <Plug>(MoveLineUp)
+vmap <M-j> <Plug>(MoveLineDown)
