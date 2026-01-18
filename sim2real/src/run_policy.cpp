@@ -121,7 +121,7 @@ const int elevation_grid_total_size = elevation_grid_width * elevation_grid_heig
 const float elevation_grid_resolution = 0.08f;
 const float elevation_sensor_offset_x = 0.2f;
 const float elevation_fill_value = -0.27f; 
-const float hardcoded_elevation = -0.31f;
+const float hardcoded_elevation = -0.28f;
 
 timed_atomic<std::vector<float>> global_elevation_map_filtered{
     std::vector<float>(elevation_grid_total_size, hardcoded_elevation)
@@ -637,7 +637,7 @@ torch::Tensor construct_observation_tensor(const stamped_robot_state& robot_stat
     observation.slice(1, prev_action_start_index, prev_action_start_index + num_joints).copy_(prev_action);
 
     const int height_map_start_index = prev_action_start_index + num_joints;
-    const bool use_hardcoded_heights = false;
+    const bool use_hardcoded_heights = true;
     if(use_hardcoded_heights) {
         observation.slice(1, height_map_start_index, obs_dim).fill_(hardcoded_elevation);
     }
@@ -757,11 +757,11 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
             }	
         }
 
-        const bool walk_a_bit = true;
+        const bool walk_a_bit = false;
         if(walk_a_bit) {logger->warn("ROBOT WILL WALK SOON!");}
         auto time_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         if(walk_a_bit && time_now_ms - start_ms > 55000 && time_now_ms - start_ms < 62000) {
-            vel_command[0] = 0.7f;
+            vel_command[0] = 1.0f;
         }
 
         auto observation = construct_observation_tensor(robot_state, vel_command, previous_action, model_observation_dim == observation_dim_history, robot_state.counter == 0);
