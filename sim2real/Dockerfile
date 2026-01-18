@@ -94,8 +94,6 @@ RUN sed -E -i.bak 's#^(cmake_minimum_required\(\s*VERSION\s*)[0-9]+(\.[0-9]+)*#\
 # ROS path needed for ros-$ROS_DISTRO-eigenpy
 RUN CMAKE_PREFIX_PATH=/opt/ros/$ROS_DISTRO/:$CMAKE_PREFIX_PATH cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_INTERFACE=ON -DPYTHON_DEB_LAYOUT=ON ..
 RUN make -j && make install
-# Needed because it installs a shared lib into /usr/share/ for some reason...
-RUN ln -s /usr/local/share/libinekf.so /usr/local/lib/libinekf.so
 
 # Solver for LI-INIT
 WORKDIR /ceres
