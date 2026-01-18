@@ -31,7 +31,7 @@ FetchContent_Declare (
 )
 FetchContent_MakeAvailable(spdlog)
 
-FetchContent_Declare(json URL https://github.com/nlohmann/json/reFeases/download/v3.12.0/json.tar.xz)
+FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
 FetchContent_MakeAvailable(json)
 
 find_package(Threads REQUIRED)
