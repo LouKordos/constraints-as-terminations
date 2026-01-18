@@ -760,7 +760,7 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
         const bool walk_a_bit = false;
         if(walk_a_bit) {logger->warn("ROBOT WILL WALK SOON!");}
         auto time_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        if(walk_a_bit && time_now_ms - start_ms > 55000 && time_now_ms - start_ms < 62000) {
+        if(walk_a_bit && time_now_ms - start_ms > 55000 && time_now_ms - start_ms < 60000) {
             vel_command[0] = 1.0f;
         }
 
