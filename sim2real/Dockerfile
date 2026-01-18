@@ -114,8 +114,8 @@ RUN rosdep init
 RUN rosdep update
 RUN echo '' >> /root/.bashrc
 RUN echo 'eval "$(fzf --bash)"' >> /root/.bashrc
-RUN echo "alias rsync='rsync --checksum --partial --stats --human-readable --info=progress2 --no-inc-recursive --zc=zstd --zl=5 -avist" >> /root/.bashrc
-RUN echo "alias clbin='curl -A '\''MyUploader/1.0'\'' -F '\''file=@-'\'' -F '\''secret='\'' https://0x0.st'" >> /root/.bashrc
+RUN echo "alias rsync='rsync --checksum --partial --stats --human-readable --info=progress2 --no-inc-recursive --zc=zstd --zl=5 -avist'" >> /root/.bashrc
+RUN echo "alias clbin=\"curl -A 'MyUploader/1.0' -F 'file=@-' -F 'secret=' https://0x0.st\"" >> /root/.bashrc
 # RUN echo 'source /opt/ros/$ROS_DISTRO/setup.bash' >> ~/.bashrc
 RUN echo '# Remind user to source custom ROS2 workspace' >> /root/.bashrc
 RUN echo 'echo "Remember to source /app/ros2_ws/install/setup.bash OR /app/odom_alternative_ws/install/setup.bash if you are working with ROS!"' >> /root/.bashrc
