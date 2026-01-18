@@ -121,7 +121,7 @@ const int elevation_grid_total_size = elevation_grid_width * elevation_grid_heig
 const float elevation_grid_resolution = 0.08f;
 const float elevation_sensor_offset_x = 0.2f;
 const float elevation_fill_value = -0.27f; 
-const float hardcoded_elevation = -0.28f;
+const float hardcoded_elevation = -0.30f;
 
 timed_atomic<std::vector<float>> global_elevation_map_filtered{
     std::vector<float>(elevation_grid_total_size, hardcoded_elevation)
