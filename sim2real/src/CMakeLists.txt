@@ -31,6 +31,9 @@ FetchContent_Declare (
 )
 FetchContent_MakeAvailable(spdlog)
 
+FetchContent_Declare(json URL https://github.com/nlohmann/json/reFeases/download/v3.12.0/json.tar.xz)
+FetchContent_MakeAvailable(json)
+
 find_package(Threads REQUIRED)
 find_package(unitree_sdk2 REQUIRED)
 list(APPEND CMAKE_PREFIX_PATH "/torch/libtorch/")
@@ -41,7 +44,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_executable(run_policy run_policy.cpp)
 target_include_directories(run_policy PUBLIC ${sensor_msgs_INCLUDE_DIRS} ${std_msgs_INCLUDE_DIRS} ${geometry_msgs_INCLUDE_DIRS})
-target_link_libraries(run_policy PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 atomic Threads::Threads "${TORCH_LIBRARIES}" cppzmq)
+target_link_libraries(run_policy PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 atomic Threads::Threads "${TORCH_LIBRARIES}" cppzmq nlohmann_json::nlohmann_json)
 
 add_executable(read_observations read_observations.cpp)
 target_link_libraries(read_observations PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 Threads::Threads)
