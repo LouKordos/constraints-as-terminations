@@ -3584,6 +3584,16 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
             if any(r.get("status") != "DONE" for r in results):
                 exit_code = 1
 
+                print("\n" + "!"*40)
+                print("THE FOLLOWING JOBS FAILED:")
+                for r in results:
+                    if r['status'] != "DONE":
+                        print(f" - Plot: '{r['name']}'")
+                        print(f"   Status: {r['status']}")
+                        if 'error' in r:
+                            print(f"   Error: {r['error']}")
+                        print("-" * 20)
+
     end_time = time.time()
     print(f"Plot generation took {(end_time-start_time):.4f} seconds.")
 
