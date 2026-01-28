@@ -374,6 +374,12 @@ private:
                 pos_x = parsed_json["pose"].value("x", 0.0f);
                 pos_y = parsed_json["pose"].value("y", 0.0f);
                 pos_z = parsed_json["pose"].value("z", 0.0f);
+                logger->debug("Base z: {}", pos_z);
+                if(pos_z > 0.8 || pos_z < 0.1) {
+                    exit_flag.store(true);
+                    logger->error("Base z out of safe bounds, likely occluded or odometry wrong, exiting to be safe.");
+                }
+                hardcoded_elevation = -pos_z;
             }
             
             frame_record["pose"] = {
