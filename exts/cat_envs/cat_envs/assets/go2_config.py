@@ -1,5 +1,5 @@
 import isaaclab.sim as sim_utils
-from isaaclab.actuators import IdealPDActuatorCfg, DCMotorCfg
+from isaaclab.actuators import IdealPDActuatorCfg, DCMotorCfg, DelayedPDActuator, DelayedPDActuatorCfg
 from isaaclab.assets.articulation import ArticulationCfg
 from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
 
@@ -76,14 +76,17 @@ UNITREE_GO2_CFG_EVAL = ArticulationCfg(
     ),
     soft_joint_pos_limit_factor=0.9,
     actuators={
-        "base_legs": DCMotorCfg(
+        "base_legs": DCMotorCfg(#DelayedPDActuatorCfg(
             joint_names_expr=[".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
             effort_limit=23.5,
-            saturation_effort=23.5,
-            velocity_limit=30.0,
+            saturation_effort=20.0,
+            velocity_limit=20.0,
             stiffness=25.0,
             damping=0.5,
-            friction=0.0,
+            friction=0.05,
+            #min_delay=20, # physics time steps
+            # max_delay=60, # physics time steps
+            # armature=0.001,
         ),
     },
 )
