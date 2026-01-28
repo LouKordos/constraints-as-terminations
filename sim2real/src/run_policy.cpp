@@ -336,10 +336,10 @@ private:
                 v += temporary_elevation_offset;
             }
 
-            auto robot_state_result = global_robot_state.try_load_for(std::chrono::microseconds(100));
+            auto robot_state_result = global_robot_state.try_load_for(std::chrono::microseconds(250));
             if (!robot_state_result.has_value()) {
                  exit_flag.store(true);
-                 logger->error("Critical: Failed to load robot state for elevation logging.");
+                 logger->error("Critical: Timed out trying to load robot state for elevation logging.");
                  break;
             }
             stamped_robot_state current_state = robot_state_result.value();
@@ -352,8 +352,8 @@ private:
                 filtered_data_buffer_ = raw_data_buffer_;
             }
 
-            if(!global_elevation_map_filtered.try_store_for(filtered_data_buffer_, std::chrono::microseconds(100))) {
-                logger->error("Critical: Failed to update global elevation map atomic.");
+            if(!global_elevation_map_filtered.try_store_for(filtered_data_buffer_, std::chrono::microseconds(250))) {
+                logger->error("Critical: Timed out trying to update global elevation map atomic.");
                 exit_flag.store(true);
                 break;
             }
