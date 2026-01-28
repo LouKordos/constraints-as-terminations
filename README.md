@@ -80,7 +80,7 @@ Using `go2_robot` is currently not tested because it relies on Fast-LIO2 and LI-
 3. `export ROS_DOMAIN_ID=0` so that Go2 topics become visible
 4. `source /app/odom_alternative_ws/install/setup.bash`
 4. Ensure you see `/lowstate` and under `ros2 topic list`
-5. Run `ros2 launch go2_livox_bringup bringup.launch.py | grep -v "Failed to parse type hash for topic"`
+5. Run `ros2 launch go2_livox_bringup bringup.launch.py | grep -v "Failed to parse type hash for topic"`. Note that you can pass `use_vicon:=True` to replace odometry with vicon motion tracking. This requires a tf publisher using something like [https://github.com/dasc-lab/ros2-vicon-bridge](https://github.com/dasc-lab/ros2-vicon-bridge).
 7. Open rviz2 and ensure `/tf` and the `/odom` frame work properly.
 6. Inspect `/tf`, livox pointcloud, robot model, odometry in RViz2 on workstation
 
