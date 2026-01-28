@@ -121,7 +121,8 @@ const int elevation_grid_total_size = elevation_grid_width * elevation_grid_heig
 const float elevation_grid_resolution = 0.08f;
 const float elevation_sensor_offset_x = 0.2f;
 const float elevation_fill_value = -0.27f; 
-const float hardcoded_elevation = -0.30f;
+float hardcoded_elevation = -0.30f;
+bool use_hardcoded_heights = false;
 
 timed_atomic<std::vector<float>> global_elevation_map_filtered{
     std::vector<float>(elevation_grid_total_size, hardcoded_elevation)
@@ -643,7 +644,6 @@ torch::Tensor construct_observation_tensor(const stamped_robot_state& robot_stat
     observation.slice(1, prev_action_start_index, prev_action_start_index + num_joints).copy_(prev_action);
 
     const int height_map_start_index = prev_action_start_index + num_joints;
-    const bool use_hardcoded_heights = true;
     if(use_hardcoded_heights) {
         observation.slice(1, height_map_start_index, obs_dim).fill_(hardcoded_elevation);
     }
