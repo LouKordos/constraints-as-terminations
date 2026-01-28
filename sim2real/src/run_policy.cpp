@@ -1065,8 +1065,34 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     sigaction(SIGINT, &sigint_handler, NULL);
 
     // std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-22-08-06-02_6299_traced_deterministic.pt"};
-    std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-28-17-13-04_21349_traced_deterministic.pt"};
+    std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-28-17-13-04_21349_traced_deterministic.pt"}; // env 75, standard best one so far (with elevation map)
+    // std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-12-28-14-47-57_29499_traced_deterministic.pt"}; // env 79
+    // std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-12-28-15-28-51_19499_traced_deterministic.pt"}; // env 80
     logger->info("Using checkpoint at {}", checkpoint_path.string());
+
+    // Safety precaution to ensure that trained policies do not receive significantly OOD observations.
+    // To add new checkpoint, add to this list, hardcoded value will be set to zero automatically.
+    // Otherwise, add to checkpoints_proper_elevation_map
+    const std::vector<std::string> checkpoint_filenames_zero_elevation_map = {"2025-12-28-15-28-51_19499_traced_deterministic.pt", "2025-12-28-14-47-57_29499_traced_deterministic.pt", "2025-12-28-14-58-57_29649_traced_deterministic.pt"};
+    const std::vector<std::string> checkpoint_filenames_proper_elevation_map = {"2025-06-28-17-13-04_21349_traced_deterministic.pt"};
+    logger->info("Checkpoints registered to use zeroed out hardcoded height map: {}", checkpoint_filenames_zero_elevation_map);
+    logger->info("Checkpoints registered to use proper elevation map: {}", checkpoint_filenames_proper_elevation_map);
+
+    bool checkpoint_in_zero_elevation_map = (std::find(checkpoint_filenames_zero_elevation_map.begin(), checkpoint_filenames_zero_elevation_map.end(), checkpoint_path.filename().string()) != checkpoint_filenames_zero_elevation_map.end());
+    bool checkpoint_in_proper_elevation_map = (std::find(checkpoint_filenames_proper_elevation_map.begin(), checkpoint_filenames_proper_elevation_map.end(), checkpoint_path.filename().string()) != checkpoint_filenames_proper_elevation_map.end());
+    if(!checkpoint_in_zero_elevation_map && !checkpoint_in_proper_elevation_map) {
+        exit_flag.store(true);
+        logger->error("Specified checkpoint file found in neither of the two allowed checkpoint lists, exiting! This is a safety precaution to prevent passing incorrect observations into a policy, do not circumvent! Simply add the checkpoint to the correct list in the source code above this message printout.");
+        return EXIT_FAILURE;
+    }
+    
+    // Could maybe rework this to be a config file instead, where each checkpoint is associated with certain configuration values instead of checking like this
+    if(checkpoint_in_zero_elevation_map) {
+        logger->info("Checkpoint found in zero elevation map list, setting use_hardcoded_heights=0 and hardcoded_elevation=0.0f");
+        use_hardcoded_heights = true;
+        hardcoded_elevation = 0.0f;
+    }
+    // Add adjustments for opposite scenario here if needed
 
     logger->debug("Setting up robot communication.");
     // AsyncRosbagLogger::instance().open((logdir_path / "rosbag").string());
