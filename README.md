@@ -90,7 +90,7 @@ This is a WIP, I will add more detailed instructions when everything is working 
 1. `export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`
 2. `export ROS_DOMAIN_ID=0`
 3. `ros2 topic list` to ensure that you see all the robot topics. If not visible, add multicast route for network interface, set CYCLONEDDS_URI to config file specfiying which network interface to use, stop and start ros2 daemon
-4. `./src/elevation_mapping_cupy/docker/build.sh && source in.tall/setup.bash && ros2 launch elevation_mapping_cupy elevation_mapping_go2.launch.py use_python_node:=false`
+4. `./src/elevation_mapping_cupy/docker/build.sh && source install/setup.bash && ros2 launch elevation_mapping_cupy elevation_mapping_go2.launch.py use_python_node:=false`
 
 ## Running CaT (original repo, outdated)
 
