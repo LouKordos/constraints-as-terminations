@@ -13,6 +13,7 @@
 #include <sstream>
 #include <cstdint>
 #include <cstring>
+#include <algorithm>
 
 #include <signal.h>
 #include <stdlib.h>
