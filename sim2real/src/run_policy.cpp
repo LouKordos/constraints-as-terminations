@@ -807,7 +807,7 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
             else {
                 auto overrun = std::chrono::duration_cast<std::chrono::microseconds>(loop_end_time - next_iteration_time);
                 logger->error("Control deadline exceeded by {}us!", overrun.count());
-                if(overrun > frequency_overrun_threshold && iteration_counter > 5) { // Warm up first 5 iterations
+                if(overrun > frequency_overrun_threshold && iteration_counter > 8) { // Warm up first 5 iterations
                     exit_flag.store(true);
                     logger->error("Control loop frequency overrun exceeds threshold of {}ms, exiting for safety...", frequency_overrun_threshold.count());
                 }
