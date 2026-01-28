@@ -138,7 +138,9 @@ public:
     ElevationMapProcessor(std::string log_directory, std::string layer_name, int layer_id) 
         : zmq_context_(1), zmq_socket_(zmq_context_, zmq::socket_type::sub), layer_identifier_(layer_id), layer_name_(layer_name)
     {
-        std::string remote_endpoint = "tcp://192.168.123.224:6975"; 
+        // std::string remote_endpoint = "tcp://192.168.123.224:6975"; // Smooth plugin + relative
+        std::string remote_endpoint = "tcp://192.168.123.224:6973"; // min_filter plugin + relative
+
         
         try {
             zmq_socket_.connect(remote_endpoint);
@@ -717,8 +719,8 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
     // We start the thread here because the 25sec inside processing_loop should only start after the startup procedure is done
     std::unique_ptr<ElevationMapProcessor> elevation_processor = std::make_unique<ElevationMapProcessor>(
         logdir_path.string(),
-        "smooth",
-        2 // Min Filter Layer (ID 1)
+        "min_filter",
+        1 // Layer ID
     );
 
     auto dt = std::chrono::milliseconds{20};
