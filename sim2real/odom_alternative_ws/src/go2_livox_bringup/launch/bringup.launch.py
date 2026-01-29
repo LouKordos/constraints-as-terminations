@@ -1,7 +1,8 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, ExecuteProcess
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import PathJoinSubstitution, LaunchConfiguration
+from launch.substitutions import PathJoinSubstitution, LaunchConfiguration, FindExecutable
+
 from launch_ros.substitutions import FindPackageShare
 from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.actions import Node
@@ -32,7 +33,7 @@ def generate_launch_description():
     )
     odometry_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([go2_odometry_launch_file]),
-        condition=UnlessCondition(use_vicon)
+        condition=UnlessCondition(use_vicon)        
     )
 
     state_publisher_node = Node(
@@ -54,10 +55,15 @@ def generate_launch_description():
         condition=IfCondition(use_vicon)
     )
 
+    # Temporary because policy inference is not connected to ros so we need to convert to zmq message
+    script_path = "/app/odom_alternative_ws/src/temp_joystick_command_zmq.py"
+    joystick_zmq_translation_node = ExecuteProcess(cmd=[FindExecutable(name="python3"), script_path], output="screen", log_cmd=True)
+
     return LaunchDescription([
         use_vicon_arg,
         livox_include,
         odometry_include,
         state_publisher_node,
-        state_converter_node
+        state_converter_node,
+        joystick_zmq_translation_node
     ])
