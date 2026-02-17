@@ -164,7 +164,7 @@ class MySceneCfg(InteractiveSceneCfg):
     ray_caster = RayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
         update_period=0.0,  # will override in __post_init__
-        offset=RayCasterCfg.OffsetCfg(pos=(0.2, 0.0, 0.5)),  # 0.5 m above base
+        offset=RayCasterCfg.OffsetCfg(pos=(0.2, 0.0, 0.5)), # 0.5 m above base
         mesh_prim_paths=["/World/ground"], # Rays will only collide with meshes specified here as they need to be copied over to the GPU for calculations
         ray_alignment="yaw", # keep sensor level (no pitch/roll with body). This is a gross oversimplification but the original paper also used a grid of heights around the robot
         pattern_cfg=patterns.GridPatternCfg( # Grid pattern shoots down vertical rays to retrieve hight at each grid point. Needs adjustments to be more realistic, such as using e.g. LIDARConfig
@@ -921,6 +921,7 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
         # disable randomization for play
         self.observations.policy.enable_corruption = False
 
+        
         # Pick the hardest terrain when testing the model.
         # Technically, this is incorrect as it wlil only run after 
         # the first reset but it's good to see a baseline of it walking on flat terrain first
