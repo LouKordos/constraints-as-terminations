@@ -51,6 +51,7 @@ def parse_arguments():
     parser.add_argument("--foot_vel_height_threshold", type=float, default=0.02, help="Maximum foot height to include in the foot-velocity-vs-height plot.")
     parser.add_argument("--num_plot_jobs_in_parallel", type=int, default=2, help="Number of plot generation jobs to run in parallel.")
     parser.add_argument("--plot_job_stagger_delay", type=int, default=10, help="Delay in seconds between starting each plot generation job in a parallel batch.")
+    parser.add_argument("--skip_cot_sweep", action="store_true", default=False, help="Turn off 0.2m/s increment forward walking on flat terrain that is used for Cost of Transport estimation")
     # Good seeds for eval: 44, 46, 49
     # DEPRECATED: Hardcoded seed in env config is used
     # parser.add_argument("--seed", type=int, required=False, default=46, help="Seed for numpy, torch, env, terrain, terrain generator etc.. Good seeds for eval are 44, 46, 49")
@@ -296,38 +297,35 @@ def main():
 
     fixed_command_sim_steps = 500 # If you want to increase this you also need to increase episode length otherwise env will reset mid-way
     fixed_command_scenarios = [ # Scenario positions depend on seed!
+        ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_stairs_up", torch.tensor([1, 0.0, 0.0], device=device), (torch.tensor([-8, 16, -0.1], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        # ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("pure_spin", torch.tensor([0.0, 0.0, 0.5], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        # ("slow_walk_x_flat_terrain", torch.tensor([0.1, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        # ("slow_walk_y_flat_terrain", torch.tensor([0.0, 0.1, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        # ("medium_walk_x_flat_terrain", torch.tensor([0.5, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("cot_sweep_walk_x_flat_terrain_0.2", torch.tensor([0.2, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("cot_sweep_walk_x_flat_terrain_0.4", torch.tensor([0.4, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("cot_sweep_walk_x_flat_terrain_0.6", torch.tensor([0.6, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("cot_sweep_walk_x_flat_terrain_0.8", torch.tensor([0.8, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("cot_sweep_walk_x_flat_terrain_1.0", torch.tensor([1.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("cot_sweep_walk_x_flat_terrain_1.2", torch.tensor([1.2, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("cot_sweep_walk_x_flat_terrain_1.4", torch.tensor([1.4, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("cot_sweep_walk_x_flat_terrain_1.6", torch.tensor([1.6, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("cot_sweep_walk_x_flat_terrain_1.8", torch.tensor([1.8, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("cot_sweep_walk_x_flat_terrain_2.0", torch.tensor([2.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        # ("medium_walk_y_flat_terrain", torch.tensor([0.0, 0.5, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        # ("fast_walk_x_flat_terrain", torch.tensor([1.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        # ("fast_walk_y_flat_terrain", torch.tensor([0.0, 1.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("very_fast_walk_x_flat_terrain", torch.tensor([2.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        # ("slow_walk_x_uneven_terrain", torch.tensor([0.1, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        # ("slow_walk_y_uneven_terrain", torch.tensor([0.0, 0.1, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("walk_x_flat_terrain_0.4mps", torch.tensor([0.4, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("walk_x_flat_terrain_1.0mps", torch.tensor([1.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ("walk_x_flat_terrain_1.6mps", torch.tensor([1.6, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("medium_walk_x_uneven_terrain", torch.tensor([0.5, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        # ("medium_walk_y_uneven_terrain", torch.tensor([0.0, 0.5, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_x_uneven_terrain", torch.tensor([1.0, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("very_fast_walk_x_uneven_terrain", torch.tensor([2.0, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        # ("fast_walk_y_uneven_terrain", torch.tensor([0.0, 1.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("medium_walk_diagonal_uneven_terrain", torch.tensor([0.5, 0.5, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_diagonal_uneven_terrain", torch.tensor([1.0, 1.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("medium_walk_diagonal_turning_uneven_terrain", torch.tensor([0.8, 0.5, 0.0], device=device), (torch.tensor([0.0, 3.0, 0.4], device=device), torch.tensor([np.cos(np.pi/8), 0.0, 0.0, np.sin(np.pi/8)], dtype=torch.float32, device=device))),
+        ("medium_walk_diagonal_random_steps", torch.tensor([0.7, 0.5, 0.0], device=device), (torch.tensor([2.0, 5.0, 0.4], device=device), torch.tensor([np.cos(np.pi/8), 0.0, 0.0, np.sin(np.pi/8)], dtype=torch.float32, device=device))),
     ]
 
+    if not args.skip_cot_sweep:
+        fixed_command_scenarios.extend([
+            ("cot_sweep_walk_x_flat_terrain_0.2", torch.tensor([0.2, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+            ("cot_sweep_walk_x_flat_terrain_0.4", torch.tensor([0.4, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+            ("cot_sweep_walk_x_flat_terrain_0.6", torch.tensor([0.6, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+            ("cot_sweep_walk_x_flat_terrain_0.8", torch.tensor([0.8, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+            ("cot_sweep_walk_x_flat_terrain_1.0", torch.tensor([1.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+            ("cot_sweep_walk_x_flat_terrain_1.2", torch.tensor([1.2, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+            ("cot_sweep_walk_x_flat_terrain_1.4", torch.tensor([1.4, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+            ("cot_sweep_walk_x_flat_terrain_1.6", torch.tensor([1.6, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+            ("cot_sweep_walk_x_flat_terrain_1.8", torch.tensor([1.8, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+            ("cot_sweep_walk_x_flat_terrain_2.0", torch.tensor([2.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
+        ])
+    else:
+        print("Skipping Cost of Transport sweep scenarios")
+    
     # See main training loop for detailed explanation, but in summary, hard constraints terminate the environment or at least return terminated = 1
     # which results in zero reward and can't be recovered by rescaling. Thus, we update the constraint limits based on the loaded values from
     # the training environment. Only contact force and thigh position limit are updated because other values are handled more robustly by the rescaling in the loop.
