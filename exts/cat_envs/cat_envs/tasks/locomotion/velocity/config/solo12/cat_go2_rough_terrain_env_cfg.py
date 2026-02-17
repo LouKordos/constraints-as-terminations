@@ -172,6 +172,7 @@ class MySceneCfg(InteractiveSceneCfg):
             resolution=0.08,
             ordering="xy" # default row-major
         ),
+        ray_cast_drift_range={"x": (-0.01, 0.01), "y": (-0.01, 0.01), "z": (0.0, 0.0)},
         debug_vis=True,
     )
 
