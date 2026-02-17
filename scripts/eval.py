@@ -1,5 +1,6 @@
 import argparse
 import os
+import inspect
 import glob
 import json
 import yaml
@@ -51,6 +52,10 @@ def parse_arguments():
     parser.add_argument("--foot_vel_height_threshold", type=float, default=0.02, help="Maximum foot height to include in the foot-velocity-vs-height plot.")
     parser.add_argument("--num_plot_jobs_in_parallel", type=int, default=2, help="Number of plot generation jobs to run in parallel.")
     parser.add_argument("--plot_job_stagger_delay", type=int, default=10, help="Delay in seconds between starting each plot generation job in a parallel batch.")
+    parser.add_argument("--delay_joints", type=int, default=0, help="Latency steps for joint pos/vel.")
+    parser.add_argument("--delay_imu", type=int, default=0, help="Latency steps for IMU (ang vel/gravity).")
+    parser.add_argument("--delay_action_history", type=int, default=0, help="Latency steps for action history.")
+    parser.add_argument("--delay_height_map", type=int, default=0, help="Latency steps for height map.")
     parser.add_argument("--skip_cot_sweep", action="store_true", default=False, help="Turn off 0.2m/s increment forward walking on flat terrain that is used for Cost of Transport estimation")
     # Good seeds for eval: 44, 46, 49
     # DEPRECATED: Hardcoded seed in env config is used
@@ -259,8 +264,38 @@ def main():
     from isaaclab.utils.math import euler_xyz_from_quat, quat_apply_inverse 
     from isaaclab.envs.mdp.observations import root_quat_w
     from isaaclab.managers import SceneEntityCfg
+    from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
+    print(f"ISAACLAB_NUCLEUS_DIR={ISAACLAB_NUCLEUS_DIR}")
 
     env_cfg = parse_env_cfg(args.task, device=args.device, num_envs=args.num_envs, use_fabric=not args.disable_fabric)
+    
+    # Inject Latency
+    if hasattr(env_cfg.observations, "policy"):
+        p = env_cfg.observations.policy
+        # Helper to safely set latency if the term exists AND accepts the argument
+        def set_latency(term_name, val):
+            if hasattr(p, term_name):
+                term = getattr(p, term_name)
+                try:
+                    sig = inspect.signature(term.func)
+                except ValueError:
+                    print(f"[WARN] Could not inspect signature for {term_name}, skipping latency.")
+                    return
+
+                if "latency" in sig.parameters:
+                    if term.params is None: term.params = {}
+                    term.params["latency"] = val
+                    print(f"[INFO] Set latency for {term_name} to {val}")
+                else:
+                    print(f"[INFO] Skipping latency for {term_name} (Function '{term.func.__name__}' does not accept it)")
+
+        set_latency("joint_pos_history", args.delay_joints)
+        set_latency("joint_vel_history", args.delay_joints)
+        set_latency("base_ang_vel", args.delay_imu)
+        set_latency("projected_gravity", args.delay_imu)
+        set_latency("actions", args.delay_action_history)
+        set_latency("height_map", args.delay_height_map)
+    
 
     # Seeding
     import random
