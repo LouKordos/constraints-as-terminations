@@ -644,6 +644,32 @@ class EventCfg:
         params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
     )
 
+    # Slight tugging / pushing for longer durations
+    push_base_wrench = EventTerm(
+        func=mdp.apply_external_force_torque,
+        mode="interval",
+        is_global_time=False, # Don't apply in sync across all envs
+        interval_range_s=(0.05, 0.2), # frequency + implicit "hold" time
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=["base"]),
+            "force_range": (-10.0, 10.0),
+            "torque_range": (-0.5, 0.5),
+        },
+    )
+
+    # Strong shorter pushes
+    # strong_push_base_wrench = EventTerm(
+    #     func=mdp.apply_external_force_torque,
+    #     mode="interval",
+    #     is_global_time=False, # Don't apply in sync across all envs
+    #     interval_range_s=(0.02, 0.05), # frequency + implicit "hold" time
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", body_names=["base"]),
+    #         "force_range": (-30.0, 30.0),
+    #         "torque_range": (-1.5, 1.5),
+    #     },
+    # )
+
     episodic_height_offset = EventTerm(
         func=events.sample_episodic_height_offset,
         mode="reset",
