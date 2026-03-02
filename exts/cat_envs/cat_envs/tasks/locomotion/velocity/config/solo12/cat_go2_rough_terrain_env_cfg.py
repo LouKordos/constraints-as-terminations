@@ -932,10 +932,7 @@ class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.max_velocity_iteration_count = 1
         self.sim.bounce_threshold_velocity = 0.2
         self.sim.gpu_max_rigid_contact_count = 33554432
-        # self.sim.device = "cpu"
-        # self.sim.physx.use_gpu = False
-        # self.sim.solver_type = 1
-        # self.sim.num_threads = 1
+        self.sim.physx.gpu_max_rigid_patch_count = 568462
         self.sim.physx.enable_enhanced_determinism = True
         self.sim.physics_material = self.scene.terrain.physics_material
 
@@ -963,7 +960,6 @@ class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
             self.scene.terrain.terrain_generator.seed = HARDCODED_SEED
             print(f"Terrain generator seed in env post init={self.scene.terrain.terrain_generator.seed}")
 
-        self.sim.physx.gpu_max_rigid_patch_count = 568462
         self.apply_elevation_map_pose_noise = True
         self.apply_elevation_map_point_noise = False
 
