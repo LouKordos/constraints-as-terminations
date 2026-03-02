@@ -929,6 +929,34 @@ class Go2RoughTerrainEnvCfgJointStateHistory(Go2RoughTerrainEnvCfg):
 @configclass
 class Go2RoughTerrainEnvCfgFullStateHistory(Go2RoughTerrainEnvCfg):
     observations: ObservationsCfgFullStateHistory = ObservationsCfgFullStateHistory()
+# This is needed because simply changing default joint pos in go2_config.py will cause action space to be different
+# from training, as Isaac Lab uses those values for applying actions. So we simply override the reset event to adjust the joint positions
+def reset_joints_to_eval_pose(env, env_ids, asset_cfg=SceneEntityCfg("robot")):
+    asset: Articulation = env.scene[asset_cfg.name]
+
+    # Start from defaults, then overwrite specific joints
+    joint_pos = asset.data.default_joint_pos[env_ids].clone()
+    joint_vel = asset.data.default_joint_vel[env_ids].clone()
+
+    name_to_id = {n: i for i, n in enumerate(asset.data.joint_names)}
+
+    joint_pos[:, name_to_id["FL_thigh_joint"]] = 1.1
+    joint_pos[:, name_to_id["FR_thigh_joint"]] = 1.1
+    joint_pos[:, name_to_id["RL_thigh_joint"]] = 1.1
+    joint_pos[:, name_to_id["RR_thigh_joint"]] = 1.1
+
+    joint_pos[:, name_to_id["FL_hip_joint"]] = 0.0
+    joint_pos[:, name_to_id["FR_hip_joint"]] = 0.0
+    joint_pos[:, name_to_id["RL_hip_joint"]] = 0.0
+    joint_pos[:, name_to_id["RR_hip_joint"]] = 0.0
+    
+    joint_pos[:, name_to_id["FL_calf_joint"]] = -1.8
+    joint_pos[:, name_to_id["FR_calf_joint"]] = -1.8
+    joint_pos[:, name_to_id["RL_calf_joint"]] = -1.8
+    joint_pos[:, name_to_id["RR_calf_joint"]] = -1.8
+    
+    asset.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+    asset.reset(env_ids)
 
 class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
     def __post_init__(self) -> None:
@@ -951,6 +979,11 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
         self.events.force_hard_terrain = EventTerm(
             func=force_hard_terrain,
             mode="startup",  # runs once at environment startup
+        )
+
+        self.events.reset_robot_joints = EventTerm(
+            func=reset_joints_to_eval_pose,
+            mode="reset",
         )
 
         ENABLE_EXTRA_MASS = True
