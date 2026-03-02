@@ -50,7 +50,7 @@ RUN git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 RUN ~/.fzf/install --all
 
 # ROS2 stuff
-RUN apt-get update -y && apt-get install -y ros-dev-tools ros-$ROS_DISTRO-desktop ros-$ROS_DISTRO-rmw-cyclonedds-cpp ros-$ROS_DISTRO-rosidl-generator-dds-idl ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan ros-$ROS_DISTRO-eigenpy
+RUN apt-get update -y && apt-get install -y ros-dev-tools ros-$ROS_DISTRO-desktop ros-$ROS_DISTRO-rmw-cyclonedds-cpp ros-$ROS_DISTRO-rosidl-generator-dds-idl ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan ros-$ROS_DISTRO-eigenpy ros-$ROS_DISTRO-grid-map-rviz-plugin ros-$ROS_DISTRO-grid-map-msgs
 
 WORKDIR /go2_sdk
 RUN git clone https://github.com/unitreerobotics/unitree_sdk2.git
