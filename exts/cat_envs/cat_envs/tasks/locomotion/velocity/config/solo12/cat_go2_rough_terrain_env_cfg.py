@@ -33,6 +33,7 @@ from isaaclab.terrains import TerrainImporterCfg, FlatPatchSamplingCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
+from isaaclab.utils.noise import NoiseModelWithAdditiveBiasCfg, GaussianNoiseCfg, UniformNoiseCfg
 from isaaclab.sensors.ray_caster import RayCasterCfg, patterns
 from isaaclab.sensors.frame_transformer import FrameTransformerCfg
 
@@ -89,33 +90,66 @@ def _get_or_create_noisy_height_markers(env):
     env._noisy_height_markers.set_visibility(True)
     return env._noisy_height_markers
 
-
 def height_map_grid(env, asset_cfg: SceneEntityCfg): 
     ray_hit_positions_world_frame = env.scene[asset_cfg.name].data.ray_hits_w # [E, R, 3]
     base_pose_world_frame = env.scene["robot"].data.root_pos_w # [E, 3]
 
-    # 2) expand base_w so it lines up with hits_w
+    POSE_NOISE_MEAN = 0.0 # TODO: Resample per episode
+    POSE_NOISE_STD = 0.001 # TODO: Check if redundant since height map noise is the same or not?
+    if env.cfg.apply_elevation_map_pose_noise:
+        base_pose_world_frame += torch.randn(base_pose_world_frame.shape[0], 1, device=base_pose_world_frame.device) * POSE_NOISE_STD + POSE_NOISE_MEAN
     base_expanded_to_match_shape_world_frame = base_pose_world_frame.view(-1, 1, 3).expand_as(ray_hit_positions_world_frame) # [E, R, 3]
-
-    # 3) sanitize: any non‐finite entry → copy from base_expanded...
-    #	this makes hit == base for that ray, so height=0
+    
     non_finite_mask = ~torch.isfinite(ray_hit_positions_world_frame)
     if non_finite_mask.any():
-        # clone once so we don't overwrite the original tensor in the scene
-        print("NANS OR INF DURING HEIGHT MAP CALCULATION!!!")
+        # print("NANS OR INF DURING HEIGHT MAP CALCULATION!!!")
         hits_clean = ray_hit_positions_world_frame.clone()
         hits_clean[non_finite_mask] = base_expanded_to_match_shape_world_frame[non_finite_mask]
     else:
         hits_clean = ray_hit_positions_world_frame
 
-    # 4) compute local coordinates, then the height = z_hit - z_base
     local = hits_clean - base_expanded_to_match_shape_world_frame # [E, R, 3]
     height = local[..., 2] # [E, R]
-    # height = torch.ones_like(height) * -0.33
-    # print(height.mean().item())
-    #test_offset = torch.ones_like(height) * 0.03
-    #height += test_offset
-    # height = torch.zeros_like(height)
+
+    # height = torch.full_like(height, -base_pose_world_frame[0,2])
+
+    # Per point outliers
+    OUTLIER_PROB = 0.01
+    OUTLIER_MEAN = 0.0
+    OUTLIER_STD = 0.05 # Large std dev for spikes
+    NOISE_MEAN = 0.0
+    NOISE_STD = 0.003
+
+    if env.cfg.apply_elevation_map_point_noise:
+        # Random single constant offset for *all* points
+        step_offset = torch.randn(height.shape[0], 1, device=height.device) * NOISE_STD + NOISE_MEAN
+        # Random noise for every point independently
+        pixel_noise = torch.randn_like(height) * NOISE_STD
+        height += pixel_noise + step_offset
+
+    # NOTE: XY noise (i.e. where each height is sampled from) is too difficult to implement in Isaac Lab efficiently because it requires re-casting rays or complex grid interpolation.
+    # Episodic Noise (Constant offset per episode)
+    if hasattr(env, "episodic_height_offset"):
+        # env.episodic_height_offset must be shape [E, 1] to broadcast over R
+        if env.cfg.apply_elevation_map_point_noise:
+            height += env.episodic_height_offset
+    else:
+        print("[WARNING] 'episodic_height_offset' not found in env! Episodic noise is NOT being applied.")
+
+    # Per-point Outlier Noise (large bias, using a mask for which points become outliers)
+    outlier_mask = torch.rand_like(height) < OUTLIER_PROB
+    if outlier_mask.any():
+        outlier_values = torch.randn(outlier_mask.sum(), device=height.device) * OUTLIER_STD + OUTLIER_MEAN
+        if env.cfg.apply_elevation_map_point_noise:
+            height[outlier_mask] += outlier_values
+
+    if env.unwrapped.num_envs == 1:
+        noisy_markers = _get_or_create_noisy_height_markers(env)
+        if noisy_markers is not None:
+            e = 0 # Show only env 0 to avoid rendering exploding if num_envs is large
+            noisy_hits_w = hits_clean[e].clone()  # [R, 3]
+            noisy_hits_w[:, 2] = base_pose_world_frame[e, 2] + height[e]  # z = base_z + noisy_height
+            noisy_markers.visualize(translations=noisy_hits_w)
 
     return height
 
@@ -610,6 +644,15 @@ class EventCfg:
         params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
     )
 
+    episodic_height_offset = EventTerm(
+        func=events.sample_episodic_height_offset,
+        mode="reset",
+        params={
+            "mean": 0.0,
+            "std": 0.01,
+        },
+    )
+    
 
 @configclass
 class RewardsCfg:
@@ -921,6 +964,8 @@ class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
             print(f"Terrain generator seed in env post init={self.scene.terrain.terrain_generator.seed}")
 
         self.sim.physx.gpu_max_rigid_patch_count = 568462
+        self.apply_elevation_map_pose_noise = True
+        self.apply_elevation_map_point_noise = False
 
 @configclass
 class Go2RoughTerrainEnvCfgJointStateHistory(Go2RoughTerrainEnvCfg):
@@ -966,6 +1011,9 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
         # make a smaller scene for play
         self.scene.num_envs = 1
         self.scene.env_spacing = 8
+
+        # Enable realistic gaussian noise during eval
+        self.apply_elevation_map_point_noise = False
     
         # Original torque limit as specified in isaac lab example config
         self.scene.robot = UNITREE_GO2_CFG_EVAL.replace(prim_path="{ENV_REGEX_NS}/Robot")
