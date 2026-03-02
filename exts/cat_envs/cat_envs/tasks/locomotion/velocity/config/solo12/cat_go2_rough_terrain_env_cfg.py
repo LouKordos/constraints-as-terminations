@@ -67,7 +67,30 @@ torch.backends.cudnn.benchmark = False
 torch.manual_seed(HARDCODED_SEED)
 torch.cuda.manual_seed_all(HARDCODED_SEED)
 
-def height_map_grid(env, asset_cfg: SceneEntityCfg):
+def _get_or_create_noisy_height_markers(env):
+    """Create (once) a marker instancer used to visualize noisy ray hit heights."""
+    if hasattr(env, "_noisy_height_markers"):
+        return env._noisy_height_markers
+
+    import isaaclab.sim as sim_utils
+    from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
+
+    cfg = VisualizationMarkersCfg(
+        prim_path="/Visuals/NoisyRayCaster",
+        markers={
+            # green spheres
+            "noisy_hit": sim_utils.SphereCfg(
+                radius=0.02,
+                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0)),
+            ),
+        },
+    )
+    env._noisy_height_markers = VisualizationMarkers(cfg)
+    env._noisy_height_markers.set_visibility(True)
+    return env._noisy_height_markers
+
+
+def height_map_grid(env, asset_cfg: SceneEntityCfg): 
     ray_hit_positions_world_frame = env.scene[asset_cfg.name].data.ray_hits_w # [E, R, 3]
     base_pose_world_frame = env.scene["robot"].data.root_pos_w # [E, 3]
 
