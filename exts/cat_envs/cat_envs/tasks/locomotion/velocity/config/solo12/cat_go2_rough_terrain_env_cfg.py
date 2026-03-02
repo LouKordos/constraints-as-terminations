@@ -944,7 +944,6 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
 
         # disable randomization for play
         self.observations.policy.enable_corruption = False
-
         
         # Pick the hardest terrain when testing the model.
         # Technically, this is incorrect as it wlil only run after 
