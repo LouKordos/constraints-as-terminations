@@ -73,3 +73,40 @@ def push_by_setting_velocity_with_random_envs(env: ManagerBasedEnv, env_ids: tor
 
     # set the velocities into the physics simulation
     asset.write_root_velocity_to_sim(vel_w, env_ids=push_idx)
+
+
+def sample_episodic_height_offset(env, env_ids: Sequence[int] | None, mean: float, std: float, attribute_name: str = "episodic_height_offset"):
+    """
+    Sample a per-episode height offset for selected envs.
+    """
+
+    # Lazily create the buffer if it doesn't exist.
+    if not hasattr(env, attribute_name):
+        setattr(env, attribute_name, torch.zeros((env.num_envs, 1), device=env.device))
+
+    buf: torch.Tensor = getattr(env, attribute_name)
+
+    # Resolve which envs to write.
+    # - In reset mode, env_ids is usually a list/sequence of indices.
+    # - In startup/global interval cases, env_ids can be None.
+    if env_ids is None:
+        idx = slice(None)
+        num = env.num_envs
+    elif isinstance(env_ids, slice):
+        idx = env_ids
+        num = env.num_envs
+    else:
+        idx = env_ids
+        num = len(env_ids)
+
+    samples = torch.randn((num, 1), device=env.device) * std + mean
+    # print(samples)
+    buf[idx] = samples
+
+def sample_episodic_height_map_noise_params(env, env_ids):
+    """
+    Adjusts mean and stddev of various noise applied to height map
+    """
+
+    if not hasattr(env, "height_map_noise_params"):
+        env.height_map_noise_params = dict
