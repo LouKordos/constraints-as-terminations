@@ -321,7 +321,7 @@ class ObservationsCfg:
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity, noise=Unoise(n_min=-0.05, n_max=0.05), scale=0.1
         )
-        joint_pos = ObsTerm(
+        joint_pos_history = ObsTerm(
             func=observations.joint_pos,
             params={
                 "names": [
@@ -342,7 +342,7 @@ class ObservationsCfg:
             noise=Unoise(n_min=-0.01, n_max=0.01),
             scale=1.0,
         )
-        joint_vel = ObsTerm(
+        joint_vel_history = ObsTerm(
             func=observations.joint_vel,
             params={
                 "names": [
@@ -368,7 +368,7 @@ class ObservationsCfg:
         height_map = ObsTerm(
             func=height_map_grid,
             params={"asset_cfg": SceneEntityCfg("ray_caster")},
-            noise=Unoise(n_min=-0.02, n_max=0.02),
+            noise=Unoise(n_min=-0.01, n_max=0.01),
             scale=1.0,
         )
 
@@ -384,7 +384,10 @@ class ObservationsCfgJointStateHistory(ObservationsCfg): # Inherit but redefine 
     @configclass
     class PolicyCfg(ObsGroup):
         base_ang_vel = ObsTerm(
-            func=mdp.base_ang_vel, noise=Unoise(n_min=-0.001, n_max=0.001), scale=0.25
+            func=observations.base_ang_vel_history, 
+            params={"history_len": 1, "latency": 0}, # LATENCY OVERWRITTEN BY eval.py ARGS
+            noise=Unoise(n_min=-0.001, n_max=0.001),
+            scale=0.25
         )
         velocity_commands = ObsTerm(
             func=mdp.generated_commands,
@@ -392,7 +395,10 @@ class ObservationsCfgJointStateHistory(ObservationsCfg): # Inherit but redefine 
             scale=(2.0, 2.0, 0.25),
         )
         projected_gravity = ObsTerm(
-            func=mdp.projected_gravity, noise=Unoise(n_min=-0.05, n_max=0.05), scale=0.1
+            func=observations.projected_gravity_history, 
+            params={"history_len": 1, "latency": 0}, # LATENCY OVERWRITTEN BY eval.py ARGS
+            noise=Unoise(n_min=-0.05, n_max=0.05),
+            scale=0.1
         )
         joint_pos_history = ObsTerm(
             func=observations.joint_state_history,
@@ -412,7 +418,8 @@ class ObservationsCfgJointStateHistory(ObservationsCfg): # Inherit but redefine 
                     "RR_calf_joint",
                 ],
                 "history_len": 3,
-                "mode": "pos"
+                "mode": "pos",
+                "latency": 0
             },
             noise=Unoise(n_min=-0.01, n_max=0.01),
             scale=1.0,
@@ -435,114 +442,28 @@ class ObservationsCfgJointStateHistory(ObservationsCfg): # Inherit but redefine 
                     "RR_calf_joint",
                 ],
                 "history_len": 3,
-                "mode": "vel"
+                "mode": "vel",
+                "latency": 0
             },
             noise=Unoise(n_min=-0.2, n_max=0.2),
             scale=0.05,
         )
-        actions = ObsTerm(func=mdp.last_action, scale=1.0)
+        actions = ObsTerm(func=observations.actions_history, scale=1.0, params={"history_len": 1, "latency": 0}) # LATENCY OVERWRITTEN BY eval.py ARGS
         
         height_map = ObsTerm(
-            func=height_map_grid,
-            params={"asset_cfg": SceneEntityCfg("ray_caster")},
-            noise=Unoise(n_min=-0.01, n_max=0.01),
-            scale=1.0,
-        )
-
-        def __post_init__(self):
-            self.enable_corruption = True
-            self.concatenate_terms = True
-
-    # observation groups
-    policy: PolicyCfg = PolicyCfg()
-
-@configclass
-class ObservationsCfgFullStateHistory(ObservationsCfg): # Inherit but redefine all terms to ensure correct order
-    @configclass
-    class PolicyCfg(ObsGroup):
-        """Observations for policy group."""
-        # observation terms (order preserved)
-        base_ang_vel_hist = ObsTerm(
-            func=observations.base_ang_vel_history,
-            params={"history_len": 3},
-            noise=Unoise(n_min=-0.001, n_max=0.001),
-            scale=0.25,
-        )
-        velocity_commands = ObsTerm(
-            func=mdp.generated_commands,
-            params={"command_name": "base_velocity"},
-            scale=(2.0, 2.0, 0.25),
-        )
-        projected_gravity_hist = ObsTerm(
-            func=observations.projected_gravity_history,
-            params={"history_len": 3},
-            noise=Unoise(n_min=-0.05, n_max=0.05),
-            scale=0.1,
-        ) 
-        joint_pos_history = ObsTerm(
-            func=observations.joint_state_history,
-            params={
-                "names": [
-                    "FL_hip_joint",
-                    "FR_hip_joint",
-                    "RL_hip_joint",
-                    "RR_hip_joint",
-                    "FL_thigh_joint",
-                    "FR_thigh_joint",
-                    "RL_thigh_joint",
-                    "RR_thigh_joint",
-                    "FL_calf_joint",
-                    "FR_calf_joint",
-                    "RL_calf_joint",
-                    "RR_calf_joint",
-                ],
-                "history_len": 3,
-                "mode": "pos"
-            },
-            noise=Unoise(n_min=-0.01, n_max=0.01),
-            scale=1.0,
-        )
-        joint_vel_history = ObsTerm(
-            func=observations.joint_state_history,
-            params={
-                "names": [
-                    "FL_hip_joint",
-                    "FR_hip_joint",
-                    "RL_hip_joint",
-                    "RR_hip_joint",
-                    "FL_thigh_joint",
-                    "FR_thigh_joint",
-                    "RL_thigh_joint",
-                    "RR_thigh_joint",
-                    "FL_calf_joint",
-                    "FR_calf_joint",
-                    "RL_calf_joint",
-                    "RR_calf_joint",
-                ],
-                "history_len": 3,
-                "mode": "vel"
-            },
-            noise=Unoise(n_min=-0.2, n_max=0.2),
-            scale=0.05,
-        )
-        actions_hist = ObsTerm(
-            func=observations.actions_history,
-            params={"history_len": 3},
-            scale=1.0,
-        ) 
-        height_map_hist = ObsTerm(
             func=observations.height_map_history,
-            params={"history_len": 3, "asset_cfg": SceneEntityCfg("ray_caster")},
+            params={"asset_cfg": SceneEntityCfg("ray_caster"), "history_len": 1, "latency": 0}, # LATENCY OVERWRITTEN BY eval.py ARGS
             noise=Unoise(n_min=-0.01, n_max=0.01),
             scale=1.0,
-        )    
-    
+        )
+
         def __post_init__(self):
             self.enable_corruption = True
             self.concatenate_terms = True
 
     # observation groups
     policy: PolicyCfg = PolicyCfg()
+
 
 def force_hard_terrain(env, env_ids: torch.Tensor | None):
     ti = env.scene.terrain  # runtime TerrainImporter
@@ -924,6 +845,30 @@ class CurriculumCfg:
     terrain_levels = CurrTerm(func=terrain_levels_with_ray_caster_refresh)
     # terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
 
+def enable_biased_gaussian_noise(env_cfg):
+    env_cfg.observations.policy.base_ang_vel.noise = NoiseModelWithAdditiveBiasCfg(
+                noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.001),
+                bias_noise_cfg=UniformNoiseCfg(n_min=-0.002, n_max=0.002)
+            )
+    env_cfg.observations.policy.projected_gravity.noise = NoiseModelWithAdditiveBiasCfg(
+                noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.03),
+                bias_noise_cfg=UniformNoiseCfg(n_min=-0.01, n_max=0.01)
+            )
+    env_cfg.observations.policy.joint_pos_history.noise = NoiseModelWithAdditiveBiasCfg(
+                noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.007),
+                bias_noise_cfg=UniformNoiseCfg(n_min=-0.003, n_max=0.003)
+            )
+    env_cfg.observations.policy.joint_vel_history.noise = NoiseModelWithAdditiveBiasCfg(
+                noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.12),
+                bias_noise_cfg=UniformNoiseCfg(n_min=-0.05, n_max=0.05)
+            )
+    env_cfg.observations.policy.height_map.noise = NoiseModelWithAdditiveBiasCfg(
+                # Currently modeling noise in height_map_grid function to better be able to control it, that's why its so low here
+                noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.00005),
+                bias_noise_cfg=UniformNoiseCfg(n_min=-0.001, n_max=0.001)
+            )
+
+
 @configclass
 class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
@@ -986,14 +931,15 @@ class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
 
         self.apply_elevation_map_pose_noise = True
         self.apply_elevation_map_point_noise = False
+        
+        # Uncomment to enable biased gaussian noise instead of uniform noise on observations.
+        # If enabled in train cfg, it is automatically also enabled in eval!
+        # enable_biased_gaussian_noise(self)
 
 @configclass
 class Go2RoughTerrainEnvCfgJointStateHistory(Go2RoughTerrainEnvCfg):
     observations: ObservationsCfgJointStateHistory = ObservationsCfgJointStateHistory()
 
-@configclass
-class Go2RoughTerrainEnvCfgFullStateHistory(Go2RoughTerrainEnvCfg):
-    observations: ObservationsCfgFullStateHistory = ObservationsCfgFullStateHistory()
 # This is needed because simply changing default joint pos in go2_config.py will cause action space to be different
 # from training, as Isaac Lab uses those values for applying actions. So we simply override the reset event to adjust the joint positions
 def reset_joints_to_eval_pose(env, env_ids, asset_cfg=SceneEntityCfg("robot")):
@@ -1138,11 +1084,11 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
             if isinstance(term, CurrTerm) and term.params.get("term_name") == "minimize_power":
                 setattr(self.curriculum, field_name, None)
 
+        # Uncomment to enable biased gaussian noise instead of uniform noise on observations.
+        # If enabled in train cfg, it is automatically also enabled in eval!
+        # enable_biased_gaussian_noise(self)
+
+
 @configclass
 class Go2RoughTerrainEnvCfgJointStateHistory_PLAY(Go2RoughTerrainEnvCfg_PLAY):
     observations: ObservationsCfgJointStateHistory = ObservationsCfgJointStateHistory()
-
-@configclass
-class Go2RoughTerrainEnvCfgFullStateHistory_PLAY(Go2RoughTerrainEnvCfg_PLAY):
-    observations: ObservationsCfgFullStateHistory = ObservationsCfgFullStateHistory()
-
