@@ -846,26 +846,35 @@ class CurriculumCfg:
     # terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
 
 def enable_biased_gaussian_noise(env_cfg):
+    # In Isaac Lab, NoiseModelWithAdditiveBias.reset() updates the stored bias by applying
+    # bias_noise_cfg to the current bias value rather than creating a fresh one from scratch. Because
+    # UniformNoiseCfg and GaussianNoiseCfg default to operation="add", omitting the operation makes the
+    # bias accumulate across resets (a random walk) instead of being independently resampled each episode.
     env_cfg.observations.policy.base_ang_vel.noise = NoiseModelWithAdditiveBiasCfg(
                 noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.001),
-                bias_noise_cfg=UniformNoiseCfg(n_min=-0.002, n_max=0.002)
+                bias_noise_cfg=UniformNoiseCfg(n_min=-0.002, n_max=0.002),
+                operation="abs"
             )
     env_cfg.observations.policy.projected_gravity.noise = NoiseModelWithAdditiveBiasCfg(
                 noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.03),
-                bias_noise_cfg=UniformNoiseCfg(n_min=-0.01, n_max=0.01)
+                bias_noise_cfg=UniformNoiseCfg(n_min=-0.01, n_max=0.01),
+                operation="abs"
             )
     env_cfg.observations.policy.joint_pos_history.noise = NoiseModelWithAdditiveBiasCfg(
                 noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.007),
-                bias_noise_cfg=UniformNoiseCfg(n_min=-0.003, n_max=0.003)
+                bias_noise_cfg=UniformNoiseCfg(n_min=-0.003, n_max=0.003),
+                operation="abs"
             )
     env_cfg.observations.policy.joint_vel_history.noise = NoiseModelWithAdditiveBiasCfg(
                 noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.12),
-                bias_noise_cfg=UniformNoiseCfg(n_min=-0.05, n_max=0.05)
+                bias_noise_cfg=UniformNoiseCfg(n_min=-0.05, n_max=0.05),
+                operation="abs"
             )
     env_cfg.observations.policy.height_map.noise = NoiseModelWithAdditiveBiasCfg(
                 # Currently modeling noise in height_map_grid function to better be able to control it, that's why its so low here
                 noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.00005),
-                bias_noise_cfg=UniformNoiseCfg(n_min=-0.001, n_max=0.001)
+                bias_noise_cfg=UniformNoiseCfg(n_min=-0.001, n_max=0.001),
+                operation="abs"
             )
 
 
@@ -1086,6 +1095,7 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
 
         # Uncomment to enable biased gaussian noise instead of uniform noise on observations.
         # If enabled in train cfg, it is automatically also enabled in eval!
+        # IMPORTANT: As enable_corruption = False, NO noise will be applied during eval anyway!
         # enable_biased_gaussian_noise(self)
 
 
