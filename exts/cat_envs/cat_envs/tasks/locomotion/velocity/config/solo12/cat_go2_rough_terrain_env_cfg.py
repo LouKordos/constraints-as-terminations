@@ -953,6 +953,18 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
             mode="startup",  # runs once at environment startup
         )
 
+        ENABLE_EXTRA_MASS = True
+        if ENABLE_EXTRA_MASS:
+            self.events.add_extra_mass = EventTerm(
+                func=mdp.randomize_rigid_body_mass,
+                mode="startup",
+                params={
+                    "asset_cfg": SceneEntityCfg("robot", body_names=["base"]),
+                    "mass_distribution_params": (2.0, 2.0),
+                    "operation": "add",
+                },
+            )
+
         # Used to get foot height above terrain ("sole frame")
         self.scene.ray_caster_FL_foot = RayCasterCfg(
             prim_path="{ENV_REGEX_NS}/Robot/FL_foot",
