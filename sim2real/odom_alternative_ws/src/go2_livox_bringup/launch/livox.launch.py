@@ -26,7 +26,7 @@ def generate_launch_description():
     roll_offset = 0.0
     pitch_offset = 0.784
     yaw_offset = 0.0
-    vicon_base_frame = "vicon/Go2_Loukas/Go2"
+    vicon_base_frame = "vicon/Go2_Loukas/Go2_Loukas"
     odometry_base_frame = "base"
 
     tf_vicon_node = Node(
