@@ -993,8 +993,7 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
         # Original torque limit as specified in isaac lab example config
         self.scene.robot = UNITREE_GO2_CFG_EVAL.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
-        # disable randomization for play
-        self.observations.policy.enable_corruption = False
+        self.observations.policy.enable_corruption = True
         
         # Pick the hardest terrain when testing the model.
         # Technically, this is incorrect as it wlil only run after 
