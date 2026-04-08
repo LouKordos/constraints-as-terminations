@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<KinematicModel VERSION="3.2">
+	<Parameters>
+		<Parameter NAME="LoukasTest_LoukasTest1_x" VALUE="53.899608612060547" PRIOR="53.899608612060547" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest1_y" VALUE="32.7254638671875" PRIOR="32.7254638671875" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest1_z" VALUE="211.29515075683594" PRIOR="211.29515075683594" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest2_x" VALUE="-6.0399999618530273" PRIOR="-6.0399999618530273" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest2_y" VALUE="0" PRIOR="0" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest2_z" VALUE="222.57000732421875" PRIOR="222.57000732421875" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest3_x" VALUE="5.2874116897583008" PRIOR="5.2874116897583008" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest3_y" VALUE="-43.0770263671875" PRIOR="-43.0770263671875" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest3_z" VALUE="213.77085876464844" PRIOR="213.77085876464844" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest4_x" VALUE="47.571929931640625" PRIOR="47.571929931640625" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest4_y" VALUE="-41.169189453125" PRIOR="-41.169189453125" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest4_z" VALUE="210.20695495605469" PRIOR="210.20695495605469" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest5_x" VALUE="-34.2138671875" PRIOR="-34.2138671875" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest5_y" VALUE="-38.8262939453125" PRIOR="-38.8262939453125" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest5_z" VALUE="214.46873474121094" PRIOR="214.46873474121094" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest6_x" VALUE="-0.44731047749519348" PRIOR="-0.44731047749519348" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest6_y" VALUE="39.98974609375" PRIOR="39.98974609375" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest6_z" VALUE="215.22271728515625" PRIOR="215.22271728515625" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest7_x" VALUE="36.723426818847656" PRIOR="36.723426818847656" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest7_y" VALUE="46.897216796875" PRIOR="46.897216796875" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest7_z" VALUE="181.12202453613281" PRIOR="181.12202453613281" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest8_x" VALUE="263.22509765625" PRIOR="263.22509765625" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest8_y" VALUE="42.9949951171875" PRIOR="42.9949951171875" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest8_z" VALUE="90.257102966308594" PRIOR="90.257102966308594" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest9_x" VALUE="246.92431640625" PRIOR="246.92431640625" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest9_y" VALUE="-94.4080810546875" PRIOR="-94.4080810546875" HIDDEN="true"/>
+		<Parameter NAME="LoukasTest_LoukasTest9_z" VALUE="88.397972106933594" PRIOR="88.397972106933594" HIDDEN="true"/>
+	</Parameters>
+	<Skeleton RGB="93 93 93">
+		<Segment NAME="Go2_Loukas" OPACITY="255" BOUNDS="-50 -50 -50 50 50 50" MASS="0" MASS-CENTRE="0 0 0" INERTIA="0 0 0" RGB="255 164 0" HIDDEN="false" DRAW-END-RATIO="1" DRAW-HEIGHT="0.5" DRAW-TWIST="0" DRAW-WIDTH="0.5" DRAW-STYLE="box" DRAW-SHADING="shaded-smooth">
+			<JointFree NAME="World_LoukasTest" PRE-ORIENTATION="0 0 0" PRE-POSITION="0 0 0" INVERSE-POST-ORIENTATION="0 0 0" INVERSE-POST-POSITION="0 0 0" MEAN="0 0 0 0 0 0" COVARIANCE="2.464900016784668 0 0 0 0 0 0 2.464900016784668 0 0 0 0 0 0 246.49000549316406 0 0 0 0 0 0 1000000 0 0 0 0 0 0 1000000 0 0 0 0 0 0 1000000" T="* * * * * *" SIGNS="+ + + + + +" RANGE-CENTRING-STATE="0 0 0 0 0 0" RANGE-MATRIX="29.60881233215332 0 0 0 0 0 0 29.60881233215332 0 0 0 0 0 0 29.60881233215332 0 0 0 0 0 0 100000000 0 0 0 0 0 0 100000000 0 0 0 0 0 0 100000000">
+				<JointTemplate MEAN="0 0 0 0 0 0" COVARIANCE="2.464900016784668 0 0 0 0 0 0 2.464900016784668 0 0 0 0 0 0 246.49000549316406 0 0 0 0 0 0 1000000 0 0 0 0 0 0 1000000 0 0 0 0 0 0 1000000" TPOSE-MEAN="0 0 0 0 0 0" TPOSE-COVARIANCE="0.10000000149011612 0 0 0 0 0 0 0.10000000149011612 0 0 0 0 0 0 0.10000000149011612 0 0 0 0 0 0 0.10000000149011612 0 0 0 0 0 0 0.10000000149011612 0 0 0 0 0 0 0.10000000149011612" PRE-ORIENTATION="0 0 0" PRE-POSITION="0 0 0" INVERSE-POST-ORIENTATION="0 0 0" INVERSE-POST-POSITION="0 0 0"/>
+			</JointFree>
+		</Segment>
+	</Skeleton>
+	<MarkerSet>
+		<Markers>
+			<Marker NAME="LoukasTest1" RADIUS="14" RGB="255 164 0" STATUS="required" VIEW-ANGLE="0"/>
+			<Marker NAME="LoukasTest2" RADIUS="14" RGB="255 164 0" STATUS="optional" VIEW-ANGLE="0"/>
+			<Marker NAME="LoukasTest3" RADIUS="14" RGB="255 164 0" STATUS="optional" VIEW-ANGLE="0"/>
+			<Marker NAME="LoukasTest4" RADIUS="14" RGB="255 164 0" STATUS="optional" VIEW-ANGLE="0"/>
+			<Marker NAME="LoukasTest5" RADIUS="14" RGB="255 164 0" STATUS="optional" VIEW-ANGLE="0"/>
+			<Marker NAME="LoukasTest6" RADIUS="14" RGB="255 164 0" STATUS="optional" VIEW-ANGLE="0"/>
+			<Marker NAME="LoukasTest7" RADIUS="14" RGB="255 164 0" STATUS="optional" VIEW-ANGLE="0"/>
+			<Marker NAME="LoukasTest8" RADIUS="14" RGB="255 164 0" STATUS="optional" VIEW-ANGLE="0"/>
+			<Marker NAME="LoukasTest9" RADIUS="14" RGB="255 164 0" STATUS="optional" VIEW-ANGLE="0"/>
+		</Markers>
+		<Sticks>
+			<Stick MARKER1="LoukasTest1" MARKER2="LoukasTest2" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest1" MARKER2="LoukasTest3" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest1" MARKER2="LoukasTest4" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest1" MARKER2="LoukasTest5" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest1" MARKER2="LoukasTest6" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest1" MARKER2="LoukasTest7" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest1" MARKER2="LoukasTest8" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest1" MARKER2="LoukasTest9" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest2" MARKER2="LoukasTest3" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest2" MARKER2="LoukasTest4" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest2" MARKER2="LoukasTest5" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest2" MARKER2="LoukasTest6" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest2" MARKER2="LoukasTest7" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest2" MARKER2="LoukasTest8" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest2" MARKER2="LoukasTest9" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest3" MARKER2="LoukasTest4" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest3" MARKER2="LoukasTest5" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest3" MARKER2="LoukasTest6" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest3" MARKER2="LoukasTest7" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest3" MARKER2="LoukasTest8" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest3" MARKER2="LoukasTest9" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest4" MARKER2="LoukasTest5" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest4" MARKER2="LoukasTest6" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest4" MARKER2="LoukasTest7" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest4" MARKER2="LoukasTest8" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest4" MARKER2="LoukasTest9" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest5" MARKER2="LoukasTest6" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest5" MARKER2="LoukasTest7" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest5" MARKER2="LoukasTest8" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest5" MARKER2="LoukasTest9" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest6" MARKER2="LoukasTest7" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest6" MARKER2="LoukasTest8" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest6" MARKER2="LoukasTest9" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest7" MARKER2="LoukasTest8" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest7" MARKER2="LoukasTest9" RGB1="255 164 0" RGB2="255 164 0"/>
+			<Stick MARKER1="LoukasTest8" MARKER2="LoukasTest9" RGB1="255 164 0" RGB2="255 164 0"/>
+		</Sticks>
+	</MarkerSet>
+	<TargetSet>
+		<Targets>
+			<TargetLocalPointToWorldPoint COVARIANCE="1 0 0 0 1 0 0 0 1" FILL-GAPS="false" GAUSSIAN="true" HIDDEN="false" MARKER="LoukasTest1" OPACITY="255" POSITION="'LoukasTest_LoukasTest1_x' 'LoukasTest_LoukasTest1_y' 'LoukasTest_LoukasTest1_z'" RGB="93 93 93" SEGMENT="Go2_Loukas" WEIGHT="1" DRAW-STYLE="None">
+				<TargetLocalPointToWorldPointTemplate COVARIANCE="1 0 0 0 1 0 0 0 1"/>
+			</TargetLocalPointToWorldPoint>
+			<TargetLocalPointToWorldPoint COVARIANCE="1 0 0 0 1 0 0 0 1" FILL-GAPS="false" GAUSSIAN="true" HIDDEN="false" MARKER="LoukasTest2" OPACITY="255" POSITION="'LoukasTest_LoukasTest2_x' 'LoukasTest_LoukasTest2_y' 'LoukasTest_LoukasTest2_z'" RGB="93 93 93" SEGMENT="Go2_Loukas" WEIGHT="1" DRAW-STYLE="None">
+				<TargetLocalPointToWorldPointTemplate COVARIANCE="1 0 0 0 1 0 0 0 1"/>
+			</TargetLocalPointToWorldPoint>
+			<TargetLocalPointToWorldPoint COVARIANCE="1 0 0 0 1 0 0 0 1" FILL-GAPS="false" GAUSSIAN="true" HIDDEN="false" MARKER="LoukasTest3" OPACITY="255" POSITION="'LoukasTest_LoukasTest3_x' 'LoukasTest_LoukasTest3_y' 'LoukasTest_LoukasTest3_z'" RGB="93 93 93" SEGMENT="Go2_Loukas" WEIGHT="1" DRAW-STYLE="None">
+				<TargetLocalPointToWorldPointTemplate COVARIANCE="1 0 0 0 1 0 0 0 1"/>
+			</TargetLocalPointToWorldPoint>
+			<TargetLocalPointToWorldPoint COVARIANCE="1 0 0 0 1 0 0 0 1" FILL-GAPS="false" GAUSSIAN="true" HIDDEN="false" MARKER="LoukasTest4" OPACITY="255" POSITION="'LoukasTest_LoukasTest4_x' 'LoukasTest_LoukasTest4_y' 'LoukasTest_LoukasTest4_z'" RGB="93 93 93" SEGMENT="Go2_Loukas" WEIGHT="1" DRAW-STYLE="None">
+				<TargetLocalPointToWorldPointTemplate COVARIANCE="1 0 0 0 1 0 0 0 1"/>
+			</TargetLocalPointToWorldPoint>
+			<TargetLocalPointToWorldPoint COVARIANCE="1 0 0 0 1 0 0 0 1" FILL-GAPS="false" GAUSSIAN="true" HIDDEN="false" MARKER="LoukasTest5" OPACITY="255" POSITION="'LoukasTest_LoukasTest5_x' 'LoukasTest_LoukasTest5_y' 'LoukasTest_LoukasTest5_z'" RGB="93 93 93" SEGMENT="Go2_Loukas" WEIGHT="1" DRAW-STYLE="None">
+				<TargetLocalPointToWorldPointTemplate COVARIANCE="1 0 0 0 1 0 0 0 1"/>
+			</TargetLocalPointToWorldPoint>
+			<TargetLocalPointToWorldPoint COVARIANCE="1 0 0 0 1 0 0 0 1" FILL-GAPS="false" GAUSSIAN="true" HIDDEN="false" MARKER="LoukasTest6" OPACITY="255" POSITION="'LoukasTest_LoukasTest6_x' 'LoukasTest_LoukasTest6_y' 'LoukasTest_LoukasTest6_z'" RGB="93 93 93" SEGMENT="Go2_Loukas" WEIGHT="1" DRAW-STYLE="None">
+				<TargetLocalPointToWorldPointTemplate COVARIANCE="1 0 0 0 1 0 0 0 1"/>
+			</TargetLocalPointToWorldPoint>
+			<TargetLocalPointToWorldPoint COVARIANCE="1 0 0 0 1 0 0 0 1" FILL-GAPS="false" GAUSSIAN="true" HIDDEN="false" MARKER="LoukasTest7" OPACITY="255" POSITION="'LoukasTest_LoukasTest7_x' 'LoukasTest_LoukasTest7_y' 'LoukasTest_LoukasTest7_z'" RGB="93 93 93" SEGMENT="Go2_Loukas" WEIGHT="1" DRAW-STYLE="None">
+				<TargetLocalPointToWorldPointTemplate COVARIANCE="1 0 0 0 1 0 0 0 1"/>
+			</TargetLocalPointToWorldPoint>
+			<TargetLocalPointToWorldPoint COVARIANCE="1 0 0 0 1 0 0 0 1" FILL-GAPS="false" GAUSSIAN="true" HIDDEN="false" MARKER="LoukasTest8" OPACITY="255" POSITION="'LoukasTest_LoukasTest8_x' 'LoukasTest_LoukasTest8_y' 'LoukasTest_LoukasTest8_z'" RGB="93 93 93" SEGMENT="Go2_Loukas" WEIGHT="1" DRAW-STYLE="None">
+				<TargetLocalPointToWorldPointTemplate COVARIANCE="1 0 0 0 1 0 0 0 1"/>
+			</TargetLocalPointToWorldPoint>
+			<TargetLocalPointToWorldPoint COVARIANCE="1 0 0 0 1 0 0 0 1" FILL-GAPS="false" GAUSSIAN="true" HIDDEN="false" MARKER="LoukasTest9" OPACITY="255" POSITION="'LoukasTest_LoukasTest9_x' 'LoukasTest_LoukasTest9_y' 'LoukasTest_LoukasTest9_z'" RGB="93 93 93" SEGMENT="Go2_Loukas" WEIGHT="1" DRAW-STYLE="None">
+				<TargetLocalPointToWorldPointTemplate COVARIANCE="1 0 0 0 1 0 0 0 1"/>
+			</TargetLocalPointToWorldPoint>
+		</Targets>
+	</TargetSet>
+</KinematicModel>
+
