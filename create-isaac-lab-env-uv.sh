@@ -12,7 +12,7 @@ export OMNI_KIT_ACCEPT_EULA=Y
 PROJECT_ROOT="$HOME/mamba_env_data/$ENV_NAME"
 
 PYTHON_VERSION="3.11"
-ISAACLAB_TAG="5c2ec81cb17532d32f7922dd7fcaae40d123b71a"
+ISAACLAB_TAG="ddb044eb5b2300792de41e82d53b032f3632b489"
 
 # Ensure uv is installed
 if ! command -v uv >/dev/null 2>&1; then
@@ -54,7 +54,7 @@ echo "[INFO] Checking out Isaac Lab version: $ISAACLAB_TAG"
 git checkout $ISAACLAB_TAG
 
 echo "[INFO] Attempting to activate: source ${PROJECT_ROOT}/.venv/bin/activate"
-source "${PROJECT_ROOT}/.venv/bin/activate" || { echo "Activation failed"; exit 1; }
+source "${PROJECT_ROOT}/.venv/bin/activate" || { echo "venv activation failed"; exit 1; }
 export OMNI_KIT_ACCEPT_EULA=Y
 
 echo "[INFO] Installing Isaac Lab Core and Tasks..."
