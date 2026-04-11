@@ -546,8 +546,8 @@ void enable_low_level_control() {
 
     logger->info("Hold robot using tether or safely put on the floor, low level control mode will be enabled once enter key is registered. This will make robot fall down!");
     std::cin.ignore();
-    logger->info("Sleeping for 10sec to let user reevaluate his choices :)");
-    std::this_thread::sleep_for(std::chrono::seconds{10});
+    // logger->info("Sleeping for 10sec to let user reevaluate his choices :)");
+    // std::this_thread::sleep_for(std::chrono::seconds{10});
 
     unitree::robot::b2::MotionSwitcherClient msc;
     msc.SetTimeout(10.0f);
