@@ -768,8 +768,9 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
 
         // if(walk_a_bit) {logger->warn("ROBOT WILL WALK SOON!");}
         auto time_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        if(walk_a_bit && time_now_ms - start_ms > 55000 && time_now_ms - start_ms < 62000) {
-            vel_command[0] = 1.0f;
+        auto rel_time_ms = time_now_ms - start_ms;
+        if(walk_a_bit && rel_time_ms > 30000 && rel_time_ms < 34500) {
+            vel_command[0] = 0.9f;
         }
 
         auto observation = construct_observation_tensor(robot_state, vel_command, previous_action, model_observation_dim == observation_dim_history, robot_state.counter == 0);
