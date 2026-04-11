@@ -123,6 +123,7 @@ const float elevation_sensor_offset_x = 0.2f;
 const float elevation_fill_value = -0.27f; 
 float hardcoded_elevation = -0.30f;
 bool use_hardcoded_heights = false;
+const bool walk_a_bit = true;
 
 timed_atomic<std::vector<float>> global_elevation_map_filtered{
     std::vector<float>(elevation_grid_total_size, hardcoded_elevation)
@@ -765,8 +766,7 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
             }	
         }
 
-        const bool walk_a_bit = false;
-        if(walk_a_bit) {logger->warn("ROBOT WILL WALK SOON!");}
+        // if(walk_a_bit) {logger->warn("ROBOT WILL WALK SOON!");}
         auto time_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         if(walk_a_bit && time_now_ms - start_ms > 55000 && time_now_ms - start_ms < 62000) {
             vel_command[0] = 1.0f;
