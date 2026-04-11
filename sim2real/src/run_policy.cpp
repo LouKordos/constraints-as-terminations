@@ -960,7 +960,6 @@ void robot_state_message_handler(const void *message) {
     // std::this_thread::sleep_for(std::chrono::milliseconds{200});
 }
 
-// This is completely redundant because we can just use the data from the cyclonedds lowstate topic, or the ros topic after the rewrite for ROS
 void joystick_listener(std::string endpoint)
 {
     if(walk_a_bit) {
