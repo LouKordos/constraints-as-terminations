@@ -283,7 +283,7 @@ private:
     }
 
     void processing_loop() {
-        auto wait_seconds = std::chrono::seconds(50);
+        auto wait_seconds = std::chrono::seconds(15);
         logger->info("ElevationMapProcessor: Waiting {}sec for external Odom/Mapping pipeline to warm up...", wait_seconds.count());
         auto start_wait = std::chrono::steady_clock::now();
         while(std::chrono::steady_clock::now() - start_wait < wait_seconds) { if(exit_flag.load()) {return;} std::this_thread::sleep_for(std::chrono::milliseconds(100)); } 
