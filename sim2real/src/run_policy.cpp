@@ -290,7 +290,7 @@ private:
         logger->info("ElevationMapProcessor: Warmup complete. Enforcing ZMQ timeouts now."); 
         
         zmq::pollitem_t poll_items[] = { { static_cast<void*>(zmq_socket_), 0, ZMQ_POLLIN, 0 } };
-        auto safety_timeout = std::chrono::milliseconds{500};
+        auto safety_timeout = std::chrono::milliseconds{100};
 
         while (!exit_flag.load()) {
             ZoneScopedN("ElevationProcessingLoop");
@@ -298,7 +298,7 @@ private:
             int rc = zmq::poll(poll_items, 1, safety_timeout);
             if (rc == 0) {
                 exit_flag.store(true);
-                logger->error("Critical: Elevation map ZMQ timeout (>500ms). Stopping robot for safety.");
+                logger->error("Critical: Elevation map ZMQ timeout (>{}ms). Stopping robot for safety.", safety_timeout.count());
                 continue;
             }
 
