@@ -1074,6 +1074,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
 
     // std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-22-08-06-02_6299_traced_deterministic.pt"};
     std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-28-17-13-04_21349_traced_deterministic.pt"}; // env 75, standard best one so far (with elevation map)
+    // std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-28-17-13-04_6049_traced_deterministic.pt"}; // env 75, same as above just ealier checkpoint to show before vs. after energy minimization 
     // std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-12-28-14-47-57_29499_traced_deterministic.pt"}; // env 79
     // std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-12-28-15-28-51_19499_traced_deterministic.pt"}; // env 80
     logger->info("Using checkpoint at {}", checkpoint_path.string());
@@ -1082,7 +1083,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     // To add new checkpoint, add to this list, hardcoded value will be set to zero automatically.
     // Otherwise, add to checkpoints_proper_elevation_map
     const std::vector<std::string> checkpoint_filenames_zero_elevation_map = {"2025-12-28-15-28-51_19499_traced_deterministic.pt", "2025-12-28-14-47-57_29499_traced_deterministic.pt", "2025-12-28-14-58-57_29649_traced_deterministic.pt"};
-    const std::vector<std::string> checkpoint_filenames_proper_elevation_map = {"2025-06-28-17-13-04_21349_traced_deterministic.pt"};
+    const std::vector<std::string> checkpoint_filenames_proper_elevation_map = {"2025-06-28-17-13-04_21349_traced_deterministic.pt", "2025-06-28-17-13-04_6049_traced_deterministic.pt"};
     logger->info("Checkpoints registered to use zeroed out hardcoded height map: {}", checkpoint_filenames_zero_elevation_map);
     logger->info("Checkpoints registered to use proper elevation map: {}", checkpoint_filenames_proper_elevation_map);
 
