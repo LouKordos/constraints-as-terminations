@@ -42,15 +42,15 @@ RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake -G Ninja --compile-no-warnin
       ..
 RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake --build . --target install -j12
 
-# Set this AFTER libtorch due to compiler bug in gcc14!
-#NV CC=gcc-14
-ENV CXX=g++-14
-
 RUN git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 RUN ~/.fzf/install --all
 
 # ROS2 stuff
 RUN apt-get update -y && apt-get install -y ros-dev-tools ros-$ROS_DISTRO-desktop ros-$ROS_DISTRO-rmw-cyclonedds-cpp ros-$ROS_DISTRO-rosidl-generator-dds-idl ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan ros-$ROS_DISTRO-eigenpy ros-$ROS_DISTRO-grid-map-rviz-plugin ros-$ROS_DISTRO-grid-map-msgs
+
+# Set this AFTER libtorch due to compiler bug in gcc14!
+ENV CC=gcc-14
+ENV CXX=g++-14
 
 WORKDIR /go2_sdk
 RUN git clone https://github.com/unitreerobotics/unitree_sdk2.git
