@@ -83,7 +83,7 @@ const std::array<std::pair<float, float>, 2> base_orientation_limit_rad {std::pa
 const std::array<std::pair<float, float>, num_joints> joint_position_limits {std::pair<float, float>{-0.9, 0.9}, {-0.9, 0.9}, {-0.9, 0.9}, {-0.9, 0.9}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}}; // rad
 std::array<float, num_joints> default_joint_positions {0.1, -0.1, 0.1, -0.1, 0.8, 0.8, 1.0, 1.0, -1.5, -1.5, -1.5, -1.5}; // Isaac Lab order
 const double joint_vel_abs_limit = 30; // rad/s
-const double joint_torque_abs_limit = 40; //Nm
+const double joint_torque_abs_limit = 46; //Nm
 timed_atomic<stamped_robot_state> global_robot_state {};
 
 constexpr auto joystick_zmq_poll_timeout = std::chrono::milliseconds{50};
