@@ -1018,7 +1018,7 @@ void joystick_listener(std::string endpoint)
             vy = std::clamp(ly, -0.5f, 0.5f);
         }
 
-        logger->debug("joystick vel_x={}, vel_y={}", vx, vy);
+        /* logger->debug("joystick vel_x={}, vel_y={}", vx, vy); */
 
         float omega = 0.0f; // Zero for now
         global_vel_command.try_store_for({vx, vy, omega}, atomic_op_timeout);
