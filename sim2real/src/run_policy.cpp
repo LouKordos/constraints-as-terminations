@@ -963,6 +963,10 @@ void robot_state_message_handler(const void *message) {
 // This is completely redundant because we can just use the data from the cyclonedds lowstate topic, or the ros topic after the rewrite for ROS
 void joystick_listener(std::string endpoint)
 {
+    if(walk_a_bit) {
+        logger->info("Joystick control disabled (walk_a_bit=true), exiting joystick listener thread.");
+        return;
+    }
     zmq::context_t ctx{1};
     zmq::socket_t sock{ctx, zmq::socket_type::sub};
     try {
