@@ -13,7 +13,6 @@ git clone https://github.com/inria-paris-robotics-lab/go2_odometry.git || (cd go
 git clone https://github.com/inria-paris-robotics-lab/unitree_description.git || (cd unitree_description && git pull)
 git clone https://github.com/Ericsii/livox_ros_driver2 -b feature/use-standard-unit || (cd livox_ros_driver2 && git pull)
 git clone https://github.com/Unitree-Go2-Robot/unitree_go.git || (cd unitree_go && git pull)
-# git clone https://github.com/LouKordos/elevation_mapping_cupy.git -b ros2_humble || (cd elevation_mapping_cupy && git pull)
 git clone --recurse-submodules https://github.com/LouKordos/FAST_LIO_ROS2.git || (cd FAST_LIO_ROS2 && git pull)
 git clone https://github.com/LouKordos/LiDAR_IMU_Init.git/ || (cd LiDAR_IMU_Init && git pull)
 git clone --recurse-submodules https://github.com/HesaiTechnology/HesaiLidar_ROS_2.0.git HesaiLidar_ROS_2.0 || (cd HesaiLidar_ROS_2.0 && git pull)
