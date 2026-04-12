@@ -72,7 +72,7 @@ else
     echo "Docker detected."
     if [[ "${CLEAN_BUILD}" == "true" ]]; then
         echo "Performing clean build: deleting markers and build directories..."
-        rm -rf ${SCRIPT_DIR}/build ${SCRIPT_DIR}/ros2_ws/{build,install,log} ${SCRIPT_DIR}/odom_alternative_ws/{build,install,log} /*.marker || true
+        rm -rf ${SCRIPT_DIR}/build ${SCRIPT_DIR}/ros2_ws/{build,install,log} /*.marker || true
     fi
     echo "Building ROS packages..."
     ./bootstrap_ros2_ws.sh
