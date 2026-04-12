@@ -121,7 +121,7 @@ RUN echo "alias clbin=\"curl -A 'MyUploader/1.0' -F 'file=@-' -F 'secret=' https
 RUN echo '# Reminder messages for user' >> /root/.bashrc
 RUN echo 'echo "1. Source /app/sim2real/ros2_ws/install/setup.bash if you are working with ROS!"' >> /root/.bashrc
 RUN echo 'echo "2. Export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."' >> /root/.bashrc
-RUN echo 'echo "3. Run tmux inside the docker container for persistent sessions, access it from a recent version of Konsole, that way OSC-52 copying should work through the container."'
+RUN echo 'echo "3. Run tmux inside the docker container for persistent sessions, access it from a recent version of Konsole, that way OSC-52 copying should work through the container."' >> /root/.bashrc
 
 COPY . /app
 COPY ./sim2real/.vimrc /root/.vimrc
