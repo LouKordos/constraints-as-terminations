@@ -3,6 +3,7 @@ ARG ROS_DISTRO=jazzy
 FROM ros:$ROS_DISTRO-ros-core
 ENV ROS_DISTRO=$ROS_DISTRO
 RUN printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4
+RUN apt-get update && apt-get install -y --no-install-recommends software-properties-common && add-apt-repository universe && apt-get update
 # Essential stuff
 RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl rsync vim gdu iperf3 ripgrep libtbb-dev dbus git-lfs libeigen3-dev libboost-python-dev libboost-numpy-dev libpcl-dev python3-dev python3-numpy python3-matplotlib libgoogle-glog-dev tmux sudo iputils-ping unzip wget iproute2 iperf3 libzstd-dev zstd locales curl dbus dbus-x11 x11-apps xauth tree net-tools cyclonedds-tools netcat-openbsd libboost-all-dev libyaml-cpp-dev
 

@@ -50,7 +50,7 @@ if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
         echo "Creating buildx builder for multiarch builds if not exists..."
         if ! docker buildx inspect multiarch-builder-${CONTAINER_NAME} >/dev/null 2>&1; then
             echo "Creating multiarch builder…"
-            docker buildx create --name multiarch-builder-${CONTAINER_NAME} --driver docker-container --bootstrap
+            docker buildx create --name multiarch-builder-${CONTAINER_NAME} --driver docker-container --bootstrap --driver-opt network=host
         else
             echo "multiarch builder already exists, skipping creation."
         fi 
