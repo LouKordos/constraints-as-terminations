@@ -10,7 +10,7 @@ BASE_DIR=/app/sim2real/ # In case you want to run outside docker
 # Use third_party for any external packages because it's ignored by git. For custom code, use ros2_ws directly as that will be tracked by git.
 mkdir -p $BASE_DIR/ros2_ws/src/third_party && cd $BASE_DIR/ros2_ws/src/third_party
 git clone https://github.com/inria-paris-robotics-lab/go2_odometry.git || (cd go2_odometry && git pull)
-git clone https://github.com/inria-paris-robotics-lab/go2_description.git || (cd go2_description && git pull)
+git clone https://github.com/inria-paris-robotics-lab/unitree_description.git || (cd unitree_description && git pull)
 git clone https://github.com/Ericsii/livox_ros_driver2 -b feature/use-standard-unit || (cd livox_ros_driver2 && git pull)
 git clone https://github.com/Unitree-Go2-Robot/unitree_go.git || (cd unitree_go && git pull)
 # git clone https://github.com/LouKordos/elevation_mapping_cupy.git -b ros2_humble || (cd elevation_mapping_cupy && git pull)
