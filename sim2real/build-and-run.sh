@@ -62,7 +62,7 @@ if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
     fi
     rm -rf "${SCRIPT_DIR}/build" || true # Reset build to a clean state, as build cache can cause confusing issues when changing installed deps in the Dockerfile.
     rm -rf "${SCRIPT_DIR}/ros2_ws/{build,install,log}" || true # Same for ROS workspace
-    docker compose --project-directory "${REPO_ROOT}" up -d
+    docker compose --project-directory "${REPO_ROOT}" up --no-build -d # Don't build due to multiarch check above
     echo "Docker container is now running, starting interactive shell. Run ${SCRIPT_DIR}/build-and-run.sh inside the shell to proceed."
     echo "If you require GUI access, you may need to run (outside the docker container) xhost +local:docker, as well as xhost +SI:localuser:root for ssh X forwarding => Docker => X11"
     echo "You may also choose to docker compose push now for easy deployment. Not automating this due to high bandwidth and time usage."
