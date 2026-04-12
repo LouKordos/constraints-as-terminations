@@ -682,6 +682,7 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
     catch (const c10::Error& e) {
         logger->error("Failed to load module, exiting.");
         exit_flag.store(true);
+        return;
     }
 
     int64_t in_features = -1;
