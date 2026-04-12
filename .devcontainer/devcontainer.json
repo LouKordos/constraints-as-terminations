@@ -15,7 +15,7 @@
             ]
         }
     },
-    "service": "constraints-as-terminations-cat_sim2real-1",
+    "service": "cat_sim2real", // Note that this is not the container name, but the service name as defined in compose.yml
     "workspaceFolder": "/app"
     "postCreateCommand": "rm -rf /app/sim2real/build || rm -rf /app/sim2real/ros2_ws/{build,install,log} || true", // Reset to clean state after rebuild, changing deps combined with CMake caching has caused weird issues in the past
 }
