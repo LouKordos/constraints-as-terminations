@@ -6,7 +6,7 @@ from launch.substitutions import PathJoinSubstitution, LaunchConfiguration, Find
 from launch_ros.substitutions import FindPackageShare
 from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.actions import Node
-from go2_description import GO2_DESCRIPTION_URDF_PATH
+from unitree_description import GO2_DESCRIPTION_URDF_PATH
 
 def generate_launch_description():
     go2_odometry_launch_file = PathJoinSubstitution(
