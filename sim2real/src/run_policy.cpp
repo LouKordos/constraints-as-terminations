@@ -1037,7 +1037,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     tzset();
 
     auto run_timestamp_utc = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
-    std::filesystem::path logdir_path {"/app/logs/utc_" + std::format("{:%Y-%m-%d-%H-%M-%S}", run_timestamp_utc) + "/"};
+    std::filesystem::path logdir_path {"/app/sim2real/logs/utc_" + std::format("{:%Y-%m-%d-%H-%M-%S}", run_timestamp_utc) + "/"};
     std::error_code ec;
 
     if(std::filesystem::create_directories(logdir_path, ec)) {
@@ -1077,11 +1077,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     sigint_handler.sa_flags = 0;
     sigaction(SIGINT, &sigint_handler, NULL);
 
-    // std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-22-08-06-02_6299_traced_deterministic.pt"};
-    std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-28-17-13-04_21349_traced_deterministic.pt"}; // env 75, standard best one so far (with elevation map)
-    // std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-06-28-17-13-04_6049_traced_deterministic.pt"}; // env 75, same as above just ealier checkpoint to show before vs. after energy minimization 
-    // std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-12-28-14-47-57_29499_traced_deterministic.pt"}; // env 79
-    // std::filesystem::path checkpoint_path {"/app/traced_checkpoints/2025-12-28-15-28-51_19499_traced_deterministic.pt"}; // env 80
+    // std::filesystem::path checkpoint_path {"/app/sim2real/traced_checkpoints/2025-06-22-08-06-02_6299_traced_deterministic.pt"};
+    std::filesystem::path checkpoint_path {"/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_21349_traced_deterministic.pt"}; // env 75, standard best one so far (with elevation map)
+    // std::filesystem::path checkpoint_path {"/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_6049_traced_deterministic.pt"}; // env 75, same as above just ealier checkpoint to show before vs. after energy minimization 
+    // std::filesystem::path checkpoint_path {"/app/sim2real/traced_checkpoints/2025-12-28-14-47-57_29499_traced_deterministic.pt"}; // env 79
+    // std::filesystem::path checkpoint_path {"/app/sim2ral/traced_checkpoints/2025-12-28-15-28-51_19499_traced_deterministic.pt"}; // env 80
     logger->info("Using checkpoint at {}", checkpoint_path.string());
 
     // Safety precaution to ensure that trained policies do not receive significantly OOD observations.
