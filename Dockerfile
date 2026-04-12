@@ -119,6 +119,7 @@ RUN echo "alias clbin=\"curl -A 'MyUploader/1.0' -F 'file=@-' -F 'secret=' https
 RUN echo '# Remind user to source custom ROS2 workspace' >> /root/.bashrc
 RUN echo 'echo "Remember to source /app/sim2real/ros2_ws/install/setup.bash OR /app/sim2real/odom_alternative_ws/install/setup.bash if you are working with ROS!"' >> /root/.bashrc
 RUN echo 'echo "Also remember to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."' >> /root/.bashrc
+RUN echo 'echo "For persistent sessions, it is recommended to run tmux inside the docker container and access it from a recent Konsole window, that way OSC-52 copying should work."
 ENV ROS_DOMAIN_ID=69
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
