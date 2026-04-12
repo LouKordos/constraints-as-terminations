@@ -1,13 +1,15 @@
 #!/bin/bash
 set -exo pipefail
 
-# Default build type
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
 BUILD_TYPE="Release"
 CLEAN_BUILD=false
-SKIP_MULTIARCH_DOCKER_BUILD=false
-BUILD_DIR="/app/build"
-LOG_FILE="/app/build.log"
-CONTAINER_NAME="sim2real-cat_sim2real-1"
+SKIP_MULTIARCH_DOCKER_BUILD=true
+BUILD_DIR="${SCRIPT_DIR}/build"
+LOG_FILE="${SCRIPT_DIR}/build.log"
+CONTAINER_NAME="constraints-as-terminations-cat_sim2real-1"
 BINARY_NAME="run_policy"
 BINARY_ARGV="eth0" # Separated so that it can be passed to gdb as well
 # BINARY_NAME="sdk_stand_example ens4"
@@ -22,7 +24,7 @@ while [[ "$#" -gt 0 ]]; do
             shift
             ;;
         --no-multiarch-docker-build)
-        SKIP_MULTIARCH_BUILD=true
+        SKIP_MULTIARCH_DOCKER_BUILD=true
         shift
         ;;
         --build-type=*)
@@ -41,8 +43,8 @@ while [[ "$#" -gt 0 ]]; do
 done
         
 if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
-    echo "Host (no docker) detected."
-    if [[ "$SKIP_MULTIARCH_BUILD" == false ]]; then
+    echo "Host detected, we are outside of docker."
+    if [[ "$SKIP_MULTIARCH_DOCKER_BUILD" == false ]]; then
         echo "Installing qemu emulation for arm64 builds..."
         docker run --privileged --rm tonistiigi/binfmt --install all
         echo "Creating buildx builder for multiarch builds if not exists..."
@@ -53,26 +55,25 @@ if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
             echo "multiarch builder already exists, skipping creation."
         fi 
         echo "Starting multiarch build..."
-        COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose --progress plain build --builder multiarch-builder-${CONTAINER_NAME}
+        docker compose --progress plain --builder multiarch-builder-${CONTAINER_NAME} -f "${REPO_ROOT}/compose.yml" --project-directory "${REPO_ROOT}" build
     else
         echo "Starting non-multiarch build."
-        COMPOSE_DOCKER_CLI_BUILD=0 DOCKER_BUILDKIT=0 docker compose --progress plain -f compose.yml -f compose.no-multiarch.yml build
+        docker compose --progress plain -f "${REPO_ROOT}/compose.yml" -f "${REPO_ROOT}/compose.no-multiarch.yml" --project-directory "${REPO_ROOT}" build
     fi
-    rm -rf ./build || true # Reset build to a clean state, as build cache can cause confusing issues when changing installed deps in the Dockerfile.
-    rm -rf ./ros2_ws/{build,install,log} || true # Same for ROS workspace
-    COMPOSE_DOCKER_CLI_BUILD=0 DOCKER_BUILDKIT=0 docker compose up -d
-    echo "Docker container is now running, starting interactive shell. Run /app/build-and-run.sh inside the shell to proceed."
+    rm -rf "${SCRIPT_DIR}/build" || true # Reset build to a clean state, as build cache can cause confusing issues when changing installed deps in the Dockerfile.
+    rm -rf "${SCRIPT_DIR}/ros2_ws/{build,install,log}" || true # Same for ROS workspace
+    docker compose --project-directory "${REPO_ROOT}" up -d
+    echo "Docker container is now running, starting interactive shell. Run ${SCRIPT_DIR}/build-and-run.sh inside the shell to proceed."
     echo "If you require GUI access, you may need to run (outside the docker container) xhost +local:docker, as well as xhost +SI:localuser:root for ssh X forwarding => Docker => X11"
     echo "You may also choose to docker compose push now for easy deployment. Not automating this due to high bandwidth and time usage."
     echo "Do not forget to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2. Check if it works with ros2 topic list, that should show topics such as /utlidar/cloud."
-    docker exec -it $CONTAINER_NAME /bin/bash
+    docker exec -it ${CONTAINER_NAME} /bin/bash
 else
     echo "Docker detected."
     if [[ "${CLEAN_BUILD}" == "true" ]]; then
         echo "Performing clean build: deleting markers and build directories..."
-        rm -rf /app/build /app/ros2_ws/{build,install,log} /app/odom_alternative_ws/{build,install,log} /*.marker || true
+        rm -rf ${SCRIPT_DIR}/build ${SCRIPT_DIR}/ros2_ws/{build,install,log} ${SCRIPT_DIR}/odom_alternative_ws/{build,install,log} /*.marker || true
     fi
-    cd /app
     echo "Building ROS packages..."
     ./bootstrap_ros2_ws.sh
     # source ./ros2_ws/install/setup.bash # If this is sourced, cyclonedds will cause a null pointer access in run_policy, likely due to the installed ROS cyclonedds rmw version mismatch to the Go2 SDK.
@@ -103,7 +104,7 @@ else
     mkdir -p /app/tracy-profiles/
     TRACY_LOG_FILE="/app/logs/tracy-capture/tracy-capture-$(date -u '+%Y-%m-%d-%H-%M-%S').log"
     # Start a new tracy-capture instance and redirect output to the log file 
-    /tracy-for-capture/capture/build/tracy-capture -o /app/tracy-profiles/$(date -u '+%Y-%m-%d-%H-%M-%S').tracy > "$TRACY_LOG_FILE" 2>&1 & 
+    /tracy-for-capture/capture/build/tracy-capture -o /app/logs/tracy-profiles/$(date -u '+%Y-%m-%d-%H-%M-%S').tracy > "$TRACY_LOG_FILE" 2>&1 & 
     TRACY_PID=$!
     echo "Tracy capture started with PID $TRACY_PID. Logs are being written to $TRACY_LOG_FILE"
 
@@ -125,13 +126,12 @@ else
     echo "→ Recording ROS2 topics to ${BAG_DIR} (PID $BAG_PID)"
 
     chmod -R 777 /app/logs
-    chmod -R 777 /app/tracy-profiles
 
     if [[ "${BUILD_TYPE}" = "Debug" ]]; then
         gdb --args ${BUILD_DIR}/src/$BINARY_NAME $BINARY_ARGV
     else
         ${BUILD_DIR}/src/$BINARY_NAME $BINARY_ARGV
     fi
-    echo "Remember to source /app/ros2_ws/install/setup.bash if you are working with ROS custom packages! bashrc already sources /opt/ros/$ROS_DISTRO/setup.bash"
+    echo "Remember to source /app/sim2real/ros2_ws/install/setup.bash if you are working with ROS custom packages! bashrc already sources /opt/ros/$ROS_DISTRO/setup.bash"
     echo "Also remember to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."
 fi

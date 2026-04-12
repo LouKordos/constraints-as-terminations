@@ -6,7 +6,7 @@ services:
       args:
         progress: plain
       network: host
-      dockerfile: Dockerfile
+      dockerfile: ./Dockerfile
       platforms:
         - linux/amd64
         - linux/arm64

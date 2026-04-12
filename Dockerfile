@@ -116,14 +116,14 @@ RUN echo "alias rsync='rsync --checksum --partial --stats --human-readable --inf
 RUN echo "alias clbin=\"curl -A 'MyUploader/1.0' -F 'file=@-' -F 'secret=' https://0x0.st\"" >> /root/.bashrc
 # RUN echo 'source /opt/ros/$ROS_DISTRO/setup.bash' >> ~/.bashrc
 RUN echo '# Remind user to source custom ROS2 workspace' >> /root/.bashrc
-RUN echo 'echo "Remember to source /app/ros2_ws/install/setup.bash OR /app/odom_alternative_ws/install/setup.bash if you are working with ROS!"' >> /root/.bashrc
+RUN echo 'echo "Remember to source /app/sim2real/ros2_ws/install/setup.bash OR /app/sim2real/odom_alternative_ws/install/setup.bash if you are working with ROS!"' >> /root/.bashrc
 RUN echo 'echo "Also remember to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."' >> /root/.bashrc
 ENV ROS_DOMAIN_ID=69
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 COPY . /app
-COPY .vimrc /root/.vimrc
-WORKDIR /app
+COPY ./sim2real/.vimrc /root/.vimrc
+WORKDIR /app/sim2real
 
 # Using CMD instead of ENTRYPOINT here so that docker-compose.yml for vs code can override it.
 CMD sleep infinity
