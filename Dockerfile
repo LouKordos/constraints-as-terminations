@@ -124,6 +124,7 @@ ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 COPY . /app
 COPY ./sim2real/.vimrc /root/.vimrc
+COPY ./sim2real/.tmux.conf /root/.tmux.conf
 WORKDIR /app/sim2real
 
 # Using CMD instead of ENTRYPOINT here so that docker-compose.yml for vs code can override it.

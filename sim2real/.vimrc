@@ -66,40 +66,58 @@ set ttimeoutlen=50
 set hlsearch
 set incsearch
 set smartcase
+" This is required to temporarily turn off smartindent when wanting to paste something using insert mode + ctrl-shift-v.
+" The reason this might be needed is system clipboard not being synced with vim registers for various reasons, so while
+" using P or p is better, sometimes its required. By pressing F2 before insert mode => ctrl-shift-v, smart features are disabled
+" and pasting can proceed normally. then press f2 again to disable paste mode.
+set pastetoggle=<F2>
 
 " ============================================================================
-" Clipboard routing policy
+" Clipboard routing policy: "Always On" Strategy
+" Rationale:
+"   We deliberately choose the simpler approach of always enabling the system 
+"   clipboard ('unnamedplus'). This avoids complex environment detection scripts 
+"   while satisfying the primary requirement: seamless pasting in Local TMUX.
 "
-" Goals:
-"  1) Local desktop (no SSH, no tmux): normal system clipboard integration.
-"     - Under Wayland, vim-wayland-clipboard makes the + register work via wl-copy/wl-paste.
+" Scenarios & Behavior:
+"   1) Local Desktop (inc. TMUX):
+"      - Paste ("+p): Works flawlessly (reads local OS clipboard).
+"      - Yank (y): Writes to local OS clipboard directly.
+"        * Note: OSC52 also fires (redundant "double copy"), which is benign.
 "
-"  2) Any SSH session (with or without tmux): clipboard must follow the SSH client terminal.
-"     - Even if the remote machine has Wayland/X11, copying into the remote GUI clipboard is wrong.
-"     - Many servers/headless nodes have no clipboard provider at all (has('clipboard_working') == 0).
-"     - Therefore: use OSC52 to update the local/client clipboard.
+"   2) Remote SSH (Headless/No X11):
+"      - Paste: Clipboard connection fails gracefully; falls back to 'viminfo'.
+"      - Yank: 'unnamedplus' is ignored. OSC52 handles the transfer to client.
+"      - Persistence: Works via 'viminfo' (yank -> quit -> reopen -> paste).
 "
-"  3) Any tmux session (local or remote attach): clipboard must follow the currently attached terminal.
-"     - Therefore: avoid binding Vim to the host clipboard provider, emit OSC52 on yank/delete/change.
+"   3) Remote SSH (With X11/GUI clipboard):
+"      - Trade-off: We connect to the remote machine's physical clipboard.
+"        * Privacy: Yanks overwrite the remote clipboard (acceptable for single-user servers).
+"        * Paste: May paste remote content instead of 'viminfo' history.
+"        * Safety Net: If the default paste is wrong, use "0p to recover the 
+"          last yank from the viminfo-persisted "0 register.
 "
-"  4) Cross-Vim-session yanks (yank -> quit -> reopen -> paste) must work on headless servers:
-"     - solved via viminfo persistence; increase < and s to avoid truncation.
+" Conclusion:
+"   We accept the minor privacy/startup risks on GUI-enabled remote servers 
+"   in exchange for guaranteed clipboard functionality in local workflows 
+"   without fragile detection logic.
 " ============================================================================
 
+" Always enable system clipboard integration. This ensures "+p works inside local TMUX sessions.
+set clipboard=unnamedplus,unnamed
+
+" We still need OSC52 for two cases:
+" a) True Remote SSH (where system clipboard is on the server, not the client).
+" b) Local TMUX attached from afar (system clip hits desktop; OSC52 hits laptop).
+let g:oscyank_max_length = 0
 let s:IsRemoteSsh = exists('$SSH_TTY') || exists('$SSH_CONNECTION')
 
-if exists('$TMUX') || s:IsRemoteSsh
-    set clipboard=
-else
-    set clipboard=unnamedplus,unnamed
-endif
-
-let g:oscyank_max_length = 0
-
 function! s:VimOsc52MaybeCopy(ev) abort
-    if !(exists('$TMUX') || (exists('$SSH_TTY') || exists('$SSH_CONNECTION')))
+    " Trigger OSC52 if we are in any tmux session or any ssh session.
+    if !(exists('$TMUX') || s:IsRemoteSsh)
         return
     endif
+    
     if !exists('*OSCYankRegister')
         return
     endif
@@ -177,6 +195,10 @@ function! PythonBlockComment() range
   call append(l:end   + 1, repeat(' ', l:ind) . "'''")
 endfunction
 
+" Maps Ctrl+a to go to the first non-whitespace character in Insert mode
+inoremap <C-a> <C-o>^
+
+" Support home and end buttons for navigating lines
 inoremap <End> <C-o>$
 inoremap <Home> <C-o>0
 vnoremap <End> $
@@ -204,10 +226,8 @@ exe 'set t_kB=' . nr2char(27) . '[Z'
 xnoremap <Tab> >gv
 xnoremap <S-Tab> <gv
 
-" ================================
 " Move lines like VS Code
 " Supports: Alt+Up / Alt+Down and Alt+K / Alt+J
-" ================================
 nnoremap <silent> <Plug>(MoveLineUp)   :m .-2<CR>==
 nnoremap <silent> <Plug>(MoveLineDown) :m .+1<CR>==
 inoremap <silent> <Plug>(MoveLineUp)   <Esc>:m .-2<CR>==gi
