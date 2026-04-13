@@ -40,8 +40,7 @@ COLCON_ARGS=(
     "-DCMAKE_BUILD_TYPE=Release"
     "-DBUILD_TESTING=OFF"
     "-DPYTHON_EXECUTABLE=$(which python3)"
-    "-DCMAKE_CXX_FLAGS=-Wl,--allow-shlib-undefined -Wall -Wextra -Wpedantic -Wshadow"
-    --packages-skip convex_plane_decomposition convex_plane_decomposition_ros
+    "-DCMAKE_CXX_FLAGS=-Wall -Wextra -Wpedantic -Wshadow"
     --parallel-workers $(nproc)
 )
 
