@@ -807,21 +807,6 @@ static inline std::array<float, 3> projected_gravity_body_frame(const std::array
     return { r1, r2, r3 };
 }
 
-// DEPRECATED
-void append_row_to_csv(const std::string& filename, const std::vector<double>& row) {
-    std::ofstream ofs(filename, std::ios::app);
-    if (!ofs.is_open()) {
-        std::cerr << "Error: could not open " << filename << " for appending\n";
-        return;
-    }
-    for (size_t i = 0; i < row.size(); ++i) {
-        ofs << row[i];
-        if (i + 1 < row.size())
-            ofs << ',';
-    }
-    ofs << '\n';
-}
-
 // Sets exit_flag=true if states are exceeded
 void check_state_safety_limits(const stamped_robot_state &robot_state) {
     ZoneScoped;
