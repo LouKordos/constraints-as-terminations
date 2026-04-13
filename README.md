@@ -47,15 +47,13 @@ For deploying on the real robot, the `sim2real` directory is relevant. It uses d
 
 Initial setup steps:
 1. Run `xhost +local:docker` on the host (outside docker) so that GUI applications such as RViz2 work through docker.
-2. `export ROS_DOMAIN_ID=0` and source the workspace (as the docker bashrc already tells you to).
-3. Ensure `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` is set in every ROS terminal.
-4. Set up your network and ensure you can ping the robot: [https://support.unitree.com/home/en/developer/Quick_start](https://support.unitree.com/home/en/developer/Quick_start). You can run the sim2real code on either a connected workstation or the Go2 itself, but the latter is recommended for latency reasons.
+2. Set up your network and ensure you can ping the robot: [https://support.unitree.com/home/en/developer/Quick_start](https://support.unitree.com/home/en/developer/Quick_start). You can run the sim2real code on either a connected workstation or the Go2 itself, but the latter is recommended for latency reasons.
 
 **Ensure the time between Go2 and your workstation are synced!** This is crucial for the ROS computations to work properly:
 1. On the workstation connected to Go2: Add `allow 192.168.123.0/24` in `/etc/chrony/chrony.conf`
 2. Allow NTP through the firewall (if enabled)
 3. On the Go2: Add `server [YOUR_WORKSTATION_IP] iburst prefer minpoll 0 maxpoll ` to `/etc/chrony/chrony.conf`
-4. Confirm time is sufficiently accurate using `chronyc tracking`
+4. Confirm time is sufficiently accurate using `chronyc tracking`. Then, ensure you somehow have internet access on the Go2, e.g. using something like `sshuttle`.
 
 To set up the MID360 LIDAR (used for elevation mapping), ensure the LIDAR is on the same subnet as the robot (`192.168.123.xxx`, can be done with [Livox Viewer 2](https://www.livoxtech.com/downloads)) and that you can ping it. Then, ensure data readouts work properly using [Livox Viewer 2](https://www.livoxtech.com/downloads).
 
@@ -71,16 +69,17 @@ To check if everything is set up properly:
 1. Ensure `ros2 multicast send` on workstation results in a received message when running `ros2 multicast receive` on the Go2. 
 2. Check if `ros2 topic echo /lowstate` and other topics are printing out the robot's state correctly, or at least receiving messages.
 
-The `build-and-run.sh` script is responsible for building both the docker container and the actual code base, so you simply run it after cloning the repository and then once more inside the container. The script will automatically enter a shell inside the container and it is recommended to use tmux so that OSC-52 can be used for copying via SSH. 
 
 ### Run the policy
-**Important:** If you run the ROS nodes first, this will cause issues. The Unitree Go2 publishes odometry and some other topics only when high level control mode is enabled (low level control mode **disabled**), and disables them once you want to control the actuators directly. Follow the steps below to correctly start up the policy:
+The `build-and-run.sh` script is responsible for building both the docker container and the actual code base, so you simply run it after cloning the repository and then once more inside the container. The script will automatically enter a shell inside the container and it is recommended to use tmux so that OSC-52 can be used for copying via SSH. 
 
-1. **In a new terminal without ROS sourced**: Run `build-and-run.sh` inside the docker container as a first step, press enter and wait for it to enter low level control mode, so that the robot disables the publishers for these topics. Ensure the robot is standing in place for a few seconds at least, then cancel using CTRL+C.
+**Important:** Launching the ROS nodes first will cause issues because the Unitree Go2 publishes odometry and some other topics only when high level control mode is enabled (low level control mode **disabled**), and disables them once you want to control the actuators directly. Follow the steps below to correctly start up the policy:
+
+1. **In a new terminal without ROS sourced**: Execute `build-and-run.sh` inside the docker container as a first step, press enter and wait for it to enter low level control mode, so that the robot disables the publishers for these topics. Ensure the robot is standing in place for a few seconds at least, then cancel using `CTRL+C`.
 2. Adjust `/app/ros2_ws/src/third_party/livox_ros_driver2/config/MID360_config.json`: The host ip should be set to the machine that is running the docker container, the LIDAR IP should be the one you set in Livox Viewer (same subnet as robot).
 3. Adjust extrinsics in `/app/ros2_ws/src/go2_livox_bringup/launch/livox.launch.py` depending on how and where you mounted your LIDAR. This will create a static transform publisher to define where the lidar is relative to the base link.
 
-In a second tmux pane, run the following: 
+Now you can launch the ROS nodes. In a second tmux pane, run the following: 
 1. `bootstrap_ros2_ws.sh`
 2. `export ROS_DOMAIN_ID=0` so that Go2 topics become visible
 3. `source /app/ros2_ws/install/setup.bash`
