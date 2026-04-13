@@ -23,7 +23,7 @@ ROSDEP_MARKER=/rosdep-bootstrap-ros-ws.marker
 if [[ ! -f "${ROSDEP_MARKER}" ]]; then
     echo "${ROSDEP_MARKER} missing, initializing and updating rosdep..."
     apt-get update -y
-    apt-get install -y libyaml-cpp-dev libboost-all-dev ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan
+    apt-get install -y jq libyaml-cpp-dev libboost-all-dev ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan
     rosdep init || true
     rosdep update
     touch "${ROSDEP_MARKER}"
@@ -38,6 +38,7 @@ export CMAKE_EXPORT_COMPILE_COMMANDS=ON
 COLCON_ARGS=(
     --cmake-args
     "-DCMAKE_BUILD_TYPE=Release"
+    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
     "-DBUILD_TESTING=OFF"
     "-DPYTHON_EXECUTABLE=$(which python3)"
     "-DCMAKE_CXX_FLAGS=-Wall -Wextra -Wpedantic -Wshadow"
@@ -55,6 +56,9 @@ if [[ ! -f "${FIRST_BUILD_MARKER}" ]]; then
 else
     colcon build "${COLCON_ARGS[@]}"
 fi
+
+echo "Merging compile_commands.json files for IntelliSense..." # colcon produces a separate compile_commands.json for each package
+jq -s 'add' $BASE_DIR/ros2_ws/build/*/compile_commands.json > $BASE_DIR/ros2_ws/build/compile_commands.json
 
 chmod -R a+rwX $BASE_DIR/ros2_ws
 echo "ROS2 workspace bootstrap finished."
