@@ -668,7 +668,7 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
 
 	std::array<float, 3> vel_command_mag_limit = {2.0, 2.0, 1.0}; //vel_x, vel_y, omega_z    
 
-    // We start the thread here because the 25sec inside processing_loop should only start after the startup procedure is done
+    // We start the thread here because the warmup period inside processing_loop should only start after the startup procedure is done
     std::unique_ptr<ElevationMapProcessor> elevation_processor = std::make_unique<ElevationMapProcessor>(
         logdir_path.string(),
         "min_filter",
@@ -682,8 +682,7 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
     static long long iteration_counter = 0;
 
     while(!exit_flag.load()) {
-        ZoneScoped;
-        FrameMarkNamed("run_control_loop");
+        ZoneScoped; FrameMarkNamed("run_control_loop");
         next_iteration_time += dt;
 
         auto robot_state_res = global_robot_state.try_load_for(atomic_op_timeout);
@@ -710,6 +709,8 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
             logger->error("Failed to fetch vel_command within {}us, exiting.", atomic_op_timeout.count());
             exit_flag.store(true);
         }
+        
+        // Clip velocity command components
         for(int i = 0; i < 3; i++) {
             if(std::abs(vel_command[i]) > vel_command_mag_limit[i]) {
                 logger->warn("Had to clip vel_command[{}]={}, vel_command_mag_limit[i]={}", i, vel_command[i], vel_command_mag_limit[i]);
@@ -717,7 +718,6 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
             }	
         }
 
-        // if(walk_a_bit) {logger->warn("ROBOT WILL WALK SOON!");}
         auto time_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         auto rel_time_ms = time_now_ms - start_ms;
         if(walk_a_bit && rel_time_ms > 30000 && rel_time_ms < 34500) {
@@ -734,13 +734,7 @@ void run_control_loop(std::filesystem::path checkpoint_path, std::filesystem::pa
             logger->error("Failed to set global current_action within {}us, exiting.", atomic_op_timeout.count());
             exit_flag.store(true);
         }
-        // logger->debug("raw action={}", current_action);
-        auto delta_action = [](auto const& curr, auto const& prev, double dt){ 
-            std::array<double, num_joints> r; 
-            std::ranges::transform(curr, prev, r.begin(), 
-                [dt](auto a, auto b){return (a-b)/dt;}); return r; }(current_action, previous_action, dt.count() / 1e+3);
-        // logger->debug("delta_action/dt= [{}]", join_formatted(delta_action));
-        // TODO: Store all intermediate values such as current action, pd_targets in rosbag for debugging
+
         std::array<float, num_joints> pd_target_sdk_order {}; // Go2 native order, NOT Isaac Lab!!!
         for(int i = 0; i < num_joints; i++) {
             int j = sdk_to_isaac_idx[i]; // Remap to go2 order
@@ -903,7 +897,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     auto run_timestamp_utc = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
     std::filesystem::path logdir_path {"/app/sim2real/logs/utc_" + std::format("{:%Y-%m-%d-%H-%M-%S}", run_timestamp_utc) + "/"};
     std::error_code ec;
-
     if(std::filesystem::create_directories(logdir_path, ec)) {
         std::cout << "Successfully created logdir at " << logdir_path << std::endl;
     }
