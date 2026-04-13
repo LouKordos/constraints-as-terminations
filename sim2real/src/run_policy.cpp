@@ -48,18 +48,6 @@ std::ostream& operator<<(std::ostream& os, const std::atomic<T>& v) {
     os << v.load(); 
     return os;
 }
-// Helper: format each element with `fmt_spec` and join with `sep`
-template<typename Range>
-std::string join_formatted(const Range& values, std::string_view fmt_spec = "{:.4f}", std::string_view sep = ",")
-{
-    std::vector<std::string> formatted;
-    formatted.reserve(std::size(values));
-    for (auto&& v : values) {
-        formatted.push_back(fmt::format(fmt::runtime(fmt_spec), v));
-    }
-
-    return fmt::format("{}", fmt::join(formatted, sep));
-}
 
 #include <torch/script.h>
 #include <torch/torch.h>
@@ -382,6 +370,19 @@ private:
         }
     }
 };
+
+// Helper: format each element with `fmt_spec` and join with `sep`
+template<typename Range>
+std::string join_formatted(const Range& values, std::string_view fmt_spec = "{:.4f}", std::string_view sep = ",")
+{
+    std::vector<std::string> formatted;
+    formatted.reserve(std::size(values));
+    for (auto&& v : values) {
+        formatted.push_back(fmt::format(fmt::runtime(fmt_spec), v));
+    }
+
+    return fmt::format("{}", fmt::join(formatted, sep));
+}
 
 // Taken from unitree_go2_sdk stand_example
 uint32_t crc32_core(uint32_t* ptr, uint32_t len)
