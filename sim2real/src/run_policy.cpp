@@ -48,6 +48,19 @@ std::ostream& operator<<(std::ostream& os, const std::atomic<T>& v) {
     os << v.load(); 
     return os;
 }
+// Helper: format each element with `fmt_spec` and join with `sep`
+template<typename Range>
+std::string join_formatted(const Range& values, std::string_view fmt_spec = "{:.4f}", std::string_view sep = ",")
+{
+    std::vector<std::string> formatted;
+    formatted.reserve(std::size(values));
+    for (auto&& v : values) {
+        formatted.push_back(fmt::format(fmt::runtime(fmt_spec), v));
+    }
+
+    return fmt::format("{}", fmt::join(formatted, sep));
+}
+
 #include <torch/script.h>
 #include <torch/torch.h>
 
@@ -135,7 +148,7 @@ public:
         // std::string remote_endpoint = "tcp://192.168.123.224:6975"; // Smooth plugin + relative
         std::string remote_endpoint = "tcp://192.168.123.224:6973"; // min_filter plugin + relative
 
-        
+        // TODO: Replace this with in-place calculation based on elevation map subscriber once ROS is integrated
         try {
             zmq_socket_.connect(remote_endpoint);
             zmq_socket_.set(zmq::sockopt::subscribe, ""); 
@@ -211,46 +224,11 @@ private:
     std::thread logging_thread_;
     
     std::vector<float> raw_data_buffer_ = std::vector<float>(elevation_grid_total_size);
-    std::vector<float> filtered_data_buffer_ = std::vector<float>(elevation_grid_total_size);
 
     std::atomic<bool> logging_active_{false};
     std::queue<LogEntry> log_queue_;
     std::mutex log_mutex_;
     std::condition_variable logging_cv_;
-
-    void apply_masked_spatial_filter(const std::vector<float>& input, std::vector<float>& output, float current_fill_val) {
-        for (int y = 0; y < elevation_grid_height; ++y) {
-            for (int x = 0; x < elevation_grid_width; ++x) {
-                int current_idx = y * elevation_grid_width + x;
-                double val = static_cast<double>(input[current_idx]);
-
-                if (std::abs(val - current_fill_val) < 1e-5) {
-                    output[current_idx] = current_fill_val;
-                    continue;
-                }
-
-                double accumulator = 0.0;
-                int valid_neighbor_count = 0;
-
-                for (int dy = -1; dy <= 1; ++dy) {
-                    for (int dx = -1; dx <= 1; ++dx) {
-                        int ny = y + dy;
-                        int nx = x + dx;
-
-                        if (nx >= 0 && nx < elevation_grid_width && ny >= 0 && ny < elevation_grid_height) {
-                            double neighbor_val = static_cast<double>(input[ny * elevation_grid_width + nx]);
-                            if (std::abs(neighbor_val - current_fill_val) > 1e-5) {
-                                accumulator += neighbor_val;
-                                valid_neighbor_count++;
-                            }
-                        }
-                    }
-                }
-
-                output[current_idx] = (valid_neighbor_count > 0) ? static_cast<float>(accumulator / valid_neighbor_count) : static_cast<float>(val);
-            }
-        }
-    }
 
     void logging_loop() {
         while (logging_active_ || !log_queue_.empty()) {
@@ -341,15 +319,7 @@ private:
             }
             stamped_robot_state current_state = robot_state_result.value();
             
-            const bool apply_filter = false;
-            if(apply_filter) {
-                apply_masked_spatial_filter(raw_data_buffer_, filtered_data_buffer_, current_fill_val);
-            }
-            else {
-                filtered_data_buffer_ = raw_data_buffer_;
-            }
-
-            if(!global_elevation_map_filtered.try_store_for(filtered_data_buffer_, std::chrono::microseconds(250))) {
+            if(!global_elevation_map_filtered.try_store_for(raw_data_buffer_, std::chrono::microseconds(250))) {
                 logger->error("Critical: Timed out trying to update global elevation map atomic.");
                 exit_flag.store(true);
                 break;
@@ -412,19 +382,6 @@ private:
         }
     }
 };
-
-// Helper: format each element with `fmt_spec` and join with `sep`
-template<typename Range>
-std::string join_formatted(const Range& values, std::string_view fmt_spec = "{:.4f}", std::string_view sep = ",")
-{
-    std::vector<std::string> formatted;
-    formatted.reserve(std::size(values));
-    for (auto&& v : values) {
-        formatted.push_back(fmt::format(fmt::runtime(fmt_spec), v));
-    }
-
-    return fmt::format("{}", fmt::join(formatted, sep));
-}
 
 // Taken from unitree_go2_sdk stand_example
 uint32_t crc32_core(uint32_t* ptr, uint32_t len)
