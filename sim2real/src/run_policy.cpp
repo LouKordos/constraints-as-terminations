@@ -38,11 +38,6 @@ using json = nlohmann::json;
 #include <unitree/common/thread/thread.hpp>
 #include <unitree/robot/b2/motion_switcher/motion_switcher_client.hpp>
 
-// #include <sensor_msgs/msg/joint_state.hpp>
-// #include <sensor_msgs/msg/imu.hpp>
-// #include <std_msgs/msg/float32_multi_array.hpp>
-// #include <rclcpp/clock.hpp>
-
 #include <zmq.hpp>
 
 // Provide a non-ambiguous overload for streaming std::atomic types.
@@ -64,7 +59,6 @@ std::ostream& operator<<(std::ostream& os, const std::atomic<T>& v) {
 
 #include <timed_atomic.hpp>
 #include <stamped_robot_state.hpp>
-// #include <async_rosbag_logger.hpp>
 #include <history_buffer.hpp>
 
 std::shared_ptr<spdlog::logger> logger {nullptr};
@@ -86,7 +80,6 @@ const double joint_vel_abs_limit = 30; // rad/s
 const double joint_torque_abs_limit = 46; //Nm
 timed_atomic<stamped_robot_state> global_robot_state {};
 
-constexpr auto joystick_zmq_poll_timeout = std::chrono::milliseconds{50};
 timed_atomic<std::array<float, 3>> global_vel_command { {0.0f, 0.0f, 0.0f} };
 
 // Joint order in isaac lab is "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", "FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint", "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
@@ -959,82 +952,11 @@ void robot_state_message_handler(const void *message) {
             angular_velocity[0], angular_velocity[1], angular_velocity[2],
             join_formatted(stamped_state.joint_pos));   
     }
-    // std::this_thread::sleep_for(std::chrono::milliseconds{200});
-}
-
-void joystick_listener(std::string endpoint)
-{
-    if(walk_a_bit) {
-        logger->info("Joystick control disabled (walk_a_bit=true), exiting joystick listener thread.");
-        return;
-    }
-    zmq::context_t ctx{1};
-    zmq::socket_t sock{ctx, zmq::socket_type::sub};
-    try {
-        sock.connect(endpoint);
-        sock.set(zmq::sockopt::subscribe, "");
-        logger->info("Joystick listener connected to {}", endpoint);
-    }
-    catch(const zmq::error_t& e) {
-        logger->error("Failed to connect Joystick SUB socket ({}), exiting.", e.what());
-        exit_flag.store(true);
-        return;
-    }
-
-    zmq::pollitem_t poll_items[] = { { static_cast<void*>(sock), 0, ZMQ_POLLIN, 0 } };
-    std::array<float, 3> zero {0.0f,0.0f,0.0f};
-    const bool enable_lateral_movement = false; 
-
-    while(!exit_flag.load()) {
-        ZoneScopedN("joystick_listener_loop");
-        int rc = zmq::poll(poll_items, 1, joystick_zmq_poll_timeout);
-        if(rc == 0) {
-            logger->error("Joystick timeout! No message received for {}ms. Exiting for safety.", joystick_zmq_poll_timeout.count());
-            exit_flag.store(true);
-            global_vel_command.try_store_for(zero, atomic_op_timeout);
-            continue;
-        }
-
-        zmq::message_t msg;
-        if(!sock.recv(msg, zmq::recv_flags::none)) {
-            logger->warn("Failed to recv() on joystick socket.");
-            continue;
-        }
-        if (msg.size() < 24) { continue; } // Minimum size check
-        
-		const uint8_t* data = static_cast<const uint8_t*>(msg.data());
-        uint8_t btn = data[2];
-        if (btn == 1 || btn == 2 || btn == 16 || btn == 17 || btn == 32 || btn == 34) {
-            logger->error("Joystick E-STOP Detected! (Button value: {}). Exiting.", btn);
-            exit_flag.store(true);
-            global_vel_command.try_store_for(zero, atomic_op_timeout);
-            break;
-        }
-        
-		float lx = 0.0f;
-        float ly = 0.0f;
-		// https://github.com/unitreerobotics/unitree_sdk2_python/blob/master/example/wireless_controller/wireless_controller.py
-        std::memcpy(&lx, data + 20, sizeof(float)); 
-        std::memcpy(&ly, data + 4, sizeof(float));  
-
-        float vx = std::clamp(lx, -1.0f, 1.0f);
-        float vy = 0.0f;
-        if (enable_lateral_movement) {
-            vy = std::clamp(ly, -0.5f, 0.5f);
-        }
-
-        /* logger->debug("joystick vel_x={}, vel_y={}", vx, vy); */
-
-        float omega = 0.0f; // Zero for now
-        global_vel_command.try_store_for({vx, vy, omega}, atomic_op_timeout);
-    }
 }
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
 {
-    // Forces all standard libs to use UTC
-    setenv("TZ", "", 1);
-    tzset();
+    setenv("TZ", "", 1); tzset(); // Forces all standard libs to use UTC
 
     auto run_timestamp_utc = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
     std::filesystem::path logdir_path {"/app/sim2real/logs/utc_" + std::format("{:%Y-%m-%d-%H-%M-%S}", run_timestamp_utc) + "/"};
@@ -1048,7 +970,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
             std::cerr << "Error creating logdir: " << ec.message() << " (code " << ec.value() << "), exiting.\n";
             exit_flag.store(true);
             return EXIT_FAILURE;
-        } // else path already existed
+        } // else path already existed, so we proceed
     }
 
     try {
@@ -1109,15 +1031,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     // Add adjustments for opposite scenario here if needed
 
     logger->debug("Setting up robot communication.");
-    // AsyncRosbagLogger::instance().open((logdir_path / "rosbag").string());
     unitree::robot::ChannelFactory::Instance()->Init(0, argv[1]);
     unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::LowState_> robot_state_subscriber;
     std::string robot_state_topic {"rt/lowstate"};
     robot_state_subscriber.reset(new unitree::robot::ChannelSubscriber<unitree_go::msg::dds_::LowState_>(robot_state_topic));
     robot_state_subscriber->InitChannel(std::bind(&robot_state_message_handler, std::placeholders::_1), 1);
-
-    std::string zmq_endpoint = "tcp://127.0.0.1:6969";
-	std::thread joystick_listener_thread(joystick_listener, zmq_endpoint);
 
     std::this_thread::sleep_for(std::chrono::milliseconds{500});
 
@@ -1137,7 +1055,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
         logger->error("Failed to set PD setpoint within {}us in main(), exiting.", atomic_op_timeout.count());
     }
 
-    // TODO: Infer input dimension and set global variable
     run_control_loop(checkpoint_path, logdir_path);
     
     logger->debug("Reached end of main function, setting exit flag and joining threads...");
@@ -1148,7 +1065,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
     lowcmd_publisher->CloseChannel();
     logger->debug("Closed robot channels.");
 
-    if(joystick_listener_thread.joinable()) joystick_listener_thread.join();
     logger->debug("Flushing logs...");
     logger->flush();
     spdlog::shutdown();
