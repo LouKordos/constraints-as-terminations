@@ -319,7 +319,7 @@ private:
             frame_record["layer"] = layer_name_;
 
             int valid_cell_count = 0;
-            for (const float &v : filtered_data_buffer_) {
+            for (const float &v : raw_data_buffer_) {
                 if (std::abs(v - current_fill_val) > 1e-5) valid_cell_count++;
             }
             frame_record["valid"] = static_cast<float>(valid_cell_count) / elevation_grid_total_size;
@@ -360,7 +360,7 @@ private:
             }
 
             {
-                frame_record["grid"] = filtered_data_buffer_;
+                frame_record["grid"] = raw_data_buffer_;
                 
                 std::lock_guard<std::mutex> lock(log_mutex_);
                 log_queue_.push({false, frame_record.dump()});
