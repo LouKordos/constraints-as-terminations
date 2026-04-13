@@ -77,10 +77,10 @@ else
         rm -rf ${SCRIPT_DIR}/build ${SCRIPT_DIR}/ros2_ws/{build,install,log} /*.marker || true
     fi
     echo "Building ROS packages..."
-    ./bootstrap_ros2_ws.sh
+    ${SCRIPT_DIR}/bootstrap_ros2_ws.sh
     # source ./ros2_ws/install/setup.bash # If this is sourced, cyclonedds will cause a null pointer access in run_policy, likely due to the installed ROS cyclonedds rmw version mismatch to the Go2 SDK.
     echo "Building main codebase..."
-    time cmake -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -S . -B ${BUILD_DIR}
+    time cmake -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -S ${SCRIPT_DIR} -B ${BUILD_DIR}
     if [[ ! -f "/tracy-for-capture-built.marker" ]]; then
         echo "-----------------------------------------Setting up automatic tracy profile capture------------------------------------------------"
         cp -r ${BUILD_DIR}/_deps/tracy-src/ /tracy-for-capture/
