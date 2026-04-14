@@ -21,7 +21,7 @@ class CaTControlNode : public rclcpp::Node {
             rclcpp::QoS best_effort_qos(10); // Queue size 10;
             robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>("/lowstate", best_effort_qos, std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1));
             command_timer_ = this->create_wall_timer(2ms, std::bind(&CaTControlNode::publish_torque_commands, this));
-            command_publisher = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", 10); // Keep reliable QOS for commands for obvious reasons
+            command_publisher = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", best_effort_qos);
         }
     private:
         void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg) {
