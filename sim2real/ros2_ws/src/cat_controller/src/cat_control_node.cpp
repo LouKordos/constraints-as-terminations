@@ -8,10 +8,10 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 
-// #include "unitree_go/msg/sport_mode_state.hpp"
+#include "unitree_go/msg/sport_mode_state.hpp"
 #include "unitree_go/msg/low_state.hpp"
 #include "unitree_go/msg/low_cmd.hpp"
-// #include "cat_controller/motor_crc.h" // Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
+#include "cat_controller/motor_crc.h" // Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
 
 using namespace std::chrono_literals;
 
