@@ -20,11 +20,15 @@ class CaTControlNode : public rclcpp::Node {
         CaTControlNode() : Node("cat_control_node") {
             rclcpp::QoS best_effort_qos(10); // Queue size 10;
             robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>("/lowstate", best_effort_qos, std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1));
+            command_timer_ = this->create_wall_timer(2ms, std::bind(&CaTControlNode::publish_torque_commands, this));
         }
     private:
         void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg) {
             unitree_go::msg::LowState state = *msg;
             RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 500, "RPY[0]: %f", state.imu_state.rpy[0]);
+        }
+        void publish_torque_commands() {
+            RCLCPP_INFO(this->get_logger(), "Would publish now at time=%f", this->get_clock()->now().seconds());
         }
 
         rclcpp::TimerBase::SharedPtr command_timer_;
