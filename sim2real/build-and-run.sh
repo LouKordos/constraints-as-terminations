@@ -22,6 +22,8 @@ while [[ "$#" -gt 0 ]]; do
         --clean-build)
             CLEAN_BUILD=true
             shift
+            echo "Script was executed with --clean-build. Press enter to acknowledge that ros2_ws/src/third_party will NOT be deleted in case temporary changes have been made that should not be lost!"
+            read
             ;;
         --no-multiarch-docker-build)
         SKIP_MULTIARCH_DOCKER_BUILD=true
