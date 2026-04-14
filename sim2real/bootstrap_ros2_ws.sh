@@ -17,6 +17,11 @@ git clone https://github.com/LouKordos/LiDAR_IMU_Init.git/ || (cd LiDAR_IMU_Init
 git clone --recurse-submodules https://github.com/HesaiTechnology/HesaiLidar_ROS_2.0.git HesaiLidar_ROS_2.0 || (cd HesaiLidar_ROS_2.0 && git pull)
 git clone https://github.com/unitreerobotics/unitree_ros2 || (cd unitree_ros2 && git pull)
 
+#  Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
+cp $BASE_DIR/ros2_ws/src/third_party/unitree_ros2/example/src/include/common/motor_crc.h $BASE_DIR/ros2_ws/src/cat_controller/include/cat_controller/motor_crc.h
+cp $BASE_DIR/ros2_ws/src/third_party/unitree_ros2/example/src/src/common/motor_crc.cpp $BASE_DIR/ros2_ws/src/cat_controller/src/motor_crc.cpp
+sed -i 's|#include "motor_crc.h"|#include "cat_controller/motor_crc.h"|' "$BASE_DIR/ros2_ws/src/cat_controller/src/motor_crc.cpp"
+
 cd $BASE_DIR/ros2_ws
 ROSDEP_MARKER=/rosdep-bootstrap-ros-ws.marker
 if [[ ! -f "${ROSDEP_MARKER}" ]]; then
