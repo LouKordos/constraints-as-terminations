@@ -30,11 +30,15 @@ class CaTControlNode : public rclcpp::Node {
         }
         void publish_torque_commands() {
             RCLCPP_INFO(this->get_logger(), "Would publish now at time=%f", this->get_clock()->now().seconds());
+            // TODO: Compute CRC, then publish using publisher
         }
 
         rclcpp::TimerBase::SharedPtr command_timer_;
         rclcpp::Subscription<unitree_go::msg::LowState>::SharedPtr robot_state_sub_;
         rclcpp::Publisher<unitree_go::msg::LowCmd>::SharedPtr command_publisher;
+        // TODO: Add subscriber for elevation map
+        // TODO: Timer for inference
+        // TODO: Timer for safety checks of last execution time for each pub/sub/timer, as well as safety bounds for state
 };
 
 int main(int argc, char* argv[]) {
