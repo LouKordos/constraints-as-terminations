@@ -18,14 +18,16 @@ using namespace std::chrono_literals;
 class CaTControlNode : public rclcpp::Node {
     public:
         CaTControlNode() : Node("cat_control_node") {
-            robot_state_timer_ = this->create_wall_timer(2000ms, std::bind(&CaTControlNode::read_robot_state, this));
+            rclcpp::QoS best_effort_qos(10); // Queue size 10;
+            robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>("/lowstate", best_effort_qos, std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1));
         }
     private:
-        void read_robot_state() {
-            RCLCPP_INFO(this->get_logger(), "Test");
+        void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg) {
+            unitree_go::msg::LowState state = *msg;
+            RCLCPP_INFO(this->get_logger(), "RPY[0]: %f", state.imu_state.rpy[0]);
         }
 
-        rclcpp::TimerBase::SharedPtr robot_state_timer_;
+        rclcpp::TimerBase::SharedPtr command_timer_;
         rclcpp::Subscription<unitree_go::msg::LowState>::SharedPtr robot_state_sub_;
 };
 
