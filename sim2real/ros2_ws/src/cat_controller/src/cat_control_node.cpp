@@ -24,7 +24,7 @@ class CaTControlNode : public rclcpp::Node {
     private:
         void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg) {
             unitree_go::msg::LowState state = *msg;
-            RCLCPP_INFO(this->get_logger(), "RPY[0]: %f", state.imu_state.rpy[0]);
+            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 500, "RPY[0]: %f", state.imu_state.rpy[0]);
         }
 
         rclcpp::TimerBase::SharedPtr command_timer_;
