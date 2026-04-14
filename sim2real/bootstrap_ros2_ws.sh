@@ -14,7 +14,6 @@ git clone https://github.com/inria-paris-robotics-lab/unitree_description.git ||
 git clone https://github.com/Ericsii/livox_ros_driver2 -b feature/use-standard-unit || (cd livox_ros_driver2 && git pull)
 git clone --recurse-submodules https://github.com/LouKordos/FAST_LIO_ROS2.git || (cd FAST_LIO_ROS2 && git pull)
 git clone https://github.com/LouKordos/LiDAR_IMU_Init.git/ || (cd LiDAR_IMU_Init && git pull)
-git clone --recurse-submodules https://github.com/HesaiTechnology/HesaiLidar_ROS_2.0.git HesaiLidar_ROS_2.0 || (cd HesaiLidar_ROS_2.0 && git pull)
 git clone https://github.com/unitreerobotics/unitree_ros2 || (cd unitree_ros2 && git pull)
 
 #  Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
