@@ -18,7 +18,8 @@ using namespace std::chrono_literals;
 class CaTControlNode : public rclcpp::Node {
     public:
         CaTControlNode() : Node("cat_control_node") {
-            rclcpp::QoS best_effort_qos(10); // Queue size 10;
+            init_command();
+            rclcpp::SensorDataQoS best_effort_qos{}; // keep-last, depth 5, best effort, volatile
             robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>("/lowstate", best_effort_qos, std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1));
             command_timer_ = this->create_wall_timer(2ms, std::bind(&CaTControlNode::publish_torque_commands, this));
             command_publisher = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", best_effort_qos);
