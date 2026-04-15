@@ -308,6 +308,7 @@ private:
             "Loaded module checkpoint from " << checkpoint_path.string() << "with observation dimension=" << model_observation_dim_);
     }
 
+    long long inference_iteration_counter_;
     int model_observation_dim_;
     std::atomic<bool> exit_flag_{false};
     std::atomic<bool> shutdown_started_{false};
