@@ -126,7 +126,38 @@ private:
         auto stamped_state = stamped_state_from_lowstate(*msg, state_callback_iteration_counter_++, steady_publish_time);
         global_robot_state_.try_store_for(stamped_state, atomic_op_timeout);
 
-        // check_state_safety_limits(stamped_state);
+        // State safety check
+        // TODO: Use templates and functions to avoid repetition
+        if (stamped_state.body_rpy_xyz[0] < base_orientation_limit_rad[0].first ||
+            stamped_state.body_rpy_xyz[0] > base_orientation_limit_rad[0].second)
+        {
+            shutdown_coordinator_.shutdown(std::format("Base roll angle out of bounds, roll={}, bounds=[{},{}]", stamped_state.body_rpy_xyz[0],
+                base_orientation_limit_rad[0].first, base_orientation_limit_rad[0].second));
+        }
+
+        if (stamped_state.body_rpy_xyz[1] < base_orientation_limit_rad[1].first ||
+            stamped_state.body_rpy_xyz[1] > base_orientation_limit_rad[1].second)
+        {
+            shutdown_coordinator_.shutdown(std::format("Base pitch angle out of bounds, pitch={}, bounds=[{},{}]", stamped_state.body_rpy_xyz[1],
+                base_orientation_limit_rad[1].first, base_orientation_limit_rad[1].second));
+        }
+
+        for (int i = 0; i < num_joints; i++) {
+            if (stamped_state.joint_pos[i] < joint_position_limits[i].first || stamped_state.joint_pos[i] > joint_position_limits[i].second) {
+                shutdown_coordinator_.shutdown(std::format("Joint position for index {} out of bounds, pos={}, bounds=[{},{}]", i,
+                    stamped_state.joint_pos[i], joint_position_limits[i].first, joint_position_limits[i].second));
+            }
+
+            if (std::abs(stamped_state.joint_torque[i]) > joint_torque_abs_limit) {
+                shutdown_coordinator_.shutdown(std::format(
+                    "Joint torque for index {} out of bounds, torque={}, limit={}", i, stamped_state.joint_torque[i], joint_torque_abs_limit));
+            }
+
+            if (std::abs(stamped_state.joint_vel[i]) > joint_vel_abs_limit) {
+                shutdown_coordinator_.shutdown(std::format(
+                    "Joint velocity for index {} out of bounds, velocity={}, limit={}", i, stamped_state.joint_vel[i], joint_vel_abs_limit));
+            }
+        }
     }
 
     void policy_inference_callback()
