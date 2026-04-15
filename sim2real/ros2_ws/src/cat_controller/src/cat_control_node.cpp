@@ -110,10 +110,10 @@ private:
         RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 50, "motor_state[2]: %f", msg->motor_state[2].q);
 
         // TODO: Remove because this was only used to check if /lowcmd works
-        if (low_level_mode_enabled_ && !initial_state_latched_) {
+        if (low_level_mode_enabled_.load(std::memory_order_acquire) && !initial_state_latched_.load(std::memory_order_acquire)) {
             initial_state_ = *msg;
             start_time_ = this->get_clock()->now().seconds();
-            initial_state_latched_ = true;
+            initial_state_latched_.store(true, std::memory_order_release);
 
             RCLCPP_INFO(
                 this->get_logger(), "Baseline latched. FR Calf: %f, FL Calf: %f", initial_state_.motor_state[2].q, initial_state_.motor_state[5].q);
@@ -130,9 +130,9 @@ private:
     void publish_torque_commands()
     {
         if (handle_exit_if_requested()) { return; }
+        if (startup_failed_.load(std::memory_order_acquire)) { return; }
 
-        if (startup_failed_) { return; }
-        if (!low_level_mode_enabled_) {
+        if (!low_level_mode_enabled_.load(std::memory_order_acquire)) {
             std::string error_message;
             const LowLevelModeEnabler::Status status = low_level_mode_enabler_.poll_thread_unsafe(error_message);
 
@@ -148,7 +148,7 @@ private:
             }
 
             if (status == LowLevelModeEnabler::Status::Succeeded) {
-                low_level_mode_enabled_ = true;
+                low_level_mode_enabled_.store(true, std::memory_order_release);
                 low_level_mode_enabled_time_ = this->get_clock()->now();
                 RCLCPP_INFO(this->get_logger(), "Motion switcher helper exited successfully. Starting low-level control.");
             } else {
@@ -157,7 +157,7 @@ private:
         }
 
         // TODO: Remove because this was only used to check if /lowcmd works
-        if (!initial_state_latched_) {
+        if (!initial_state_latched_.load(std::memory_order_acquire)) {
             const double seconds_since_low_level_enabled = (this->get_clock()->now() - low_level_mode_enabled_time_).seconds();
 
             if (seconds_since_low_level_enabled > initial_state_latch_timeout_seconds_) {
