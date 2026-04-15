@@ -260,12 +260,13 @@ private:
         RCLCPP_INFO(this->get_logger(), "Checkpoints registered to use proper elevation map: %s",
             fmt::format("{}", fmt::join(checkpoint_filenames_proper_elevation_map, ", ")).c_str());
 
-        bool checkpoint_in_zero_elevation_map =
+        const bool checkpoint_in_zero_elevation_map =
             (std::find(checkpoint_filenames_zero_elevation_map.begin(), checkpoint_filenames_zero_elevation_map.end(),
                  checkpoint_path.filename().string()) != checkpoint_filenames_zero_elevation_map.end());
-        bool checkpoint_in_proper_elevation_map =
+        const bool checkpoint_in_proper_elevation_map =
             (std::find(checkpoint_filenames_proper_elevation_map.begin(), checkpoint_filenames_proper_elevation_map.end(),
                  checkpoint_path.filename().string()) != checkpoint_filenames_proper_elevation_map.end());
+
         if (!checkpoint_in_zero_elevation_map && !checkpoint_in_proper_elevation_map) {
             fail_node(
                 "Specified checkpoint file found in neither of the two allowed checkpoint lists, exiting! This is a safety precaution to prevent "
