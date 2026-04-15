@@ -64,7 +64,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "Started motion switcher helper using interface '%s'.", network_interface_.c_str());
 
         RCLCPP_DEBUG(this->get_logger(), "Starting robot command publish timer.");
-        command_timer_ = this->create_wall_timer(2ms, std::bind(&CaTControlNode::publish_torque_commands, this));
+        command_timer_ = this->create_wall_timer(2ms, std::bind(&CaTControlNode::publish_commands, this));
         RCLCPP_DEBUG(this->get_logger(), "Started robot command publish timer.");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting policy inference / control loop timer.");
@@ -118,7 +118,7 @@ private:
     void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg)
     {
         if (shutdown_coordinator_.handle_exit_if_requested() ||
-            shutdown_if_deadline_exceeded(last_robot_state_callback_time_, std::chrono::milliseconds{50}))
+            shutdown_if_deadline_exceeded(last_state_callback_time_, std::chrono::milliseconds{50}))
         {
             return;
         }
@@ -145,10 +145,10 @@ private:
     }
 
     // Sends latest generated actions to the robot at steady 500Hz, as policy only runs at 50Hz.
-    void publish_torque_commands()
+    void publish_commands()
     {
         if (shutdown_coordinator_.handle_exit_if_requested() ||
-            shutdown_if_deadline_exceeded(last_torque_command_callback_time_, std::chrono::milliseconds{30}))
+            shutdown_if_deadline_exceeded(last_command_callback_time_, std::chrono::milliseconds{30}))
         {
             return;
         }
@@ -322,9 +322,9 @@ private:
 
     long long inference_iteration_counter_;
     long long state_callback_iteration_counter_;
-    std::chrono::steady_clock::time_point last_robot_state_callback_time_{};     // default = epoch
-    std::chrono::steady_clock::time_point last_inference_callback_time_{};       // default = epoch
-    std::chrono::steady_clock::time_point last_torque_command_callback_time_{};  // default = epoch
+    std::chrono::steady_clock::time_point last_state_callback_time_{};      // default = epoch
+    std::chrono::steady_clock::time_point last_inference_callback_time_{};  // default = epoch
+    std::chrono::steady_clock::time_point last_command_callback_time_{};    // default = epoch
     int model_observation_dim_;
 
     // TODO: Clean up once motion test is removed in favor of proper policy inference
