@@ -214,6 +214,37 @@ private:
         // command_publisher->publish(command_message_);
     }
 
+    // TODO: Move into helper class or replace with library
+    // Compute body-frame gravity vector given a body→world quaternion.
+    // quat_body_to_world_wxyz is a unit quaternion [w, x, y, z] rotating body to world.
+    // Returns [g_x, g_y, g_z] in body frame.
+    static inline std::array<float, 3> projected_gravity_body_frame(const std::array<float, 4> & quat_body_to_world_wxyz)
+    {
+        // Extract components
+        const float w = quat_body_to_world_wxyz[0];
+        const float x = quat_body_to_world_wxyz[1];
+        const float y = quat_body_to_world_wxyz[2];
+        const float z = quat_body_to_world_wxyz[3];
+
+        const float wi = w;
+        const float xi = -x;
+        const float yi = -y;
+        const float zi = -z;
+
+        // First Hamilton product: q_inv ⊗ g
+        const float a0 = zi;
+        const float a1 = -yi;
+        const float a2 = xi;
+        const float a3 = -wi;
+
+        // Second Hamilton product: (q_inv ⊗ g) ⊗ q
+        const float r1 = a0 * x + a1 * w + a2 * z - a3 * y;
+        const float r2 = a0 * y - a1 * z + a2 * w + a3 * x;
+        const float r3 = a0 * z + a1 * y - a2 * x + a3 * w;
+
+        return {r1, r2, r3};
+    }
+
     // Init the message struct with appropriate default values
     void init_command_messages()
     {
