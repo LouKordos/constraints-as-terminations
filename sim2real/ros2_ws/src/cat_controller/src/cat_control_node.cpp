@@ -106,10 +106,7 @@ public:
 private:
     void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg)
     {
-        if (shutdown_coordinator_.exit_requested()) {
-            begin_shutdown_once();
-            return;
-        }
+        if (handle_exit_if_requested()) { return; }
         RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 50, "motor_state[2]: %f", msg->motor_state[2].q);
 
         // TODO: Remove because this was only used to check if /lowcmd works
@@ -125,20 +122,15 @@ private:
 
     void policy_inference_callback()
     {
-        if (shutdown_coordinator_.exit_requested()) {
-            begin_shutdown_once();
-            return;
-        }
+        if (handle_exit_if_requested()) { return; }
         // // TODO: Check low_state timestamp
     }
 
     // Sends latest generated actions to the robot at steady 500Hz, as policy only runs at 50Hz.
     void publish_torque_commands()
     {
-        if (shutdown_coordinator_.exit_requested()) {
-            begin_shutdown_once();
-            return;
-        }
+        if (handle_exit_if_requested()) { return; }
+
         if (startup_failed_) { return; }
         if (!low_level_mode_enabled_) {
             std::string error_message;
@@ -213,7 +205,13 @@ private:
         if (message != nullptr && !message->empty()) { RCLCPP_ERROR(this->get_logger(), "%s", message->c_str()); }
         this->get_node_base_interface()->get_context()->shutdown("exit flag set");
     }
+    bool handle_exit_if_requested()
+    {
+        if (!shutdown_coordinator_.exit_requested()) { return false; }
 
+        begin_shutdown_once();
+        return true;
+    }
     void fail_node(const std::string & message)
     {
         shutdown_coordinator_.request_exit();
