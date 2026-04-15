@@ -46,7 +46,7 @@ public:
         std::string error_message;
         RCLCPP_DEBUG(this->get_logger(), "Starting low level control mode enabler process.");
         if (!low_level_mode_enabler_.start(error_message)) {
-            fail_node_thread_unsafe(error_message);
+            fail_node(error_message);
             return;
         }
         RCLCPP_INFO(this->get_logger(), "Started motion switcher helper using interface '%s'.", network_interface_.c_str());
@@ -105,6 +105,10 @@ public:
 private:
     void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg)
     {
+        if (exit_requested()) {
+            begin_shutdown_once();
+            return;
+        }
         RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 50, "motor_state[2]: %f", msg->motor_state[2].q);
 
         // TODO: Remove because this was only used to check if /lowcmd works
@@ -120,18 +124,26 @@ private:
 
     void policy_inference_callback()
     {
+        if (exit_requested()) {
+            begin_shutdown_once();
+            return;
+        }
     }
 
     // Sends latest generated actions to the robot at steady 500Hz, as policy only runs at 50Hz.
     void publish_torque_commands()
     {
+        if (exit_requested()) {
+            begin_shutdown_once();
+            return;
+        }
         if (startup_failed_) { return; }
         if (!low_level_mode_enabled_) {
             std::string error_message;
             const LowLevelModeEnabler::Status status = low_level_mode_enabler_.poll_thread_unsafe(error_message);
 
             if (status == LowLevelModeEnabler::Status::Failed) {
-                fail_node_thread_unsafe(error_message);
+                fail_node(error_message);
                 return;
             }
 
@@ -155,7 +167,7 @@ private:
             const double seconds_since_low_level_enabled = (this->get_clock()->now() - low_level_mode_enabled_time_).seconds();
 
             if (seconds_since_low_level_enabled > initial_state_latch_timeout_seconds_) {
-                fail_node_thread_unsafe("Low-level mode was enabled, but initial /lowstate was not latched in time.");
+                fail_node("Low-level mode was enabled, but initial /lowstate was not latched in time.");
             }
 
             return;
@@ -185,6 +197,30 @@ private:
         // command_publisher->publish(command_message_);
     }
 
+    void request_exit() noexcept { exit_flag_.store(true, std::memory_order_release); }
+    bool exit_requested() const noexcept { return exit_flag_.load(std::memory_order_acquire); }
+    void begin_shutdown_once(const std::string * message = nullptr)
+    {
+        bool expected = false;
+        // If already true, no cleanup needed
+        if (!shutdown_started_.compare_exchange_strong(expected, true, std::memory_order_acq_rel, std::memory_order_acquire)) { return; }
+
+        // TODO: ADD ANY OTHER TIMERS, VERY IMPORTANT
+        // Very important to put any cleanup for the node here!
+        if (command_timer_) { command_timer_->cancel(); }
+        if (policy_inference_timer_) { policy_inference_timer_->cancel(); }
+
+        low_level_mode_enabler_.stop();
+        if (message != nullptr && !message->empty()) { RCLCPP_ERROR(this->get_logger(), "%s", message->c_str()); }
+        this->get_node_base_interface()->get_context()->shutdown("exit flag set");
+    }
+
+    void fail_node(const std::string & message)
+    {
+        request_exit();
+        begin_shutdown_once(&message);
+    }
+
     // Init the message struct with appropriate default values
     void init_command_messages()
     {
@@ -201,17 +237,6 @@ private:
             command_message_.motor_cmd[i].kd = 0.0;
             command_message_.motor_cmd[i].tau = 0.0;
         }
-    }
-
-    void fail_node_thread_unsafe(const std::string & message)
-    {
-        if (startup_failed_) { return; }
-        startup_failed_ = true;
-        if (command_timer_) { command_timer_->cancel(); }
-
-        low_level_mode_enabler_.stop();
-        RCLCPP_ERROR(this->get_logger(), "%s", message.c_str());
-        rclcpp::shutdown();
     }
 
     // TODO: Move into history_buffer.hpp and rename to pytorch_helpers
@@ -242,10 +267,11 @@ private:
             (std::find(checkpoint_filenames_proper_elevation_map.begin(), checkpoint_filenames_proper_elevation_map.end(),
                  checkpoint_path.filename().string()) != checkpoint_filenames_proper_elevation_map.end());
         if (!checkpoint_in_zero_elevation_map && !checkpoint_in_proper_elevation_map) {
-            fail_node_thread_unsafe(
+            fail_node(
                 "Specified checkpoint file found in neither of the two allowed checkpoint lists, exiting! This is a safety precaution to prevent "
                 "passing incorrect observations into a policy, do not circumvent! Simply add the checkpoint to the correct list in the source code "
                 "above this message printout.");
+            return;
         }
 
         // TODO: Rework this to be a config file where each checkpoint is associated with certain configuration values
@@ -261,7 +287,8 @@ private:
             policy_model_ = torch::jit::load(checkpoint_path.string());
             policy_model_.eval();
         } catch (const c10::Error & e) {
-            fail_node_thread_unsafe("Failed to load module, exiting.");
+            fail_node("Failed to load module, exiting.");
+            return;
         }
 
         int64_t in_features = -1;
@@ -272,7 +299,8 @@ private:
             }
         }
         if (in_features != observation_dim_no_history && in_features != observation_dim_history) {
-            fail_node_thread_unsafe(std::format("Observation dimension does not match expected value, exiting. in_features={}", in_features));
+            fail_node(std::format("Observation dimension does not match expected value, exiting. in_features={}", in_features));
+            return;
         }
 
         RCLCPP_INFO_STREAM(this->get_logger(),
