@@ -211,7 +211,7 @@ private:
             return;
         }
 
-        /// TODO: Remove and use helper to send msg since we only need to pass position offsets
+        /// TODO: Remove and use send_pd_commands from run_policy
         const double t = this->get_clock()->now().seconds() - start_time_;
         const double offset = 0.15 * (1.0 - std::cos(2.0 * M_PI * 0.25 * t));
 
