@@ -1,16 +1,10 @@
-#include <limits.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include <chrono>
 #include <cmath>
-#include <csignal>
-#include <cstring>
 #include <functional>
 #include <memory>
 #include <string>
 
+#include "cat_controller/low_level_mode_enabler.hpp"
 #include "cat_controller/motor_crc.h"  // Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
 #include "rclcpp/rclcpp.hpp"
 #include "unitree_go/msg/low_cmd.hpp"
@@ -22,7 +16,10 @@ class CaTControlNode : public rclcpp::Node
 {
 public:
     explicit CaTControlNode(const std::string & network_interface)
-        : Node("cat_control_node"), network_interface_(network_interface)  // TODO: Make this a ros param
+        : Node("cat_control_node"),
+          network_interface_(network_interface),  // TODO: Make this a ros param
+          low_level_mode_enabler_("/app/sim2real/build/src/release_motion_mode", network_interface_,
+              45.0)  // TODO: Move binary into ros package and find it relative to node executable
     {
         init_command();
 
@@ -30,14 +27,19 @@ public:
         robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>(
             "/lowstate", best_effort_qos, std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1));
 
+        std::string error_message;
+        if (!low_level_mode_enabler_.start(error_message)) {
+            fail_node(error_message);
+            return;
+        }
+
+        RCLCPP_INFO(this->get_logger(), "Started motion switcher helper using interface '%s'.", network_interface_.c_str());
+
         // Required to switch from high level "sport mode" state to low level control so that policy actions are applied
-        start_motion_switcher_process();
         // Only start after blocking motion switcher has succeded. ANYTHING control related should only start after this!
         command_timer_ = this->create_wall_timer(2ms, std::bind(&CaTControlNode::publish_torque_commands, this));
         command_publisher = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", best_effort_qos);
     }
-
-    ~CaTControlNode() override { stop_motion_switcher_process(SIGKILL); }
 
 private:
     void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg)
@@ -60,8 +62,27 @@ private:
     {
         if (startup_failed_) { return; }
         if (!low_level_mode_enabled_) {
-            monitor_motion_switcher_process();
-            return;
+            std::string error_message;
+            const LowLevelModeEnabler::Status status = low_level_mode_enabler_.poll(error_message);
+
+            if (status == LowLevelModeEnabler::Status::Failed) {
+                fail_node(error_message);
+                return;
+            }
+
+            if (status == LowLevelModeEnabler::Status::Running) {
+                RCLCPP_INFO_THROTTLE(
+                    this->get_logger(), *this->get_clock(), 2000, "Waiting for motion switcher helper to release high-level control...");
+                return;
+            }
+
+            if (status == LowLevelModeEnabler::Status::Succeeded) {
+                low_level_mode_enabled_ = true;
+                low_level_mode_enabled_time_ = this->get_clock()->now();
+                RCLCPP_INFO(this->get_logger(), "Motion switcher helper exited successfully. Starting low-level control.");
+            } else {
+                return;
+            }
         }
 
         // TODO: Remove because this was only used to check if /lowcmd works
@@ -117,125 +138,29 @@ private:
         }
     }
 
-    /*
-    Low-level control is enabled by an external motion-switch helper on purpose. I originally tried to disable `sport_mode` from the ROS side, but
-    although the API path responded, the robot never actually handed over control. The working mechanism was Unitree's SDK2
-    MotionSwitcherClient::ReleaseMode(), but calling that inside the ROS process was not robust because the ROS environment pulled in different DDS
-    libraries than the standalone SDK2 setup, leading to version-mismatch crashes.
-
-    This is why a separate `release_motion_mode` helper process is started through the dynamic loader with an explicit library path so it uses the
-    known-good SDK2 DDS libraries. The node then waits for that helper to exit successfully before sending any `/lowcmd` messages.
-
-    This node must also not remain in a stale half-started state, so if the helper does not succeed within a bounded time, the node fails and shuts
-    down instead of silently sitting around without valid control authority.
-    */
-    void start_motion_switcher_process()
-    {
-        const std::string helper_binary_path = "/app/sim2real/build/src/release_motion_mode";
-        const pid_t child_pid = fork();
-        if (child_pid < 0) {
-            fail_node(std::string("fork() failed while starting motion switcher helper: ") + std::strerror(errno));
-            return;
-        }
-
-        if (child_pid == 0) {
-            // Overriding dynamic lib is required because of a version mismatch between cyclonedds used by ROS2 vs. the one used by Unitree.
-            // The binary then segfaults because one of the cyclonedds so libs comes from the global install and the other one from ROS.
-            const char * loader_path = "/lib64/ld-linux-x86-64.so.2";
-            const char * library_path = "/usr/local/lib:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu";
-            execl(loader_path, loader_path, "--library-path", library_path, helper_binary_path.c_str(), network_interface_.c_str(),
-                static_cast<char *>(nullptr));
-            std::cerr << "execl() failed for release_motion_mode via ld-linux: " << std::strerror(errno) << std::endl;
-            _exit(127);
-        }
-
-        motion_switcher_pid_ = child_pid;
-        motion_switcher_start_time_ = this->get_clock()->now();
-        RCLCPP_INFO(this->get_logger(), "Started motion switcher helper with pid=%d using interface '%s'.", static_cast<int>(motion_switcher_pid_),
-            network_interface_.c_str());
-    }
-
-    void monitor_motion_switcher_process()
-    {
-        if (motion_switcher_pid_ <= 0) {
-            fail_node("Motion switcher helper process was never started correctly.");
-            return;
-        }
-
-        int status = 0;
-        const pid_t wait_result = waitpid(motion_switcher_pid_, &status, WNOHANG);
-        if (wait_result == 0) {
-            const double elapsed_seconds = (this->get_clock()->now() - motion_switcher_start_time_).seconds();
-            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Waiting for motion switcher helper to release high-level control...");
-            if (elapsed_seconds > motion_switcher_timeout_seconds_) {
-                stop_motion_switcher_process(SIGKILL);
-                fail_node("Timed out waiting for motion switcher helper to enable low-level control mode.");
-            }
-
-            return;
-        }
-
-        if (wait_result < 0) {
-            fail_node(std::string("waitpid() failed while monitoring motion switcher helper: ") + std::strerror(errno));
-            return;
-        }
-
-        motion_switcher_pid_ = -1;
-        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-            low_level_mode_enabled_ = true;
-            low_level_mode_enabled_time_ = this->get_clock()->now();
-            RCLCPP_INFO(this->get_logger(), "Motion switcher helper exited successfully. Starting low-level control.");
-            return;
-        }
-        if (WIFEXITED(status)) {
-            fail_node("Motion switcher helper exited with failure code " + std::to_string(WEXITSTATUS(status)) +
-                      ". Low-level control mode was not enabled.");
-            return;
-        }
-
-        if (WIFSIGNALED(status)) {
-            fail_node(
-                "Motion switcher helper was terminated by signal " + std::to_string(WTERMSIG(status)) + ". Low-level control mode was not enabled.");
-            return;
-        }
-
-        fail_node("Motion switcher helper ended in an unknown state.");
-    }
-
-    void stop_motion_switcher_process(int signal_number)
-    {
-        if (motion_switcher_pid_ <= 0) { return; }
-        kill(motion_switcher_pid_, signal_number);
-        int status = 0;
-        waitpid(motion_switcher_pid_, &status, 0);
-        motion_switcher_pid_ = -1;
-    }
-
     void fail_node(const std::string & message)
     {
         if (startup_failed_) { return; }
         startup_failed_ = true;
         if (command_timer_) { command_timer_->cancel(); }
 
-        stop_motion_switcher_process(SIGKILL);
+        low_level_mode_enabler_.stop();
         RCLCPP_ERROR(this->get_logger(), "%s", message.c_str());
         rclcpp::shutdown();
     }
 
+    // TODO: Clean up once motion test is removed in favor of proper policy inference
     const std::string network_interface_;
-    const double motion_switcher_timeout_seconds_ = 45.0;
     const double initial_state_latch_timeout_seconds_ = 2.0;
-
-    unitree_go::msg::LowCmd command_message_;
+    LowLevelModeEnabler low_level_mode_enabler_;
+    rclcpp::Time low_level_mode_enabled_time_{0, 0, RCL_ROS_TIME};
     bool initial_state_latched_ = false;
     bool low_level_mode_enabled_ = false;
     bool startup_failed_ = false;
     double start_time_ = 0.0;
     unitree_go::msg::LowState initial_state_;
 
-    pid_t motion_switcher_pid_ = -1;
-    rclcpp::Time motion_switcher_start_time_{0, 0, RCL_ROS_TIME};
-    rclcpp::Time low_level_mode_enabled_time_{0, 0, RCL_ROS_TIME};
+    unitree_go::msg::LowCmd command_message_;
 
     rclcpp::TimerBase::SharedPtr command_timer_;
     rclcpp::Subscription<unitree_go::msg::LowState>::SharedPtr robot_state_sub_;

@@ -14,7 +14,7 @@ find_package(std_msgs REQUIRED)
 find_package(unitree_go REQUIRED)
 find_package(unitree_api REQUIRED)
 
-add_executable(cat_controller src/cat_control_node.cpp src/motor_crc.cpp)
+add_executable(cat_controller src/cat_control_node.cpp src/motor_crc.cpp src/low_level_mode_enabler.cpp)
 target_include_directories(cat_controller PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
 
 target_link_libraries(cat_controller PUBLIC rclcpp::rclcpp ${std_msgs_TARGETS} ${unitree_go_TARGETS} ${unitree_api_TARGETS})
