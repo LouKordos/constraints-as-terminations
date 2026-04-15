@@ -21,7 +21,7 @@ public:
     ~LowLevelModeEnabler();
 
     bool start(std::string & error_message);
-    Status poll(std::string & error_message);
+    Status poll_thread_unsafe(std::string & error_message);
     void stop(int signal_number = 9);
 
 private:

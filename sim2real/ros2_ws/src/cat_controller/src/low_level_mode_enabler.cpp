@@ -49,7 +49,7 @@ bool LowLevelModeEnabler::start(std::string & error_message)
     return true;
 }
 
-LowLevelModeEnabler::Status LowLevelModeEnabler::poll(std::string & error_message)
+LowLevelModeEnabler::Status LowLevelModeEnabler::poll_thread_unsafe(std::string & error_message)
 {
     if (status_ == Status::Failed) {
         error_message = failure_message_;
