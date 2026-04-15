@@ -115,23 +115,6 @@ public:
     };
 
 private:
-    bool shutdown_if_deadline_exceeded(std::chrono::steady_clock::time_point & last_call_time, std::chrono::milliseconds allowed_threshold)
-    {
-        auto now = std::chrono::steady_clock::now();
-        if (last_call_time != std::chrono::steady_clock::time_point{}) {
-            auto delta = now - last_call_time;
-            if (delta > allowed_threshold) {
-                shutdown_coordinator_.shutdown(
-                    std::format("Duration threshold between consecutive callback executions exceeded, allowed threshold={}ms, actual "
-                                "elapsed duration={}ms, exiting.",
-                        allowed_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count()));
-                return true;
-            }
-        }
-        last_call_time = now;
-        return false;
-    }
-
     void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg)
     {
         if (shutdown_coordinator_.handle_exit_if_requested() ||
@@ -318,6 +301,23 @@ private:
         model_observation_dim_ = in_features;
         RCLCPP_INFO_STREAM(this->get_logger(),
             "Loaded module checkpoint from " << checkpoint_path.string() << "with observation dimension=" << model_observation_dim_);
+    }
+
+    bool shutdown_if_deadline_exceeded(std::chrono::steady_clock::time_point & last_call_time, std::chrono::milliseconds allowed_threshold)
+    {
+        auto now = std::chrono::steady_clock::now();
+        if (last_call_time != std::chrono::steady_clock::time_point{}) {
+            auto delta = now - last_call_time;
+            if (delta > allowed_threshold) {
+                shutdown_coordinator_.shutdown(
+                    std::format("Duration threshold between consecutive callback executions exceeded, allowed threshold={}ms, actual "
+                                "elapsed duration={}ms, exiting.",
+                        allowed_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count()));
+                return true;
+            }
+        }
+        last_call_time = now;
+        return false;
     }
 
     long long inference_iteration_counter_;
