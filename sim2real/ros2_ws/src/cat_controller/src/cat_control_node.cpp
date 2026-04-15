@@ -28,19 +28,28 @@ public:
         init_command_messages();
 
         rclcpp::SensorDataQoS best_effort_qos{};
+        RCLCPP_DEBUG(this->get_logger(), "Starting robot state subscriber.");
         robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>(
             "/lowstate", best_effort_qos, std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1));
+        RCLCPP_DEBUG(this->get_logger(), "Started robot state subscriber.");
+        RCLCPP_DEBUG(this->get_logger(), "Starting robot command publisher.");
         command_publisher = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", best_effort_qos);
+        RCLCPP_DEBUG(this->get_logger(), "Started robot command publisher.");
 
         std::string error_message;
+        RCLCPP_DEBUG(this->get_logger(), "Starting low level control mode enabler process.");
         if (!low_level_mode_enabler_.start(error_message)) {
             fail_node(error_message);
             return;
         }
         RCLCPP_INFO(this->get_logger(), "Started motion switcher helper using interface '%s'.", network_interface_.c_str());
 
+        RCLCPP_DEBUG(this->get_logger(), "Starting robot command publish timer.");
         command_timer_ = this->create_wall_timer(2ms, std::bind(&CaTControlNode::publish_torque_commands, this));
+        RCLCPP_DEBUG(this->get_logger(), "Started robot command publish timer.");
+        RCLCPP_DEBUG(this->get_logger(), "Starting policy inference / control loop timer.");
         policy_inference_timer_ = this->create_wall_timer(20ms, std::bind(&CaTControlNode::policy_inference_callback, this));
+        RCLCPP_DEBUG(this->get_logger(), "Started policy inference / control loop timer.");
         // Important TODO: Add linear interpolation from start pos to standing pos with Kp = 30 and Kd = 1 same way as run_policy.cpp
     }
 
