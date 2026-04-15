@@ -55,7 +55,7 @@ static inline std::array<float, 3> projected_gravity_body_frame(const std::array
 }
 
 inline stamped_robot_state stamped_state_from_lowstate(
-    const unitree_go::msg::LowState & lowstate, const long long & iteration_counter, const std::chrono::steady_clock::time_point & msg_publish_time)
+    const unitree_go::msg::LowState & lowstate, const long long iteration_counter, const std::chrono::steady_clock::time_point msg_publish_time)
 {
     auto quat_wxyz_body_to_world = lowstate.imu_state.quaternion;
     stamped_robot_state stamped_state;
