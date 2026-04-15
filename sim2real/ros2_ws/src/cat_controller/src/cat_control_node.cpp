@@ -46,7 +46,7 @@ public:
           })
     {
         static_assert(std::atomic<bool>::is_always_lock_free, "atomic bool is not lock free.");
-        init_command_messages();
+        init_command_msg(command_msg_);
         load_pytorch_checkpoint();
 
         RCLCPP_DEBUG(this->get_logger(), "Starting robot state subscriber.");
@@ -187,39 +187,21 @@ private:
         const int fr_calf = 2;
         const int fl_calf = 5;
 
-        command_message_.motor_cmd[fr_calf].q = initial_state_.motor_state[fr_calf].q + offset;
-        command_message_.motor_cmd[fr_calf].dq = 0.0;
-        command_message_.motor_cmd[fr_calf].kp = 30.0;
-        command_message_.motor_cmd[fr_calf].kd = 1.0;
-        command_message_.motor_cmd[fr_calf].tau = 0.0;
+        command_msg_.motor_cmd[fr_calf].q = initial_state_.motor_state[fr_calf].q + offset;
+        command_msg_.motor_cmd[fr_calf].dq = 0.0;
+        command_msg_.motor_cmd[fr_calf].kp = 30.0;
+        command_msg_.motor_cmd[fr_calf].kd = 1.0;
+        command_msg_.motor_cmd[fr_calf].tau = 0.0;
 
-        command_message_.motor_cmd[fl_calf].q = initial_state_.motor_state[fl_calf].q + offset;
-        command_message_.motor_cmd[fl_calf].dq = 0.0;
-        command_message_.motor_cmd[fl_calf].kp = 30.0;
-        command_message_.motor_cmd[fl_calf].kd = 1.0;
-        command_message_.motor_cmd[fl_calf].tau = 0.0;
+        command_msg_.motor_cmd[fl_calf].q = initial_state_.motor_state[fl_calf].q + offset;
+        command_msg_.motor_cmd[fl_calf].dq = 0.0;
+        command_msg_.motor_cmd[fl_calf].kp = 30.0;
+        command_msg_.motor_cmd[fl_calf].kd = 1.0;
+        command_msg_.motor_cmd[fl_calf].tau = 0.0;
 
-        get_crc(command_message_);
+        get_crc(command_msg_);
         // Commented out for safety for now
-        // command_publisher->publish(command_message_);
-    }
-
-    // Init the message struct with appropriate default values
-    void init_command_messages()
-    {
-        command_message_.head[0] = 0xFE;
-        command_message_.head[1] = 0xEF;
-        command_message_.level_flag = 0xFF;
-        command_message_.gpio = 0;
-
-        for (int i = 0; i < 20; i++) {
-            command_message_.motor_cmd[i].mode = 0x01;
-            command_message_.motor_cmd[i].q = PosStopF;
-            command_message_.motor_cmd[i].dq = VelStopF;
-            command_message_.motor_cmd[i].kp = 0.0;
-            command_message_.motor_cmd[i].kd = 0.0;
-            command_message_.motor_cmd[i].tau = 0.0;
-        }
+        // command_publisher->publish(command_msg_);
     }
 
     // TODO: Move into history_buffer.hpp and rename to pytorch_helpers
@@ -310,7 +292,7 @@ private:
     double start_time_ = 0.0;
     unitree_go::msg::LowState initial_state_;
 
-    unitree_go::msg::LowCmd command_message_;
+    unitree_go::msg::LowCmd command_msg_;
     torch::jit::Module policy_model_;
     LowLevelModeEnabler low_level_mode_enabler_;
     ShutdownCoordinator shutdown_coordinator_;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cat_controller/stamped_robot_state.hpp"
+#include "unitree_go/msg/low_cmd.hpp"
 #include "unitree_go/msg/low_state.hpp"
 
 // Joint order in isaac lab is "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", "FL_thigh_joint", "FR_thigh_joint",
@@ -73,4 +74,22 @@ inline stamped_robot_state stamped_state_from_lowstate(
     }
     stamped_state.timestamp = msg_publish_time;
     stamped_state.counter = iteration_counter;
+}
+
+// Init the message struct with appropriate default values. This modifies the message in place
+inline void init_command_msg(unitree_go::msg::LowCmd & msg)
+{
+    msg.head[0] = 0xFE;
+    msg.head[1] = 0xEF;
+    msg.level_flag = 0xFF;
+    msg.gpio = 0;
+
+    for (int i = 0; i < 20; i++) {
+        msg.motor_cmd[i].mode = 0x01;
+        msg.motor_cmd[i].q = PosStopF;
+        msg.motor_cmd[i].dq = VelStopF;
+        msg.motor_cmd[i].kp = 0.0;
+        msg.motor_cmd[i].kd = 0.0;
+        msg.motor_cmd[i].tau = 0.0;
+    }
 }
