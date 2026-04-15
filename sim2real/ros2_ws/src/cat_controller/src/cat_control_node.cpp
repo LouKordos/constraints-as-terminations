@@ -309,6 +309,8 @@ private:
     }
 
     int model_observation_dim_;
+    std::atomic<bool> exit_flag_{false};
+    std::atomic<bool> shutdown_started_{false};
 
     // TODO: Clean up once motion test is removed in favor of proper policy inference
     const std::string network_interface_;
