@@ -47,8 +47,8 @@ public:
         load_pytorch_checkpoint();
 
         RCLCPP_DEBUG(this->get_logger(), "Starting robot state subscriber.");
-        robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>(
-            "/lowstate", rclcpp::SensorDataQoS(), std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1));
+        robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>("/lowstate", rclcpp::SensorDataQoS(),
+            std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1, std::placeholders::_2));
         RCLCPP_DEBUG(this->get_logger(), "Started robot state subscriber.");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting robot command publisher.");
@@ -115,8 +115,11 @@ public:
     };
 
 private:
-    void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg)
+    void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg, const rclcpp::MessageInfo & message_info)
     {
+        auto steady_now = std::chrono::steady_clock::now();
+        auto system_now = std::chrono::system_clock::now();
+
         if (shutdown_coordinator_.handle_exit_if_requested() ||
             shutdown_if_deadline_exceeded(last_state_callback_time_, std::chrono::milliseconds{50}))
         {
@@ -131,7 +134,23 @@ private:
             RCLCPP_INFO(this->get_logger(), "Latched. FR Calf: %f, FL Calf: %f", initial_state_.motor_state[2].q, initial_state_.motor_state[5].q);
         }
 
+        // Backdate a local steady_clock rather than using the DDS system_clock directly because the latter are vulnerable to NTP time-jumps, which
+        // can cause cause the message age check during policy inference to falsely pass. Using steady_clock guarantees monotonic age calculations.
+        // Get the publish timestamp in nanoseconds since epoch because custom Unitree message definition has no stamp field
+        int64_t publish_timestamp_ns = message_info.get_rmw_message_info().source_timestamp;
+        if (publish_timestamp_ns == 0) {
+            publish_timestamp_ns = message_info.get_rmw_message_info().received_timestamp;  // Fallback to receive time
         }
+        // Convert DDS nanoseconds into a C++ system_clock time_point
+        auto system_publish_time =
+            std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds>(std::chrono::nanoseconds(publish_timestamp_ns));
+        auto message_age = system_now - system_publish_time;  // For e.g. network latency
+        // Prevent NTP backward-jumps from creating negative age (which causes future steady times)
+        if (message_age < std::chrono::nanoseconds(0)) {
+            RCLCPP_WARN_STREAM(this->get_logger(), "Negative computed message age in robot state callback, ensure time is synced!!!");
+            message_age = std::chrono::nanoseconds(0);
+        }
+        auto steady_publish_time = steady_now - message_age;  // Backdate the steady clock by the message age to get the steady publish time
     }
 
     void policy_inference_callback()
