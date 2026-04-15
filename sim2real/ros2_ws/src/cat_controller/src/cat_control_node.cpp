@@ -37,8 +37,6 @@ public:
           // This handles threadsafe exit, avoids race conditions when exiting, and takes a lambda for cleanup that is called only once in the end.
           // Any node can request a shutdown using shutdown_coordinator.shutdown();
           shutdown_coordinator_(this->get_logger(), this->get_node_base_interface()->get_context(), [this]() {
-              startup_failed_.store(true, std::memory_order_release);
-
               // TODO: ADD ANY OTHER TIMERS, VERY IMPORTANT
               // Very important to put any cleanup for the node here!
               if (command_timer_) { command_timer_->cancel(); }
@@ -177,8 +175,6 @@ private:
         {
             return;
         }
-
-        if (startup_failed_.load(std::memory_order_acquire)) { return; }
 
         if (!low_level_mode_enabled_.load(std::memory_order_acquire)) {
             std::string error_message;
@@ -323,7 +319,6 @@ private:
     rclcpp::Time low_level_mode_enabled_time_{0, 0, RCL_ROS_TIME};
     std::atomic<bool> initial_state_latched_{false};
     std::atomic<bool> low_level_mode_enabled_{false};
-    std::atomic<bool> startup_failed_{false};
     double start_time_ = 0.0;
     unitree_go::msg::LowState initial_state_;
 
