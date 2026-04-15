@@ -77,7 +77,7 @@ public:
     }
 
     // TODO: Move to ROS2 params
-    std::chrono::microseconds atomic_op_timeout = std::chrono::microseconds{500};
+    std::chrono::microseconds atomic_op_timeout_threshold{500};
     const bool walk_a_bit = true;
     bool use_hardcoded_elevation = false;
     double hardcoded_elevation = -0.3f;
@@ -120,7 +120,7 @@ private:
         // can cause cause the message age check during policy inference to falsely pass. Using steady_clock guarantees monotonic age calculations.
         auto steady_publish_time = time_utils::get_safe_monotonic_publish_time(message_info, this->get_logger(), steady_now, system_now);
         auto stamped_state = stamped_state_from_lowstate(*msg, state_callback_iteration_counter_++, steady_publish_time);
-        global_robot_state_.try_store_for(stamped_state, atomic_op_timeout);
+        global_robot_state_.try_store_for(stamped_state, atomic_op_timeout_threshold);
 
         // State safety check
         // TODO: Use templates and functions to avoid repetition
