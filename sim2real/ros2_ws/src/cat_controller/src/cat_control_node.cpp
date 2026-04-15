@@ -29,7 +29,7 @@ using namespace std::chrono_literals;
 class CaTControlNode : public rclcpp::Node
 {
 public:
-    // TODO: Move binary into ros package and find it relative to node executable
+    // TODO: Move release_motion_mode.cpp and binary into ros package and find it relative to node executable
     explicit CaTControlNode(const std::string & network_interface)
         : Node("cat_control_node"),
           network_interface_(network_interface),  // TODO: Make this a ros param
@@ -37,7 +37,6 @@ public:
           // This handles threadsafe exit, avoids race conditions when exiting, and takes a lambda for cleanup that is called only once in the end.
           // Any node can request a shutdown using shutdown_coordinator.shutdown();
           shutdown_coordinator_(this->get_logger(), this->get_node_base_interface()->get_context(), [this]() {
-              // TODO: ADD ANY OTHER TIMERS, VERY IMPORTANT
               // Very important to put any cleanup for the node here!
               if (command_timer_) { command_timer_->cancel(); }
               if (policy_inference_timer_) { policy_inference_timer_->cancel(); }
@@ -164,7 +163,6 @@ private:
         {
             return;
         }
-        // TODO: Ignore for now
     }
 
     // Sends latest generated actions to the robot at steady 500Hz, as policy only runs at 50Hz.
