@@ -32,13 +32,12 @@ public:
         init_command_messages();
         load_pytorch_checkpoint();
 
-        rclcpp::SensorDataQoS best_effort_qos{};
         RCLCPP_DEBUG(this->get_logger(), "Starting robot state subscriber.");
         robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>(
-            "/lowstate", best_effort_qos, std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1));
+            "/lowstate", rclcpp::SensorDataQoS(), std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1));
         RCLCPP_DEBUG(this->get_logger(), "Started robot state subscriber.");
         RCLCPP_DEBUG(this->get_logger(), "Starting robot command publisher.");
-        command_publisher = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", best_effort_qos);
+        command_publisher = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", rclcpp::SensorDataQoS());
         RCLCPP_DEBUG(this->get_logger(), "Started robot command publisher.");
 
         std::string error_message;
