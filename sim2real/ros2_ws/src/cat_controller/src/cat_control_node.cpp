@@ -16,7 +16,9 @@
 #include "cat_controller/low_level_mode_enabler.hpp"
 #include "cat_controller/motor_crc.h"  // Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
 #include "cat_controller/shutdown_coordinator.hpp"
+#include "cat_controller/stamped_robot_state.hpp"
 #include "cat_controller/time_utils.hpp"
+#include "cat_controller/unitree_msg_utils.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "unitree_go/msg/low_cmd.hpp"
 #include "unitree_go/msg/low_state.hpp"
@@ -96,24 +98,6 @@ public:
     const std::array<std::pair<float, float>, num_joints> joint_position_limits{std::pair<float, float>{-0.9, 0.9}, {-0.9, 0.9}, {-0.9, 0.9},
         {-0.9, 0.9}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}};
     std::array<float, num_joints> default_joint_positions{0.1, -0.1, 0.1, -0.1, 0.8, 0.8, 1.0, 1.0, -1.5, -1.5, -1.5, -1.5};
-    // Joint order in isaac lab is "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", "FL_thigh_joint", "FR_thigh_joint",
-    // "RL_thigh_joint", "RR_thigh_joint", "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
-    // Joint order reported by SDK state array is FR_hip_joint, FR_thigh_joint, FR_calf_joint, FL_hip_joint, FL_thigh_joint, FL_calf_joint,
-    // RR_hip_joint, RR_thigh_joint, RR_calf_joint, RL_hip_joint, RL_thigh_joint, RL_calf_joint
-    static constexpr int sdk_to_isaac_idx[12] = {
-        /*0*/ 1,   // FR_hip → Isaac[1]
-        /*1*/ 5,   // FR_thigh → Isaac[5]
-        /*2*/ 9,   // FR_calf → Isaac[9]
-        /*3*/ 0,   // FL_hip → Isaac[0]
-        /*4*/ 4,   // FL_thigh → Isaac[4]
-        /*5*/ 8,   // FL_calf → Isaac[8]
-        /*6*/ 3,   // RR_hip → Isaac[3]
-        /*7*/ 7,   // RR_thigh → Isaac[7]
-        /*8*/ 11,  // RR_calf → Isaac[11]
-        /*9*/ 2,   // RL_hip → Isaac[2]
-        /*10*/ 6,  // RL_thigh → Isaac[6]
-        /*11*/ 10  // RL_calf → Isaac[10]
-    };
 
 private:
     void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg, const rclcpp::MessageInfo & message_info)
@@ -138,7 +122,6 @@ private:
         // Backdate a local steady_clock rather than using the DDS system_clock directly because the latter are vulnerable to NTP time-jumps, which
         // can cause cause the message age check during policy inference to falsely pass. Using steady_clock guarantees monotonic age calculations.
         auto steady_publish_time = time_utils::get_safe_monotonic_publish_time(message_info, this->get_logger(), steady_now, system_now);
-        }
     }
 
     void policy_inference_callback()
@@ -219,37 +202,6 @@ private:
         get_crc(command_message_);
         // Commented out for safety for now
         // command_publisher->publish(command_message_);
-    }
-
-    // TODO: Move into helper class or replace with library
-    // Compute body-frame gravity vector given a body→world quaternion.
-    // quat_body_to_world_wxyz is a unit quaternion [w, x, y, z] rotating body to world.
-    // Returns [g_x, g_y, g_z] in body frame.
-    static inline std::array<float, 3> projected_gravity_body_frame(const std::array<float, 4> & quat_body_to_world_wxyz)
-    {
-        // Extract components
-        const float w = quat_body_to_world_wxyz[0];
-        const float x = quat_body_to_world_wxyz[1];
-        const float y = quat_body_to_world_wxyz[2];
-        const float z = quat_body_to_world_wxyz[3];
-
-        const float wi = w;
-        const float xi = -x;
-        const float yi = -y;
-        const float zi = -z;
-
-        // First Hamilton product: q_inv ⊗ g
-        const float a0 = zi;
-        const float a1 = -yi;
-        const float a2 = xi;
-        const float a3 = -wi;
-
-        // Second Hamilton product: (q_inv ⊗ g) ⊗ q
-        const float r1 = a0 * x + a1 * w + a2 * z - a3 * y;
-        const float r2 = a0 * y - a1 * z + a2 * w + a3 * x;
-        const float r3 = a0 * z + a1 * y - a2 * x + a3 * w;
-
-        return {r1, r2, r3};
     }
 
     // Init the message struct with appropriate default values
