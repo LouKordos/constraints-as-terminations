@@ -303,6 +303,7 @@ private:
             return;
         }
 
+        model_observation_dim_ = in_features;
         RCLCPP_INFO_STREAM(this->get_logger(),
             "Loaded module checkpoint from " << checkpoint_path.string() << "with observation dimension=" << model_observation_dim_);
     }
