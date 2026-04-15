@@ -16,6 +16,7 @@
 #include "cat_controller/low_level_mode_enabler.hpp"
 #include "cat_controller/motor_crc.h"  // Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
 #include "cat_controller/shutdown_coordinator.hpp"
+#include "cat_controller/time_utils.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "unitree_go/msg/low_cmd.hpp"
 #include "unitree_go/msg/low_state.hpp"
@@ -121,7 +122,7 @@ private:
         auto system_now = std::chrono::system_clock::now();
 
         if (shutdown_coordinator_.handle_exit_if_requested() ||
-            shutdown_if_deadline_exceeded(last_state_callback_time_, std::chrono::milliseconds{50}))
+            time_utils::shutdown_if_deadline_exceeded(last_state_callback_time_, std::chrono::milliseconds{50}, shutdown_coordinator_))
         {
             return;
         }
@@ -136,27 +137,14 @@ private:
 
         // Backdate a local steady_clock rather than using the DDS system_clock directly because the latter are vulnerable to NTP time-jumps, which
         // can cause cause the message age check during policy inference to falsely pass. Using steady_clock guarantees monotonic age calculations.
-        // Get the publish timestamp in nanoseconds since epoch because custom Unitree message definition has no stamp field
-        int64_t publish_timestamp_ns = message_info.get_rmw_message_info().source_timestamp;
-        if (publish_timestamp_ns == 0) {
-            publish_timestamp_ns = message_info.get_rmw_message_info().received_timestamp;  // Fallback to receive time
+        auto steady_publish_time = time_utils::get_safe_monotonic_publish_time(message_info, this->get_logger(), steady_now, system_now);
         }
-        // Convert DDS nanoseconds into a C++ system_clock time_point
-        auto system_publish_time =
-            std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds>(std::chrono::nanoseconds(publish_timestamp_ns));
-        auto message_age = system_now - system_publish_time;  // For e.g. network latency
-        // Prevent NTP backward-jumps from creating negative age (which causes future steady times)
-        if (message_age < std::chrono::nanoseconds(0)) {
-            RCLCPP_WARN_STREAM(this->get_logger(), "Negative computed message age in robot state callback, ensure time is synced!!!");
-            message_age = std::chrono::nanoseconds(0);
-        }
-        auto steady_publish_time = steady_now - message_age;  // Backdate the steady clock by the message age to get the steady publish time
     }
 
     void policy_inference_callback()
     {
         if (shutdown_coordinator_.handle_exit_if_requested() ||
-            shutdown_if_deadline_exceeded(last_inference_callback_time_, std::chrono::milliseconds{30}))
+            time_utils::shutdown_if_deadline_exceeded(last_inference_callback_time_, std::chrono::milliseconds{30}, shutdown_coordinator_))
         {
             return;
         }
@@ -167,7 +155,7 @@ private:
     void publish_commands()
     {
         if (shutdown_coordinator_.handle_exit_if_requested() ||
-            shutdown_if_deadline_exceeded(last_command_callback_time_, std::chrono::milliseconds{30}))
+            time_utils::shutdown_if_deadline_exceeded(last_command_callback_time_, std::chrono::milliseconds{30}, shutdown_coordinator_))
         {
             return;
         }
@@ -351,23 +339,6 @@ private:
         model_observation_dim_ = in_features;
         RCLCPP_INFO_STREAM(this->get_logger(),
             "Loaded module checkpoint from " << checkpoint_path.string() << "with observation dimension=" << model_observation_dim_);
-    }
-
-    bool shutdown_if_deadline_exceeded(std::chrono::steady_clock::time_point & last_call_time, std::chrono::milliseconds allowed_threshold)
-    {
-        auto now = std::chrono::steady_clock::now();
-        if (last_call_time != std::chrono::steady_clock::time_point{}) {
-            auto delta = now - last_call_time;
-            if (delta > allowed_threshold) {
-                shutdown_coordinator_.shutdown(
-                    std::format("Duration threshold between consecutive callback executions exceeded, allowed threshold={}ms, actual "
-                                "elapsed duration={}ms, exiting.",
-                        allowed_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count()));
-                return true;
-            }
-        }
-        last_call_time = now;
-        return false;
     }
 
     long long inference_iteration_counter_;
