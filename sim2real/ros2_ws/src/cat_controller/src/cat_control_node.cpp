@@ -220,14 +220,14 @@ private:
 
         command_msg_.motor_cmd[fr_calf].q = initial_state_.motor_state[fr_calf].q + offset;
         command_msg_.motor_cmd[fr_calf].dq = 0.0;
-        command_msg_.motor_cmd[fr_calf].kp = 30.0;
-        command_msg_.motor_cmd[fr_calf].kd = 1.0;
+        command_msg_.motor_cmd[fr_calf].kp = actuator_Kp;
+        command_msg_.motor_cmd[fr_calf].kd = actuator_Kd;
         command_msg_.motor_cmd[fr_calf].tau = 0.0;
 
         command_msg_.motor_cmd[fl_calf].q = initial_state_.motor_state[fl_calf].q + offset;
         command_msg_.motor_cmd[fl_calf].dq = 0.0;
-        command_msg_.motor_cmd[fl_calf].kp = 30.0;
-        command_msg_.motor_cmd[fl_calf].kd = 1.0;
+        command_msg_.motor_cmd[fl_calf].kp = actuator_Kp;
+        command_msg_.motor_cmd[fl_calf].kd = actuator_Kd;
         command_msg_.motor_cmd[fl_calf].tau = 0.0;
 
         get_crc(command_msg_);
