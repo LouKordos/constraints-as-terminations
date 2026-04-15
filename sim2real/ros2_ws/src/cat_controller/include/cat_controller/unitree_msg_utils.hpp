@@ -74,6 +74,8 @@ inline stamped_robot_state stamped_state_from_lowstate(
     }
     stamped_state.timestamp = msg_publish_time;
     stamped_state.counter = iteration_counter;
+
+    return stamped_state;
 }
 
 // Init the message struct with appropriate default values. This modifies the message in place
