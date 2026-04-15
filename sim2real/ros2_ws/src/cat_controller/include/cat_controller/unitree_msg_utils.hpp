@@ -1,5 +1,8 @@
 #pragma once
 
+#include <tf2/LinearMath/Quaternion.hpp>
+#include <tf2/LinearMath/Vector3.hpp>
+
 #include "cat_controller/stamped_robot_state.hpp"
 #include "unitree_go/msg/low_cmd.hpp"
 #include "unitree_go/msg/low_state.hpp"
@@ -23,35 +26,20 @@ static constexpr int sdk_to_isaac_idx[12] = {
     /*11*/ 10  // RL_calf → Isaac[10]
 };
 
-// TODO: Move into helper class or replace with library
 // Compute body-frame gravity vector given a body→world quaternion.
 // quat_body_to_world_wxyz is a unit quaternion [w, x, y, z] rotating body to world.
 // Returns [g_x, g_y, g_z] in body frame.
 static inline std::array<float, 3> projected_gravity_body_frame(const std::array<float, 4> & quat_body_to_world_wxyz)
 {
-    // Extract components
-    const float w = quat_body_to_world_wxyz[0];
-    const float x = quat_body_to_world_wxyz[1];
-    const float y = quat_body_to_world_wxyz[2];
-    const float z = quat_body_to_world_wxyz[3];
+    // tf2::Quaternion constructor order is (x, y, z, w).
+    tf2::Quaternion quaternion_body_to_world_xyzw(
+        quat_body_to_world_wxyz[1], quat_body_to_world_wxyz[2], quat_body_to_world_wxyz[3], quat_body_to_world_wxyz[0]);
 
-    const float wi = w;
-    const float xi = -x;
-    const float yi = -y;
-    const float zi = -z;
+    quaternion_body_to_world_xyzw.normalize();
+    const tf2::Vector3 gravity_world(0.0, 0.0, -1.0);
+    const tf2::Vector3 gravity_body = tf2::quatRotate(quaternion_body_to_world_xyzw.inverse(), gravity_world);
 
-    // First Hamilton product: q_inv ⊗ g
-    const float a0 = zi;
-    const float a1 = -yi;
-    const float a2 = xi;
-    const float a3 = -wi;
-
-    // Second Hamilton product: (q_inv ⊗ g) ⊗ q
-    const float r1 = a0 * x + a1 * w + a2 * z - a3 * y;
-    const float r2 = a0 * y - a1 * z + a2 * w + a3 * x;
-    const float r3 = a0 * z + a1 * y - a2 * x + a3 * w;
-
-    return {r1, r2, r3};
+    return {static_cast<float>(gravity_body.x()), static_cast<float>(gravity_body.y()), static_cast<float>(gravity_body.z())};
 }
 
 inline stamped_robot_state stamped_state_from_lowstate(
