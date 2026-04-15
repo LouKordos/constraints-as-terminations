@@ -191,6 +191,9 @@ private:
         // command_publisher->publish(command_message_);
     }
 
+    // The reason for this approach is the following: Even if exit is requested outside of shutdown_node,
+    // one of the callbacks will notice this and correctly shut down the node. If we would assume perfect usage of shutdown_node everytime, this would
+    // be redundant because the caller of shutdown_node would handle the shutdown, but to reduce "attack surface" for mistakes, we keep it this way.
     void begin_shutdown_once(const std::string * message = nullptr)
     {
         if (!shutdown_coordinator_.claim_shutdown_once()) { return; }
