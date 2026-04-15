@@ -25,6 +25,7 @@ public:
           low_level_mode_enabler_("/app/sim2real/build/src/release_motion_mode", network_interface_,
               45.0)  // TODO: Move binary into ros package and find it relative to node executable
     {
+        static_assert(std::atomic<bool>::is_always_lock_free, "atomic bool is not lock free.");
         init_command_messages();
 
         rclcpp::SensorDataQoS best_effort_qos{};
