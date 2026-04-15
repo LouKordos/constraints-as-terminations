@@ -122,6 +122,7 @@ private:
         // Backdate a local steady_clock rather than using the DDS system_clock directly because the latter are vulnerable to NTP time-jumps, which
         // can cause cause the message age check during policy inference to falsely pass. Using steady_clock guarantees monotonic age calculations.
         auto steady_publish_time = time_utils::get_safe_monotonic_publish_time(message_info, this->get_logger(), steady_now, system_now);
+        auto stamped_state = stamped_state_from_lowstate(*msg, state_callback_iteration_counter_++, steady_publish_time);
     }
 
     void policy_inference_callback()
