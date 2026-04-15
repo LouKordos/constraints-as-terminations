@@ -25,11 +25,22 @@ using namespace std::chrono_literals;
 class CaTControlNode : public rclcpp::Node
 {
 public:
+    // TODO: Move binary into ros package and find it relative to node executable
     explicit CaTControlNode(const std::string & network_interface)
         : Node("cat_control_node"),
           network_interface_(network_interface),  // TODO: Make this a ros param
-          low_level_mode_enabler_("/app/sim2real/build/src/release_motion_mode", network_interface_,
-              45.0)  // TODO: Move binary into ros package and find it relative to node executable
+          low_level_mode_enabler_("/app/sim2real/build/src/release_motion_mode", network_interface_, 45.0),
+          // This handles threadsafe exit, avoids race conditions when exiting, and takes a lambda for cleanup that is called only once in the end.
+          // Any node can request a shutdown using shutdown_coordinator.shutdown();
+          shutdown_coordinator_(this->get_logger(), this->get_node_base_interface()->get_context(), [this]() {
+              startup_failed_.store(true, std::memory_order_release);
+
+              // TODO: ADD ANY OTHER TIMERS, VERY IMPORTANT
+              // Very important to put any cleanup for the node here!
+              if (command_timer_) { command_timer_->cancel(); }
+              if (policy_inference_timer_) { policy_inference_timer_->cancel(); }
+              low_level_mode_enabler_.stop();
+          })
     {
         static_assert(std::atomic<bool>::is_always_lock_free, "atomic bool is not lock free.");
         init_command_messages();
@@ -47,7 +58,7 @@ public:
         std::string error_message;
         RCLCPP_DEBUG(this->get_logger(), "Starting low level control mode enabler process.");
         if (!low_level_mode_enabler_.start(error_message)) {
-            shutdown_node(error_message);
+            shutdown_coordinator_.shutdown(error_message);
             return;
         }
         RCLCPP_INFO(this->get_logger(), "Started motion switcher helper using interface '%s'.", network_interface_.c_str());
@@ -106,7 +117,8 @@ public:
 private:
     void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg)
     {
-        if (handle_exit_if_requested()) { return; }
+        if (shutdown_coordinator_.handle_exit_if_requested()) { return; }
+
         RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 50, "motor_state[2]: %f", msg->motor_state[2].q);
 
         // TODO: Remove because this was only used to check if /lowcmd works
@@ -122,14 +134,15 @@ private:
 
     void policy_inference_callback()
     {
-        if (handle_exit_if_requested()) { return; }
-        // // TODO: Check low_state timestamp
+        if (shutdown_coordinator_.handle_exit_if_requested()) { return; }
+        // TODO: Ignore for now
     }
 
     // Sends latest generated actions to the robot at steady 500Hz, as policy only runs at 50Hz.
     void publish_torque_commands()
     {
-        if (handle_exit_if_requested()) { return; }
+        if (shutdown_coordinator_.handle_exit_if_requested()) { return; }
+
         if (startup_failed_.load(std::memory_order_acquire)) { return; }
 
         if (!low_level_mode_enabled_.load(std::memory_order_acquire)) {
@@ -137,7 +150,7 @@ private:
             const LowLevelModeEnabler::Status status = low_level_mode_enabler_.poll_thread_unsafe(error_message);
 
             if (status == LowLevelModeEnabler::Status::Failed) {
-                shutdown_node(error_message);
+                shutdown_coordinator_.shutdown(error_message);
                 return;
             }
 
@@ -161,7 +174,7 @@ private:
             const double seconds_since_low_level_enabled = (this->get_clock()->now() - low_level_mode_enabled_time_).seconds();
 
             if (seconds_since_low_level_enabled > initial_state_latch_timeout_seconds_) {
-                shutdown_node("Low-level mode was enabled, but initial /lowstate was not latched in time.");
+                shutdown_coordinator_.shutdown("Low-level mode was enabled, but initial /lowstate was not latched in time.");
             }
 
             return;
@@ -189,36 +202,6 @@ private:
         get_crc(command_message_);
         // Commented out for safety for now
         // command_publisher->publish(command_message_);
-    }
-
-    // The reason for this approach is the following: Even if exit is requested outside of shutdown_node,
-    // one of the callbacks will notice this and correctly shut down the node. If we would assume perfect usage of shutdown_node everytime, this would
-    // be redundant because the caller of shutdown_node would handle the shutdown, but to reduce "attack surface" for mistakes, we keep it this way.
-    void begin_shutdown_once(const std::string * message = nullptr)
-    {
-        if (!shutdown_coordinator_.claim_shutdown_once()) { return; }
-        startup_failed_.store(true, std::memory_order_release);
-
-        // TODO: ADD ANY OTHER TIMERS, VERY IMPORTANT
-        // Very important to put any cleanup for the node here!
-        if (command_timer_) { command_timer_->cancel(); }
-        if (policy_inference_timer_) { policy_inference_timer_->cancel(); }
-
-        low_level_mode_enabler_.stop();
-        if (message != nullptr && !message->empty()) { RCLCPP_ERROR(this->get_logger(), "%s", message->c_str()); }
-        this->get_node_base_interface()->get_context()->shutdown("exit flag set");
-    }
-    bool handle_exit_if_requested()
-    {
-        if (!shutdown_coordinator_.exit_requested()) { return false; }
-
-        begin_shutdown_once();
-        return true;
-    }
-    void shutdown_node(const std::string & message)
-    {
-        shutdown_coordinator_.request_exit();
-        begin_shutdown_once(&message);
     }
 
     // Init the message struct with appropriate default values
@@ -268,7 +251,7 @@ private:
                  checkpoint_path.filename().string()) != checkpoint_filenames_proper_elevation_map.end());
 
         if (!checkpoint_in_zero_elevation_map && !checkpoint_in_proper_elevation_map) {
-            shutdown_node(
+            shutdown_coordinator_.shutdown(
                 "Specified checkpoint file found in neither of the two allowed checkpoint lists, exiting! This is a safety precaution to prevent "
                 "passing incorrect observations into a policy, do not circumvent! Simply add the checkpoint to the correct list in the source code "
                 "above this message printout.");
@@ -288,7 +271,7 @@ private:
             policy_model_ = torch::jit::load(checkpoint_path.string());
             policy_model_.eval();
         } catch (const c10::Error & e) {
-            shutdown_node(std::format("Failed to load module, error message: {}", e.what()));
+            shutdown_coordinator_.shutdown(std::format("Failed to load module, error message: {}", e.what()));
             return;
         }
 
@@ -299,8 +282,9 @@ private:
                 break;
             }
         }
+
         if (in_features != observation_dim_no_history && in_features != observation_dim_history) {
-            shutdown_node(std::format("Observation dimension does not match expected value, exiting. in_features={}", in_features));
+            shutdown_coordinator_.shutdown(std::format("Observation dimension does not match expected value, exiting. in_features={}", in_features));
             return;
         }
 
@@ -315,7 +299,6 @@ private:
     // TODO: Clean up once motion test is removed in favor of proper policy inference
     const std::string network_interface_;
     const double initial_state_latch_timeout_seconds_ = 2.0;
-    LowLevelModeEnabler low_level_mode_enabler_;
     rclcpp::Time low_level_mode_enabled_time_{0, 0, RCL_ROS_TIME};
     std::atomic<bool> initial_state_latched_{false};
     std::atomic<bool> low_level_mode_enabled_{false};
@@ -324,10 +307,9 @@ private:
     unitree_go::msg::LowState initial_state_;
 
     unitree_go::msg::LowCmd command_message_;
-    // Purpose of this shutdown coordinator is to avoid some thread just setting exit_flag = true without the necessary cleanup. Everytime an exit is
-    // desired, we have to call shutdown_coordinator_.request_exit() which handles everything safely
-    ShutdownCoordinator shutdown_coordinator_;
     torch::jit::Module policy_model_;
+    LowLevelModeEnabler low_level_mode_enabler_;
+    ShutdownCoordinator shutdown_coordinator_;
 
     rclcpp::TimerBase::SharedPtr command_timer_;
     rclcpp::TimerBase::SharedPtr policy_inference_timer_;
