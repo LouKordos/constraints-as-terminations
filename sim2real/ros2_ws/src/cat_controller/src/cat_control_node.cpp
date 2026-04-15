@@ -47,7 +47,7 @@ public:
         std::string error_message;
         RCLCPP_DEBUG(this->get_logger(), "Starting low level control mode enabler process.");
         if (!low_level_mode_enabler_.start(error_message)) {
-            fail_node(error_message);
+            shutdown_node(error_message);
             return;
         }
         RCLCPP_INFO(this->get_logger(), "Started motion switcher helper using interface '%s'.", network_interface_.c_str());
@@ -137,7 +137,7 @@ private:
             const LowLevelModeEnabler::Status status = low_level_mode_enabler_.poll_thread_unsafe(error_message);
 
             if (status == LowLevelModeEnabler::Status::Failed) {
-                fail_node(error_message);
+                shutdown_node(error_message);
                 return;
             }
 
@@ -161,7 +161,7 @@ private:
             const double seconds_since_low_level_enabled = (this->get_clock()->now() - low_level_mode_enabled_time_).seconds();
 
             if (seconds_since_low_level_enabled > initial_state_latch_timeout_seconds_) {
-                fail_node("Low-level mode was enabled, but initial /lowstate was not latched in time.");
+                shutdown_node("Low-level mode was enabled, but initial /lowstate was not latched in time.");
             }
 
             return;
@@ -212,7 +212,7 @@ private:
         begin_shutdown_once();
         return true;
     }
-    void fail_node(const std::string & message)
+    void shutdown_node(const std::string & message)
     {
         shutdown_coordinator_.request_exit();
         begin_shutdown_once(&message);
@@ -265,7 +265,7 @@ private:
                  checkpoint_path.filename().string()) != checkpoint_filenames_proper_elevation_map.end());
 
         if (!checkpoint_in_zero_elevation_map && !checkpoint_in_proper_elevation_map) {
-            fail_node(
+            shutdown_node(
                 "Specified checkpoint file found in neither of the two allowed checkpoint lists, exiting! This is a safety precaution to prevent "
                 "passing incorrect observations into a policy, do not circumvent! Simply add the checkpoint to the correct list in the source code "
                 "above this message printout.");
@@ -285,7 +285,7 @@ private:
             policy_model_ = torch::jit::load(checkpoint_path.string());
             policy_model_.eval();
         } catch (const c10::Error & e) {
-            fail_node(std::format("Failed to load module, error message: {}", e.what()));
+            shutdown_node(std::format("Failed to load module, error message: {}", e.what()));
             return;
         }
 
@@ -297,7 +297,7 @@ private:
             }
         }
         if (in_features != observation_dim_no_history && in_features != observation_dim_history) {
-            fail_node(std::format("Observation dimension does not match expected value, exiting. in_features={}", in_features));
+            shutdown_node(std::format("Observation dimension does not match expected value, exiting. in_features={}", in_features));
             return;
         }
 
