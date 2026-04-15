@@ -59,7 +59,7 @@ public:
         RCLCPP_DEBUG(this->get_logger(), "Started policy inference / control loop timer.");
         // Important TODO: Add linear interpolation from start pos to standing pos with Kp = 30 and Kd = 1 same way as run_policy.cpp
         // Important TODO: Set default global position targets used by publisher to be current position to avoid sudden movements while inference code
-        // is not producign anything
+        // is not producing anything
     }
 
     // TODO: Move to ROS2 params
@@ -213,6 +213,7 @@ private:
         rclcpp::shutdown();
     }
 
+    // TODO: Move into history_buffer.hpp and rename to pytorch_helpers
     void load_pytorch_checkpoint()
     {
         // TODO: Make this ROS param
