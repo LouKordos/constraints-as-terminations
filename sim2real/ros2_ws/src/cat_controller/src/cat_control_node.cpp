@@ -1,8 +1,11 @@
+#include <fmt/core.h>
+#include <fmt/ranges.h>
 #include <torch/script.h>
 #include <torch/torch.h>
 
 #include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -27,6 +30,7 @@ public:
     {
         static_assert(std::atomic<bool>::is_always_lock_free, "atomic bool is not lock free.");
         init_command_messages();
+        load_pytorch_checkpoint();
 
         rclcpp::SensorDataQoS best_effort_qos{};
         RCLCPP_DEBUG(this->get_logger(), "Starting robot state subscriber.");
@@ -72,7 +76,8 @@ private:
 
     void policy_inference_callback()
     {
-        // TODO: Wait until low level control mode is enabled same way as publish_torque_commands
+        // TODO: Determine if this needs to wait until low level control mode is enabled or if it can just run and the actual publih_torque_commands
+        // only checks that. If we do need it in here, ensure the wrapper class is threadsafe for fetching the state
     }
 
     // Sends latest generated actions to the robot at steady 500Hz, as policy only runs at 50Hz.
@@ -167,6 +172,95 @@ private:
         rclcpp::shutdown();
     }
 
+    void load_pytorch_checkpoint()
+    {
+        // TODO: Make this ROS param
+        // env 75, best one so far (with elevation map)
+        const std::filesystem::path checkpoint_path{"/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_21349_traced_deterministic.pt"};
+        // env 75, same as above just ealier checkpoint to show before vs. after energy minimization std::filesystem::path checkpoint_path
+        // std::filesystem::path checkpoint_path {"/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_6049_traced_deterministic.pt"};
+
+        // Safety precaution to ensure that trained policies do not receive significantly OOD observations.
+        // To add new checkpoint, add to this list, hardcoded value will be set to zero automatically.
+        // Otherwise, add to checkpoints_proper_elevation_map
+        const std::vector<std::string> checkpoint_filenames_zero_elevation_map = {"2025-12-28-15-28-51_19499_traced_deterministic.pt",
+            "2025-12-28-14-47-57_29499_traced_deterministic.pt", "2025-12-28-14-58-57_29649_traced_deterministic.pt"};
+        const std::vector<std::string> checkpoint_filenames_proper_elevation_map = {
+            "2025-06-28-17-13-04_21349_traced_deterministic.pt", "2025-06-28-17-13-04_6049_traced_deterministic.pt"};
+        RCLCPP_INFO(this->get_logger(), "Checkpoints registered to use zeroed out hardcoded height map: %s",
+            fmt::format("{}", fmt::join(checkpoint_filenames_zero_elevation_map, ", ")).c_str());
+        RCLCPP_INFO(this->get_logger(), "Checkpoints registered to use proper elevation map: %s",
+            fmt::format("{}", fmt::join(checkpoint_filenames_proper_elevation_map, ", ")).c_str());
+
+        bool checkpoint_in_zero_elevation_map =
+            (std::find(checkpoint_filenames_zero_elevation_map.begin(), checkpoint_filenames_zero_elevation_map.end(),
+                 checkpoint_path.filename().string()) != checkpoint_filenames_zero_elevation_map.end());
+        bool checkpoint_in_proper_elevation_map =
+            (std::find(checkpoint_filenames_proper_elevation_map.begin(), checkpoint_filenames_proper_elevation_map.end(),
+                 checkpoint_path.filename().string()) != checkpoint_filenames_proper_elevation_map.end());
+        if (!checkpoint_in_zero_elevation_map && !checkpoint_in_proper_elevation_map) {
+            fail_node(
+                "Specified checkpoint file found in neither of the two allowed checkpoint lists, exiting! This is a safety precaution to prevent "
+                "passing incorrect observations into a policy, do not circumvent! Simply add the checkpoint to the correct list in the source code "
+                "above this message printout.");
+        }
+
+        // TODO: Rework this to be a config file where each checkpoint is associated with certain configuration values
+        if (checkpoint_in_zero_elevation_map) {
+            RCLCPP_INFO(
+                this->get_logger(), "Checkpoint found in zero elevation map list, setting use_hardcoded_heights=0 and hardcoded_elevation=0.0f");
+            use_hardcoded_elevation = true;
+            hardcoded_elevation = 0.0f;
+        }  // Add adjustments for opposite scenario here if needed
+
+        RCLCPP_INFO(this->get_logger(), "Loading torch policy checkpoint at path %s", checkpoint_path.string().c_str());
+        try {
+            policy_model_ = torch::jit::load(checkpoint_path.string());
+            policy_model_.eval();
+            RCLCPP_INFO(this->get_logger(), "Successfully loaded traced policy_model.");
+        } catch (const c10::Error & e) {
+            fail_node("Failed to load module, exiting.");
+        }
+    }
+
+    // TODO: Move to ROS2 params
+    const bool walk_a_bit = true;
+    bool use_hardcoded_elevation = false;
+    double hardcoded_elevation = -0.3f;
+    const static short num_joints = 12;
+    int observation_dim_no_history = 188;
+    int observation_dim_history = 236;
+    int history_length = 3;
+    const float action_scale = 0.8f;
+    const float actuator_Kp = 25.0f;
+    const float actuator_Kd = 0.5;
+    const double joint_vel_abs_limit = 30;     // rad/s
+    const double joint_torque_abs_limit = 46;  // Nm
+    // Only roll and pitch, does not make sense to limit yaw
+    const std::array<std::pair<float, float>, 2> base_orientation_limit_rad{std::pair<float, float>{-0.6, 0.6}, {-0.6, 0.6}};
+    // Isaac Lab joint order, rad
+    const std::array<std::pair<float, float>, num_joints> joint_position_limits{std::pair<float, float>{-0.9, 0.9}, {-0.9, 0.9}, {-0.9, 0.9},
+        {-0.9, 0.9}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}};
+    std::array<float, num_joints> default_joint_positions{0.1, -0.1, 0.1, -0.1, 0.8, 0.8, 1.0, 1.0, -1.5, -1.5, -1.5, -1.5};
+    // Joint order in isaac lab is "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", "FL_thigh_joint", "FR_thigh_joint",
+    // "RL_thigh_joint", "RR_thigh_joint", "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
+    // Joint order reported by SDK state array is FR_hip_joint, FR_thigh_joint, FR_calf_joint, FL_hip_joint, FL_thigh_joint, FL_calf_joint,
+    // RR_hip_joint, RR_thigh_joint, RR_calf_joint, RL_hip_joint, RL_thigh_joint, RL_calf_joint
+    static constexpr int sdk_to_isaac_idx[12] = {
+        /*0*/ 1,   // FR_hip → Isaac[1]
+        /*1*/ 5,   // FR_thigh → Isaac[5]
+        /*2*/ 9,   // FR_calf → Isaac[9]
+        /*3*/ 0,   // FL_hip → Isaac[0]
+        /*4*/ 4,   // FL_thigh → Isaac[4]
+        /*5*/ 8,   // FL_calf → Isaac[8]
+        /*6*/ 3,   // RR_hip → Isaac[3]
+        /*7*/ 7,   // RR_thigh → Isaac[7]
+        /*8*/ 11,  // RR_calf → Isaac[11]
+        /*9*/ 2,   // RL_hip → Isaac[2]
+        /*10*/ 6,  // RL_thigh → Isaac[6]
+        /*11*/ 10  // RL_calf → Isaac[10]
+    };
+
     // TODO: Clean up once motion test is removed in favor of proper policy inference
     const std::string network_interface_;
     const double initial_state_latch_timeout_seconds_ = 2.0;
@@ -179,6 +273,7 @@ private:
     unitree_go::msg::LowState initial_state_;
 
     unitree_go::msg::LowCmd command_message_;
+    torch::jit::Module policy_model_;
 
     rclcpp::TimerBase::SharedPtr command_timer_;
     rclcpp::TimerBase::SharedPtr policy_inference_timer_;
