@@ -332,6 +332,8 @@ private:
     LowLevelModeEnabler low_level_mode_enabler_;
     ShutdownCoordinator shutdown_coordinator_;
 
+    // Benefit of having a separate command timer compared to also publishing in the subscriber callback is that separation means network jitter does
+    // not affect the commands as much
     rclcpp::TimerBase::SharedPtr command_timer_;
     rclcpp::TimerBase::SharedPtr policy_inference_timer_;
     rclcpp::Subscription<unitree_go::msg::LowState>::SharedPtr robot_state_sub_;
