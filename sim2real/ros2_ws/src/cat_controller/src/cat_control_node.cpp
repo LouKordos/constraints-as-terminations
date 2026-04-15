@@ -306,6 +306,70 @@ private:
             "Loaded module checkpoint from " << checkpoint_path.string() << "with observation dimension=" << model_observation_dim_);
     }
 
+    // TODO: NOT FUNCTIONAL YET BECAUSE OF MISSING ELEVATION MAP PROCESSING!
+    torch::Tensor construct_observation_tensor(const stamped_robot_state & robot_state, const std::array<float, 3> & vel_command,
+        const std::array<float, num_joints> & previous_action, bool use_history, bool reset_history = false)
+    {
+        auto opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU);
+        const int obs_dim = use_history ? observation_dim_history : observation_dim_no_history;
+        auto observation = torch::empty({1, obs_dim}, opts);
+
+        auto base_ang_vel = torch::from_blob(const_cast<float *>(robot_state.body_angular_velocity.data()), {1, 3}, opts).clone();
+        base_ang_vel.mul_(0.25f);
+        observation.slice(1, 0, 3).copy_(base_ang_vel);
+
+        auto velocity_cmd = torch::from_blob(const_cast<float *>(vel_command.data()), {1, 3}, opts).clone();
+        velocity_cmd.mul_(torch::tensor({2.0f, 2.0f, 0.25f}, opts));
+        observation.slice(1, 3, 6).copy_(velocity_cmd);
+
+        auto projected_gravity = torch::from_blob(const_cast<float *>(robot_state.projected_gravity.data()), {1, 3}, opts).clone();
+        projected_gravity.mul_(0.1f);
+        observation.slice(1, 6, 9).copy_(projected_gravity);
+
+        if (reset_history) {
+            pos_hist_.reset();
+            vel_hist_.reset();
+        }
+
+        auto jp_cur = torch::from_blob(const_cast<float *>(robot_state.joint_pos.data()), {num_joints}, opts).clone();
+        auto jv_cur = torch::from_blob(const_cast<float *>(robot_state.joint_vel.data()), {num_joints}, opts).clone();
+        jv_cur.mul_(0.05f);
+
+        if (use_history) {
+            pos_hist_.update(jp_cur);
+            vel_hist_.update(jv_cur);
+
+            const int pos_start = 9;
+            const int vel_start = pos_start + history_length * num_joints;
+            observation.slice(1, pos_start, pos_start + history_length * num_joints).copy_(pos_hist_.flattened().unsqueeze(0));
+            observation.slice(1, vel_start, vel_start + history_length * num_joints).copy_(vel_hist_.flattened().unsqueeze(0));
+        } else {
+            observation.slice(1, 9, 9 + num_joints).copy_(jp_cur.unsqueeze(0));
+            observation.slice(1, 21, 21 + num_joints).copy_(jv_cur.unsqueeze(0));
+        }
+
+        auto prev_action = torch::from_blob(const_cast<float *>(previous_action.data()), {1, num_joints}, opts).clone();
+        const int prev_action_start_index = use_history ? (9 + 2 * history_length * num_joints) : (33);
+        observation.slice(1, prev_action_start_index, prev_action_start_index + num_joints).copy_(prev_action);
+
+        // const int height_map_start_index = prev_action_start_index + num_joints;
+        // if (use_hardcoded_elevation) {
+        //     observation.slice(1, height_map_start_index, obs_dim).fill_(hardcoded_elevation);
+        // } else {
+        //     auto elevation_data_result = global_elevation_map_filtered.try_load_for(std::chrono::microseconds(250));
+        //     if (elevation_data_result.has_value()) {
+        //         std::vector<float> map_vector = elevation_data_result.value();
+        //         auto map_tensor_cpu = torch::from_blob(map_vector.data(), {1, elevation_grid_total_size},
+        //             opts);  // Creates view but lives until end of scope, so copy in next line is sufficient
+        //         observation.slice(1, height_map_start_index, height_map_start_index + elevation_grid_total_size).copy_(map_tensor_cpu);
+        //     } else {
+        //         shutdown_coordinator_.shutdown("Critical: Failed to load global elevation map in observation construction, exiting.");
+        //     }
+        // }
+
+        return observation;
+    }
+
     long long inference_iteration_counter_;
     long long state_callback_iteration_counter_;
     std::chrono::steady_clock::time_point last_state_callback_time_{};      // default = epoch
@@ -325,6 +389,8 @@ private:
     unitree_go::msg::LowCmd command_msg_;
     timed_atomic<stamped_robot_state> global_robot_state_{};
     torch::jit::Module policy_model_;
+    HistoryBuffer pos_hist_{history_length, num_joints, torch::kCPU};
+    HistoryBuffer vel_hist_{history_length, num_joints, torch::kCPU};
     LowLevelModeEnabler low_level_mode_enabler_;
     ShutdownCoordinator shutdown_coordinator_;
 
