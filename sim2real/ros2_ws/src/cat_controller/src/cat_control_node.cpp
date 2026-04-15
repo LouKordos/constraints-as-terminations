@@ -18,6 +18,7 @@
 #include "cat_controller/shutdown_coordinator.hpp"
 #include "cat_controller/stamped_robot_state.hpp"
 #include "cat_controller/time_utils.hpp"
+#include "cat_controller/timed_atomic.hpp"
 #include "cat_controller/unitree_msg_utils.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "unitree_go/msg/low_cmd.hpp"
@@ -123,6 +124,9 @@ private:
         // can cause cause the message age check during policy inference to falsely pass. Using steady_clock guarantees monotonic age calculations.
         auto steady_publish_time = time_utils::get_safe_monotonic_publish_time(message_info, this->get_logger(), steady_now, system_now);
         auto stamped_state = stamped_state_from_lowstate(*msg, state_callback_iteration_counter_++, steady_publish_time);
+        global_robot_state_.try_store_for(stamped_state, atomic_op_timeout);
+
+        // check_state_safety_limits(stamped_state);
     }
 
     void policy_inference_callback()
@@ -294,6 +298,7 @@ private:
     unitree_go::msg::LowState initial_state_;
 
     unitree_go::msg::LowCmd command_msg_;
+    timed_atomic<stamped_robot_state> global_robot_state_{};
     torch::jit::Module policy_model_;
     LowLevelModeEnabler low_level_mode_enabler_;
     ShutdownCoordinator shutdown_coordinator_;
