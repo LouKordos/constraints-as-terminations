@@ -285,9 +285,9 @@ private:
     const double initial_state_latch_timeout_seconds_ = 2.0;
     LowLevelModeEnabler low_level_mode_enabler_;
     rclcpp::Time low_level_mode_enabled_time_{0, 0, RCL_ROS_TIME};
-    bool initial_state_latched_ = false;
-    bool low_level_mode_enabled_ = false;
-    bool startup_failed_ = false;
+    std::atomic<bool> initial_state_latched_{false};
+    std::atomic<bool> low_level_mode_enabled_{false};
+    std::atomic<bool> startup_failed_{false};
     double start_time_ = 0.0;
     unitree_go::msg::LowState initial_state_;
 
