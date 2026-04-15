@@ -128,6 +128,7 @@ private:
             begin_shutdown_once();
             return;
         }
+        // // TODO: Check low_state timestamp
     }
 
     // Sends latest generated actions to the robot at steady 500Hz, as policy only runs at 50Hz.
@@ -288,7 +289,7 @@ private:
             policy_model_ = torch::jit::load(checkpoint_path.string());
             policy_model_.eval();
         } catch (const c10::Error & e) {
-            fail_node("Failed to load module, exiting.");
+            fail_node(std::format("Failed to load module, error message: {}", e.what()));
             return;
         }
 
