@@ -3,6 +3,7 @@
 #include <torch/script.h>
 #include <torch/torch.h>
 
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
