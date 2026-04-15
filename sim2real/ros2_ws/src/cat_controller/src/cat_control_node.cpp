@@ -21,7 +21,7 @@ public:
           low_level_mode_enabler_("/app/sim2real/build/src/release_motion_mode", network_interface_,
               45.0)  // TODO: Move binary into ros package and find it relative to node executable
     {
-        init_command();
+        init_command_messages();
 
         rclcpp::SensorDataQoS best_effort_qos{};
         robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>(
@@ -121,7 +121,7 @@ private:
     }
 
     // Init the message struct with appropriate default values
-    void init_command()
+    void init_command_messages()
     {
         command_message_.head[0] = 0xFE;
         command_message_.head[1] = 0xEF;
