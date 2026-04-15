@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <format>
 #include <functional>
 #include <memory>
 #include <string>
@@ -218,10 +219,24 @@ private:
         try {
             policy_model_ = torch::jit::load(checkpoint_path.string());
             policy_model_.eval();
-            RCLCPP_INFO(this->get_logger(), "Successfully loaded traced policy_model.");
         } catch (const c10::Error & e) {
             fail_node("Failed to load module, exiting.");
         }
+
+        int64_t in_features = -1;
+        for (const auto & p : policy_model_.named_parameters(/*recurse=*/true)) {
+            if (p.name.ends_with(".weight") && p.value.dim() == 2) {
+                in_features = p.value.size(1);
+                break;
+            }
+        }
+        if (in_features != observation_dim_no_history && in_features != observation_dim_history) {
+            fail_node(std::format("Observation dimension does not match expected value, exiting. in_features={}", in_features));
+        }
+
+        int model_observation_dim = in_features;
+        RCLCPP_INFO_STREAM(this->get_logger(),
+            "Loaded module checkpoint from " << checkpoint_path.string() << "with observation dimension=" << model_observation_dim);
     }
 
     // TODO: Move to ROS2 params
