@@ -185,7 +185,7 @@ private:
     rclcpp::Subscription<unitree_go::msg::LowState>::SharedPtr robot_state_sub_;
     rclcpp::Publisher<unitree_go::msg::LowCmd>::SharedPtr command_publisher;
     // TODO: Add subscriber for elevation map
-    // TODO: Timer for safety checks of last execution time for each pub/sub/timer, as well as safety bounds for state
+    // TODO: Add timer for safety checks of last execution time for each pub/sub/timer, as well as safety bounds for state
 };
 
 int main(int argc, char * argv[])
