@@ -105,7 +105,6 @@ private:
     {
         auto steady_now = std::chrono::steady_clock::now();
         auto system_now = std::chrono::system_clock::now();
-
         if (shutdown_coordinator_.handle_exit_if_requested() ||
             time_utils::shutdown_if_deadline_exceeded(last_state_callback_time_, std::chrono::milliseconds{50}, shutdown_coordinator_))
         {
