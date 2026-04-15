@@ -36,6 +36,7 @@ public:
         robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>(
             "/lowstate", rclcpp::SensorDataQoS(), std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1));
         RCLCPP_DEBUG(this->get_logger(), "Started robot state subscriber.");
+
         RCLCPP_DEBUG(this->get_logger(), "Starting robot command publisher.");
         command_publisher = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", rclcpp::SensorDataQoS());
         RCLCPP_DEBUG(this->get_logger(), "Started robot command publisher.");
@@ -51,6 +52,7 @@ public:
         RCLCPP_DEBUG(this->get_logger(), "Starting robot command publish timer.");
         command_timer_ = this->create_wall_timer(2ms, std::bind(&CaTControlNode::publish_torque_commands, this));
         RCLCPP_DEBUG(this->get_logger(), "Started robot command publish timer.");
+
         RCLCPP_DEBUG(this->get_logger(), "Starting policy inference / control loop timer.");
         policy_inference_timer_ = this->create_wall_timer(20ms, std::bind(&CaTControlNode::policy_inference_callback, this));
         RCLCPP_DEBUG(this->get_logger(), "Started policy inference / control loop timer.");
@@ -76,7 +78,7 @@ private:
     void policy_inference_callback()
     {
         // TODO: Determine if this needs to wait until low level control mode is enabled or if it can just run and the actual publih_torque_commands
-        // only checks that. If we do need it in here, ensure the wrapper class is threadsafe for fetching the state
+        // only checks that. If we do need it in here, ensure the wrapper class is threadsafe for fetching the state!
     }
 
     // Sends latest generated actions to the robot at steady 500Hz, as policy only runs at 50Hz.
