@@ -26,7 +26,8 @@ control node are applied by the robot correctly.
 #include <unitree/robot/b2/motion_switcher/motion_switcher_client.hpp>
 #include <unitree/robot/channel/channel_factory.hpp>
 
-int query_motion_status(unitree::robot::b2::MotionSwitcherClient& motion_switcher_client) {
+int query_motion_status(unitree::robot::b2::MotionSwitcherClient & motion_switcher_client)
+{
     std::string robot_form;
     std::string motion_name;
 
@@ -36,15 +37,14 @@ int query_motion_status(unitree::robot::b2::MotionSwitcherClient& motion_switche
         return -1;
     }
 
-    if (motion_name.empty()) {
-        return 0;
-    }
+    if (motion_name.empty()) { return 0; }
 
     std::cout << "Service '" << motion_name << "' is still activated..." << std::endl;
     return 1;
 }
 
-int main(int argc, const char* argv[]) {
+int main(int argc, const char * argv[])
+{
     if (argc < 2) {
         std::cerr << "No network interface specified, usage: " << argv[0] << " [networkInterface]" << std::endl;
         return EXIT_FAILURE;
@@ -62,9 +62,7 @@ int main(int argc, const char* argv[]) {
     while (std::chrono::steady_clock::now() < deadline) {
         const int motion_status = query_motion_status(motion_switcher_client);
 
-        if (motion_status < 0) {
-            return EXIT_FAILURE;
-        }
+        if (motion_status < 0) { return EXIT_FAILURE; }
 
         if (motion_status == 0) {
             std::cout << "Motion control service released. Low-level control can now begin." << std::endl;
