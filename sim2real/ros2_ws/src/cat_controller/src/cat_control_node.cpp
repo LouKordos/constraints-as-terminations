@@ -15,6 +15,7 @@
 #include "cat_controller/history_buffer.hpp"
 #include "cat_controller/low_level_mode_enabler.hpp"
 #include "cat_controller/motor_crc.h"  // Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
+#include "cat_controller/shutdown_coordinator.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "unitree_go/msg/low_cmd.hpp"
 #include "unitree_go/msg/low_state.hpp"
@@ -105,7 +106,7 @@ public:
 private:
     void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg)
     {
-        if (exit_requested()) {
+        if (shutdown_coordinator_.exit_requested()) {
             begin_shutdown_once();
             return;
         }
@@ -124,7 +125,7 @@ private:
 
     void policy_inference_callback()
     {
-        if (exit_requested()) {
+        if (shutdown_coordinator_.exit_requested()) {
             begin_shutdown_once();
             return;
         }
@@ -134,7 +135,7 @@ private:
     // Sends latest generated actions to the robot at steady 500Hz, as policy only runs at 50Hz.
     void publish_torque_commands()
     {
-        if (exit_requested()) {
+        if (shutdown_coordinator_.exit_requested()) {
             begin_shutdown_once();
             return;
         }
@@ -198,13 +199,10 @@ private:
         // command_publisher->publish(command_message_);
     }
 
-    void request_exit() noexcept { exit_flag_.store(true, std::memory_order_release); }
-    bool exit_requested() const noexcept { return exit_flag_.load(std::memory_order_acquire); }
     void begin_shutdown_once(const std::string * message = nullptr)
     {
-        bool expected = false;
-        // If already true, no cleanup needed
-        if (!shutdown_started_.compare_exchange_strong(expected, true, std::memory_order_acq_rel, std::memory_order_acquire)) { return; }
+        if (!shutdown_coordinator_.claim_shutdown_once()) { return; }
+        startup_failed_.store(true, std::memory_order_release);
 
         // TODO: ADD ANY OTHER TIMERS, VERY IMPORTANT
         // Very important to put any cleanup for the node here!
@@ -218,7 +216,7 @@ private:
 
     void fail_node(const std::string & message)
     {
-        request_exit();
+        shutdown_coordinator_.request_exit();
         begin_shutdown_once(&message);
     }
 
@@ -312,8 +310,6 @@ private:
 
     long long inference_iteration_counter_;
     int model_observation_dim_;
-    std::atomic<bool> exit_flag_{false};
-    std::atomic<bool> shutdown_started_{false};
 
     // TODO: Clean up once motion test is removed in favor of proper policy inference
     const std::string network_interface_;
@@ -327,6 +323,9 @@ private:
     unitree_go::msg::LowState initial_state_;
 
     unitree_go::msg::LowCmd command_message_;
+    // Purpose of this shutdown coordinator is to avoid some thread just setting exit_flag = true without the necessary cleanup. Everytime an exit is
+    // desired, we have to call shutdown_coordinator_.request_exit() which handles everything safely
+    ShutdownCoordinator shutdown_coordinator_;
     torch::jit::Module policy_model_;
 
     rclcpp::TimerBase::SharedPtr command_timer_;
