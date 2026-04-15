@@ -1,0 +1,27 @@
+---
+BasedOnStyle: Google
+ColumnLimit: 150
+
+# Determines if function arguments/parameters can be packed onto one line.
+# Setting these to 'true' prevents each parameter from getting its own line.
+BinPackArguments: true
+BinPackParameters: true
+AllowAllParametersOfDeclarationOnNextLine: false
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+# Keeps short blocks on a single line (e.g., empty constructors)
+AllowShortBlocksOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# Pointer alignment should be 'int* x'
+DerivePointerAlignment: false
+PointerAlignment: Left
+
+# Sorts includes automatically
+SortIncludes: true
+---

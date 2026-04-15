@@ -5,7 +5,6 @@ wandb
 *ige_logs*
 *.egg-info
 /.vs
-/.vscode
 /_package
 /shaders
 ._tmptext.txt
