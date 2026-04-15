@@ -4,10 +4,10 @@
 #include <chrono>
 #include <cmath>
 #include <functional>
-#include <history_buffer.hpp>
 #include <memory>
 #include <string>
 
+#include "cat_controller/history_buffer.hpp"
 #include "cat_controller/low_level_mode_enabler.hpp"
 #include "cat_controller/motor_crc.h"  // Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
 #include "rclcpp/rclcpp.hpp"

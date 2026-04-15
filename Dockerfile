@@ -39,7 +39,7 @@ RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake -G Ninja --compile-no-warnin
       -DCMAKE_C_FLAGS="-Wno-error" \
       -DCMAKE_CXX_FLAGS="-Wno-error" \
       -DCMAKE_CUDA_FLAGS="-Wno-error" \
-      -DCMAKE_INSTALL_PREFIX=/torch/libtorch \
+      -DCMAKE_INSTALL_PREFIX=/usr/local \
       ..
 RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake --build . --target install -j12
 
