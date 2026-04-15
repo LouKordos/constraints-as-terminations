@@ -274,11 +274,11 @@ private:
             fail_node_thread_unsafe(std::format("Observation dimension does not match expected value, exiting. in_features={}", in_features));
         }
 
-        int model_observation_dim = in_features;
         RCLCPP_INFO_STREAM(this->get_logger(),
-            "Loaded module checkpoint from " << checkpoint_path.string() << "with observation dimension=" << model_observation_dim);
+            "Loaded module checkpoint from " << checkpoint_path.string() << "with observation dimension=" << model_observation_dim_);
     }
 
+    int model_observation_dim_;
 
     // TODO: Clean up once motion test is removed in favor of proper policy inference
     const std::string network_interface_;
