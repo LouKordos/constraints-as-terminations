@@ -128,9 +128,9 @@ private:
             initial_state_ = *msg;
             start_time_ = this->get_clock()->now().seconds();
             initial_state_latched_.store(true, std::memory_order_release);
+            RCLCPP_INFO(this->get_logger(), "Latched. FR Calf: %f, FL Calf: %f", initial_state_.motor_state[2].q, initial_state_.motor_state[5].q);
+        }
 
-            RCLCPP_INFO(
-                this->get_logger(), "Baseline latched. FR Calf: %f, FL Calf: %f", initial_state_.motor_state[2].q, initial_state_.motor_state[5].q);
         }
     }
 
