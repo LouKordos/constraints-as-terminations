@@ -46,6 +46,9 @@ add_executable(run_policy run_policy.cpp)
 target_include_directories(run_policy PUBLIC ${sensor_msgs_INCLUDE_DIRS} ${std_msgs_INCLUDE_DIRS} ${geometry_msgs_INCLUDE_DIRS})
 target_link_libraries(run_policy PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 atomic Threads::Threads "${TORCH_LIBRARIES}" cppzmq nlohmann_json::nlohmann_json)
 
+add_executable(release_motion_mode release_motion_mode.cpp)
+target_link_libraries(release_motion_mode PRIVATE unitree_sdk2 Threads::Threads)
+
 add_executable(read_observations read_observations.cpp)
 target_link_libraries(read_observations PUBLIC spdlog::spdlog TracyClient atomic unitree_sdk2 Threads::Threads)
 
