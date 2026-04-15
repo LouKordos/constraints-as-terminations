@@ -1,6 +1,10 @@
+#include <torch/script.h>
+#include <torch/torch.h>
+
 #include <chrono>
 #include <cmath>
 #include <functional>
+#include <history_buffer.hpp>
 #include <memory>
 #include <string>
 
@@ -26,19 +30,18 @@ public:
         rclcpp::SensorDataQoS best_effort_qos{};
         robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>(
             "/lowstate", best_effort_qos, std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1));
+        command_publisher = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", best_effort_qos);
 
         std::string error_message;
         if (!low_level_mode_enabler_.start(error_message)) {
             fail_node(error_message);
             return;
         }
-
         RCLCPP_INFO(this->get_logger(), "Started motion switcher helper using interface '%s'.", network_interface_.c_str());
 
-        // Required to switch from high level "sport mode" state to low level control so that policy actions are applied
-        // Only start after blocking motion switcher has succeded. ANYTHING control related should only start after this!
         command_timer_ = this->create_wall_timer(2ms, std::bind(&CaTControlNode::publish_torque_commands, this));
-        command_publisher = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", best_effort_qos);
+        policy_inference_timer_ = this->create_wall_timer(20ms, std::bind(&CaTControlNode::policy_inference_callback, this));
+        // Important TODO: Add linear interpolation from start pos to standing pos with Kp = 30 and Kd = 1 same way as run_policy.cpp
     }
 
 private:
@@ -55,6 +58,11 @@ private:
             RCLCPP_INFO(
                 this->get_logger(), "Baseline latched. FR Calf: %f, FL Calf: %f", initial_state_.motor_state[2].q, initial_state_.motor_state[5].q);
         }
+    }
+
+    void policy_inference_callback()
+    {
+        // TODO: Wait until low level control mode is enabled same way as publish_torque_commands
     }
 
     // Sends latest generated actions to the robot at steady 500Hz, as policy only runs at 50Hz.
@@ -163,10 +171,10 @@ private:
     unitree_go::msg::LowCmd command_message_;
 
     rclcpp::TimerBase::SharedPtr command_timer_;
+    rclcpp::TimerBase::SharedPtr policy_inference_timer_;
     rclcpp::Subscription<unitree_go::msg::LowState>::SharedPtr robot_state_sub_;
     rclcpp::Publisher<unitree_go::msg::LowCmd>::SharedPtr command_publisher;
     // TODO: Add subscriber for elevation map
-    // TODO: Timer for inference
     // TODO: Timer for safety checks of last execution time for each pub/sub/timer, as well as safety bounds for state
 };
 
