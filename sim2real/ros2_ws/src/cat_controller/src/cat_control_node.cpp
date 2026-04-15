@@ -60,6 +60,45 @@ public:
         // Important TODO: Add linear interpolation from start pos to standing pos with Kp = 30 and Kd = 1 same way as run_policy.cpp
     }
 
+    // TODO: Move to ROS2 params
+    std::chrono::microseconds atomic_op_timeout = std::chrono::microseconds{500};
+    const bool walk_a_bit = true;
+    bool use_hardcoded_elevation = false;
+    double hardcoded_elevation = -0.3f;
+    const static short num_joints = 12;
+    int observation_dim_no_history = 188;
+    int observation_dim_history = 236;
+    int history_length = 3;
+    const float action_scale = 0.8f;
+    const float actuator_Kp = 25.0f;
+    const float actuator_Kd = 0.5;
+    const double joint_vel_abs_limit = 30;     // rad/s
+    const double joint_torque_abs_limit = 46;  // Nm
+    // Only roll and pitch, does not make sense to limit yaw
+    const std::array<std::pair<float, float>, 2> base_orientation_limit_rad{std::pair<float, float>{-0.6, 0.6}, {-0.6, 0.6}};
+    // Isaac Lab joint order, rad
+    const std::array<std::pair<float, float>, num_joints> joint_position_limits{std::pair<float, float>{-0.9, 0.9}, {-0.9, 0.9}, {-0.9, 0.9},
+        {-0.9, 0.9}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}};
+    std::array<float, num_joints> default_joint_positions{0.1, -0.1, 0.1, -0.1, 0.8, 0.8, 1.0, 1.0, -1.5, -1.5, -1.5, -1.5};
+    // Joint order in isaac lab is "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", "FL_thigh_joint", "FR_thigh_joint",
+    // "RL_thigh_joint", "RR_thigh_joint", "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
+    // Joint order reported by SDK state array is FR_hip_joint, FR_thigh_joint, FR_calf_joint, FL_hip_joint, FL_thigh_joint, FL_calf_joint,
+    // RR_hip_joint, RR_thigh_joint, RR_calf_joint, RL_hip_joint, RL_thigh_joint, RL_calf_joint
+    static constexpr int sdk_to_isaac_idx[12] = {
+        /*0*/ 1,   // FR_hip → Isaac[1]
+        /*1*/ 5,   // FR_thigh → Isaac[5]
+        /*2*/ 9,   // FR_calf → Isaac[9]
+        /*3*/ 0,   // FL_hip → Isaac[0]
+        /*4*/ 4,   // FL_thigh → Isaac[4]
+        /*5*/ 8,   // FL_calf → Isaac[8]
+        /*6*/ 3,   // RR_hip → Isaac[3]
+        /*7*/ 7,   // RR_thigh → Isaac[7]
+        /*8*/ 11,  // RR_calf → Isaac[11]
+        /*9*/ 2,   // RL_hip → Isaac[2]
+        /*10*/ 6,  // RL_thigh → Isaac[6]
+        /*11*/ 10  // RL_calf → Isaac[10]
+    };
+
 private:
     void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg)
     {
@@ -239,43 +278,6 @@ private:
             "Loaded module checkpoint from " << checkpoint_path.string() << "with observation dimension=" << model_observation_dim);
     }
 
-    // TODO: Move to ROS2 params
-    const bool walk_a_bit = true;
-    bool use_hardcoded_elevation = false;
-    double hardcoded_elevation = -0.3f;
-    const static short num_joints = 12;
-    int observation_dim_no_history = 188;
-    int observation_dim_history = 236;
-    int history_length = 3;
-    const float action_scale = 0.8f;
-    const float actuator_Kp = 25.0f;
-    const float actuator_Kd = 0.5;
-    const double joint_vel_abs_limit = 30;     // rad/s
-    const double joint_torque_abs_limit = 46;  // Nm
-    // Only roll and pitch, does not make sense to limit yaw
-    const std::array<std::pair<float, float>, 2> base_orientation_limit_rad{std::pair<float, float>{-0.6, 0.6}, {-0.6, 0.6}};
-    // Isaac Lab joint order, rad
-    const std::array<std::pair<float, float>, num_joints> joint_position_limits{std::pair<float, float>{-0.9, 0.9}, {-0.9, 0.9}, {-0.9, 0.9},
-        {-0.9, 0.9}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}};
-    std::array<float, num_joints> default_joint_positions{0.1, -0.1, 0.1, -0.1, 0.8, 0.8, 1.0, 1.0, -1.5, -1.5, -1.5, -1.5};
-    // Joint order in isaac lab is "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", "FL_thigh_joint", "FR_thigh_joint",
-    // "RL_thigh_joint", "RR_thigh_joint", "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
-    // Joint order reported by SDK state array is FR_hip_joint, FR_thigh_joint, FR_calf_joint, FL_hip_joint, FL_thigh_joint, FL_calf_joint,
-    // RR_hip_joint, RR_thigh_joint, RR_calf_joint, RL_hip_joint, RL_thigh_joint, RL_calf_joint
-    static constexpr int sdk_to_isaac_idx[12] = {
-        /*0*/ 1,   // FR_hip → Isaac[1]
-        /*1*/ 5,   // FR_thigh → Isaac[5]
-        /*2*/ 9,   // FR_calf → Isaac[9]
-        /*3*/ 0,   // FL_hip → Isaac[0]
-        /*4*/ 4,   // FL_thigh → Isaac[4]
-        /*5*/ 8,   // FL_calf → Isaac[8]
-        /*6*/ 3,   // RR_hip → Isaac[3]
-        /*7*/ 7,   // RR_thigh → Isaac[7]
-        /*8*/ 11,  // RR_calf → Isaac[11]
-        /*9*/ 2,   // RL_hip → Isaac[2]
-        /*10*/ 6,  // RL_thigh → Isaac[6]
-        /*11*/ 10  // RL_calf → Isaac[10]
-    };
 
     // TODO: Clean up once motion test is removed in favor of proper policy inference
     const std::string network_interface_;
