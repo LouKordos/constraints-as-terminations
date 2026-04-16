@@ -127,8 +127,6 @@ public:
     std::chrono::microseconds atomic_op_timeout_threshold{500};
     std::chrono::milliseconds stale_state_age_threshold{50};
     const bool walk_a_bit = true;
-    bool use_hardcoded_elevation = false;
-    double hardcoded_elevation = -0.3f;
     const static short num_joints = 12;
     const float action_scale = 0.8f;
     const float actuator_Kp = 25.0f;
@@ -351,6 +349,8 @@ private:
         // command_publisher->publish(command_msg_);
     }
 
+    const bool use_hardcoded_elevation_;
+    double hardcoded_elevation_ = -0.3f;
     long long inference_iteration_counter_{};
     long long state_callback_iteration_counter_{};
     int64_t start_ms_policy_inference_;
