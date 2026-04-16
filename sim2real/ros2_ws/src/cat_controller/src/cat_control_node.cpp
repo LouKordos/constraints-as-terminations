@@ -359,8 +359,6 @@ private:
     std::chrono::steady_clock::time_point last_inference_callback_time_{};  // default = epoch
     std::chrono::steady_clock::time_point last_command_callback_time_{};    // default = epoch
 
-    // TODO: Clean up once motion test is removed in favor of proper policy inference
-    const std::string network_interface_;
     const double initial_state_latch_timeout_seconds_{2.0};
     rclcpp::Time low_level_mode_enabled_time_{0, 0, RCL_ROS_TIME};
     std::atomic<bool> initial_state_latched_{false};
