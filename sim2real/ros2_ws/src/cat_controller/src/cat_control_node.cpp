@@ -253,7 +253,6 @@ private:
         // command_publisher->publish(command_msg_);
     }
 
-    // TODO: Move into history_buffer.hpp and rename to pytorch_helpers
     void load_pytorch_checkpoint()
     {
         // TODO: Make this ROS param
