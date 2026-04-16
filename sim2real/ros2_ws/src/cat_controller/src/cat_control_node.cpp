@@ -302,6 +302,8 @@ private:
         } else {
             if (!interpolation_finished_.load(std::memory_order_acquire)) {
                 interpolation_finished_.store(true, std::memory_order_release);
+                // Update setpoint with the final standing pose while we wait for the inference thread's first action
+                pd_setpoint_sdk_order.try_store_for(current_target_sdk, atomic_op_timeout_threshold);
                 RCLCPP_INFO(this->get_logger(), "Interpolation finished, active control started.");
             }
 
