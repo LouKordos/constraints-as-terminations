@@ -9,9 +9,10 @@ InferenceEngine::InferenceEngine(const std::filesystem::path & checkpoint_path, 
       previous_action_(num_joints, 0.0f)
 {
     load_checkpoint(checkpoint_path);
-    // and report success or type of error.
 
     // This needs to run after loading checkpoint because it depends on the model_observation_dim_
+    current_action_.reserve(num_joints);
+    previous_action_.reserve(num_joints);
     inference_input_.reserve(1);
     inference_input_.clear();
     inference_input_.push_back(torch::ones({1, model_observation_dim_}));  // To prevent dynamic allocations in loop
