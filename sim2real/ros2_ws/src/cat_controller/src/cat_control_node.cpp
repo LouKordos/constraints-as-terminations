@@ -351,7 +351,7 @@ private:
     const std::filesystem::path checkpoint_path_;
     long long inference_iteration_counter_{};
     long long state_callback_iteration_counter_{};
-    int64_t start_ms_policy_inference_;
+    int64_t start_ms_policy_inference_{};
     std::chrono::steady_clock::time_point last_state_callback_time_{};      // default = epoch
     std::chrono::steady_clock::time_point last_inference_callback_time_{};  // default = epoch
     std::chrono::steady_clock::time_point last_command_callback_time_{};    // default = epoch
