@@ -1,7 +1,5 @@
 #include <fmt/core.h>
 #include <fmt/ranges.h>
-#include <torch/script.h>
-#include <torch/torch.h>
 
 #include <atomic>
 #include <chrono>
@@ -12,7 +10,7 @@
 #include <memory>
 #include <string>
 
-#include "cat_controller/history_buffer.hpp"
+#include "cat_controller/inference_engine.hpp"
 #include "cat_controller/low_level_mode_enabler.hpp"
 #include "cat_controller/motor_crc.h"  // Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
 #include "cat_controller/shutdown_coordinator.hpp"
@@ -45,7 +43,55 @@ public:
     {
         static_assert(std::atomic<bool>::is_always_lock_free, "atomic bool is not lock free.");
         init_command_msg(command_msg_);
-        load_pytorch_checkpoint();
+
+        // TODO: Make this ROS param
+        // env 75, best one so far (with elevation map)
+        const std::filesystem::path checkpoint_path{"/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_21349_traced_deterministic.pt"};
+        // env 75, same as above just ealier checkpoint to show before vs. after energy minimization std::filesystem::path checkpoint_path
+        // std::filesystem::path checkpoint_path {"/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_6049_traced_deterministic.pt"};
+
+        // Safety precaution to ensure that trained policies do not receive significantly OOD observations.
+        // To add new checkpoint, add to this list, hardcoded value will be set to zero automatically.
+        // Otherwise, add to checkpoints_proper_elevation_map
+        const std::vector<std::string> checkpoint_filenames_zero_elevation_map = {"2025-12-28-15-28-51_19499_traced_deterministic.pt",
+            "2025-12-28-14-47-57_29499_traced_deterministic.pt", "2025-12-28-14-58-57_29649_traced_deterministic.pt"};
+        const std::vector<std::string> checkpoint_filenames_proper_elevation_map = {
+            "2025-06-28-17-13-04_21349_traced_deterministic.pt", "2025-06-28-17-13-04_6049_traced_deterministic.pt"};
+        RCLCPP_INFO(this->get_logger(), "Checkpoints registered to use zeroed out hardcoded height map: %s",
+            fmt::format("{}", fmt::join(checkpoint_filenames_zero_elevation_map, ", ")).c_str());
+        RCLCPP_INFO(this->get_logger(), "Checkpoints registered to use proper elevation map: %s",
+            fmt::format("{}", fmt::join(checkpoint_filenames_proper_elevation_map, ", ")).c_str());
+
+        const bool checkpoint_in_zero_elevation_map =
+            (std::find(checkpoint_filenames_zero_elevation_map.begin(), checkpoint_filenames_zero_elevation_map.end(),
+                 checkpoint_path.filename().string()) != checkpoint_filenames_zero_elevation_map.end());
+        const bool checkpoint_in_proper_elevation_map =
+            (std::find(checkpoint_filenames_proper_elevation_map.begin(), checkpoint_filenames_proper_elevation_map.end(),
+                 checkpoint_path.filename().string()) != checkpoint_filenames_proper_elevation_map.end());
+
+        if (!checkpoint_in_zero_elevation_map && !checkpoint_in_proper_elevation_map) {
+            shutdown_coordinator_.shutdown(
+                "Specified checkpoint file found in neither of the two allowed checkpoint lists, exiting! This is a safety precaution to prevent "
+                "passing incorrect observations into a policy, do not circumvent! Simply add the checkpoint to the correct list in the source code "
+                "above this message printout.");
+            return;
+        }
+
+        // TODO: Rework this to be a config file where each checkpoint is associated with certain configuration values
+        if (checkpoint_in_zero_elevation_map) {
+            RCLCPP_INFO(
+                this->get_logger(), "Checkpoint found in zero elevation map list, setting use_hardcoded_heights=0 and hardcoded_elevation=0.0f");
+            use_hardcoded_elevation = true;
+            hardcoded_elevation = 0.0f;
+        }  // Add adjustments for opposite scenario here if needed
+        RCLCPP_INFO(this->get_logger(), "Loading torch policy checkpoint at path %s", checkpoint_path.string().c_str());
+        try {
+            inference_engine_(checkpoint_path, num_joints);
+            RCLCPP_INFO_STREAM(this->get_logger(), "Successfully loaded module checkpoint from " << checkpoint_path.string());
+        } catch (const std::exception & e) {
+            shutdown_coordinator_.shutdown(std::format("Failed to load module, error message: {}", e.what()));
+            return;
+        }
 
         RCLCPP_DEBUG(this->get_logger(), "Starting robot state subscriber.");
         robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>("/lowstate", rclcpp::SensorDataQoS(),
@@ -85,9 +131,6 @@ public:
     bool use_hardcoded_elevation = false;
     double hardcoded_elevation = -0.3f;
     const static short num_joints = 12;
-    int observation_dim_no_history = 188;
-    int observation_dim_history = 236;
-    int history_length = 3;
     const float action_scale = 0.8f;
     const float actuator_Kp = 25.0f;
     const float actuator_Kd = 0.5;
@@ -204,35 +247,20 @@ private:
         auto time_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
         auto rel_time_ms = time_now_ms - start_ms_policy_inference_;
         if (walk_a_bit && rel_time_ms > 30000 && rel_time_ms < 34500) { vel_command[0] = 0.9f; }
-
-        auto observation = construct_observation_tensor(
-            robot_state, vel_command, previous_action, model_observation_dim_ == observation_dim_history, robot_state.counter == 0);
-        inference_input[0] = observation;
-        raw_current_action = model.forward(inference_input).toTensor().contiguous();
-        std::memcpy(current_action.data(), raw_current_action.data_ptr<float>(), num_joints * sizeof(float));
-        if (!global_current_action_isaac_order.try_store_for(current_action, atomic_op_timeout_threshold)) {
-            shutdown_coordinator_.shutdown(
-                std::format("Failed to set global current_action within {}us, exiting.", atomic_op_timeout_threshold.count()));
-            return;
-        }
-
-        std::array<float, num_joints> pd_target_sdk_order{};  // Go2 native order, NOT Isaac Lab!!!
-        for (int i = 0; i < num_joints; i++) {
-            int j = sdk_to_isaac_idx[i];                                                             // Remap to go2 order
-            pd_target_sdk_order[i] = default_joint_positions[j] + current_action[j] * action_scale;  // Scale same as Isaac Lab
-        }
+        auto generated_action = inference_engine_.generate_action();
         // Do not check if target exceeds joint limits because policy might learn to command out of range values temporarily for more rapid motion.
-        if (shutdown_coordinator_.exit_requested()) {  // Check before actually applying the action
-            RCLCPP_WARN(this->get_logger(), "Not actually updating global computed action because shutdown was requested.");
-            return;
-        }
 
+        std::array<float, num_joints> pd_target_sdk_order{};  // Go2 SDK native order, NOT Isaac Lab!!!
+        for (int i = 0; i < num_joints; i++) {
+            int j = sdk_to_isaac_idx[i];                                                               // Remap to go2 order
+            pd_target_sdk_order[i] = default_joint_positions[j] + generated_action[j] * action_scale;  // Scale same as Isaac Lab
+        }
         if (!pd_setpoint_sdk_order.try_store_for(pd_target_sdk_order, atomic_op_timeout_threshold)) {
             shutdown_coordinator_.shutdown(
                 std::format("Failed to update global PD target within {}us, exiting.", atomic_op_timeout_threshold.count()));
             return;
         }
-        previous_action = current_action;
+
         inference_iteration_counter_++;
     }
 
@@ -324,147 +352,12 @@ private:
         // command_publisher->publish(command_msg_);
     }
 
-    void load_pytorch_checkpoint()
-    {
-        // TODO: Make this ROS param
-        // env 75, best one so far (with elevation map)
-        const std::filesystem::path checkpoint_path{"/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_21349_traced_deterministic.pt"};
-        // env 75, same as above just ealier checkpoint to show before vs. after energy minimization std::filesystem::path checkpoint_path
-        // std::filesystem::path checkpoint_path {"/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_6049_traced_deterministic.pt"};
-
-        // Safety precaution to ensure that trained policies do not receive significantly OOD observations.
-        // To add new checkpoint, add to this list, hardcoded value will be set to zero automatically.
-        // Otherwise, add to checkpoints_proper_elevation_map
-        const std::vector<std::string> checkpoint_filenames_zero_elevation_map = {"2025-12-28-15-28-51_19499_traced_deterministic.pt",
-            "2025-12-28-14-47-57_29499_traced_deterministic.pt", "2025-12-28-14-58-57_29649_traced_deterministic.pt"};
-        const std::vector<std::string> checkpoint_filenames_proper_elevation_map = {
-            "2025-06-28-17-13-04_21349_traced_deterministic.pt", "2025-06-28-17-13-04_6049_traced_deterministic.pt"};
-        RCLCPP_INFO(this->get_logger(), "Checkpoints registered to use zeroed out hardcoded height map: %s",
-            fmt::format("{}", fmt::join(checkpoint_filenames_zero_elevation_map, ", ")).c_str());
-        RCLCPP_INFO(this->get_logger(), "Checkpoints registered to use proper elevation map: %s",
-            fmt::format("{}", fmt::join(checkpoint_filenames_proper_elevation_map, ", ")).c_str());
-
-        const bool checkpoint_in_zero_elevation_map =
-            (std::find(checkpoint_filenames_zero_elevation_map.begin(), checkpoint_filenames_zero_elevation_map.end(),
-                 checkpoint_path.filename().string()) != checkpoint_filenames_zero_elevation_map.end());
-        const bool checkpoint_in_proper_elevation_map =
-            (std::find(checkpoint_filenames_proper_elevation_map.begin(), checkpoint_filenames_proper_elevation_map.end(),
-                 checkpoint_path.filename().string()) != checkpoint_filenames_proper_elevation_map.end());
-
-        if (!checkpoint_in_zero_elevation_map && !checkpoint_in_proper_elevation_map) {
-            shutdown_coordinator_.shutdown(
-                "Specified checkpoint file found in neither of the two allowed checkpoint lists, exiting! This is a safety precaution to prevent "
-                "passing incorrect observations into a policy, do not circumvent! Simply add the checkpoint to the correct list in the source code "
-                "above this message printout.");
-            return;
-        }
-
-        // TODO: Rework this to be a config file where each checkpoint is associated with certain configuration values
-        if (checkpoint_in_zero_elevation_map) {
-            RCLCPP_INFO(
-                this->get_logger(), "Checkpoint found in zero elevation map list, setting use_hardcoded_heights=0 and hardcoded_elevation=0.0f");
-            use_hardcoded_elevation = true;
-            hardcoded_elevation = 0.0f;
-        }  // Add adjustments for opposite scenario here if needed
-
-        RCLCPP_INFO(this->get_logger(), "Loading torch policy checkpoint at path %s", checkpoint_path.string().c_str());
-        try {
-            policy_model_ = torch::jit::load(checkpoint_path.string());
-            policy_model_.eval();
-        } catch (const c10::Error & e) {
-            shutdown_coordinator_.shutdown(std::format("Failed to load module, error message: {}", e.what()));
-            return;
-        }
-
-        int64_t in_features = -1;
-        for (const auto & p : policy_model_.named_parameters(/*recurse=*/true)) {
-            if (p.name.ends_with(".weight") && p.value.dim() == 2) {
-                in_features = p.value.size(1);
-                break;
-            }
-        }
-
-        if (in_features != observation_dim_no_history && in_features != observation_dim_history) {
-            shutdown_coordinator_.shutdown(std::format("Observation dimension does not match expected value, exiting. in_features={}", in_features));
-            return;
-        }
-
-        model_observation_dim_ = in_features;
-        RCLCPP_INFO_STREAM(this->get_logger(),
-            "Loaded module checkpoint from " << checkpoint_path.string() << "with observation dimension=" << model_observation_dim_);
-    }
-
-    // TODO: NOT FUNCTIONAL YET BECAUSE OF MISSING ELEVATION MAP PROCESSING!
-    torch::Tensor construct_observation_tensor(const stamped_robot_state & robot_state, const std::array<float, 3> & vel_command,
-        const std::array<float, num_joints> & previous_action, bool use_history, bool reset_history = false)
-    {
-        auto opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU);
-        const int obs_dim = use_history ? observation_dim_history : observation_dim_no_history;
-        auto observation = torch::empty({1, obs_dim}, opts);
-
-        auto base_ang_vel = torch::from_blob(const_cast<float *>(robot_state.body_angular_velocity.data()), {1, 3}, opts).clone();
-        base_ang_vel.mul_(0.25f);
-        observation.slice(1, 0, 3).copy_(base_ang_vel);
-
-        auto velocity_cmd = torch::from_blob(const_cast<float *>(vel_command.data()), {1, 3}, opts).clone();
-        velocity_cmd.mul_(torch::tensor({2.0f, 2.0f, 0.25f}, opts));
-        observation.slice(1, 3, 6).copy_(velocity_cmd);
-
-        auto projected_gravity = torch::from_blob(const_cast<float *>(robot_state.projected_gravity.data()), {1, 3}, opts).clone();
-        projected_gravity.mul_(0.1f);
-        observation.slice(1, 6, 9).copy_(projected_gravity);
-
-        if (reset_history) {
-            pos_hist_.reset();
-            vel_hist_.reset();
-        }
-
-        auto jp_cur = torch::from_blob(const_cast<float *>(robot_state.joint_pos.data()), {num_joints}, opts).clone();
-        auto jv_cur = torch::from_blob(const_cast<float *>(robot_state.joint_vel.data()), {num_joints}, opts).clone();
-        jv_cur.mul_(0.05f);
-
-        if (use_history) {
-            pos_hist_.update(jp_cur);
-            vel_hist_.update(jv_cur);
-
-            const int pos_start = 9;
-            const int vel_start = pos_start + history_length * num_joints;
-            observation.slice(1, pos_start, pos_start + history_length * num_joints).copy_(pos_hist_.flattened().unsqueeze(0));
-            observation.slice(1, vel_start, vel_start + history_length * num_joints).copy_(vel_hist_.flattened().unsqueeze(0));
-        } else {
-            observation.slice(1, 9, 9 + num_joints).copy_(jp_cur.unsqueeze(0));
-            observation.slice(1, 21, 21 + num_joints).copy_(jv_cur.unsqueeze(0));
-        }
-
-        auto prev_action = torch::from_blob(const_cast<float *>(previous_action.data()), {1, num_joints}, opts).clone();
-        const int prev_action_start_index = use_history ? (9 + 2 * history_length * num_joints) : (33);
-        observation.slice(1, prev_action_start_index, prev_action_start_index + num_joints).copy_(prev_action);
-
-        // const int height_map_start_index = prev_action_start_index + num_joints;
-        // if (use_hardcoded_elevation) {
-        //     observation.slice(1, height_map_start_index, obs_dim).fill_(hardcoded_elevation);
-        // } else {
-        //     auto elevation_data_result = global_elevation_map_filtered.try_load_for(std::chrono::microseconds(250));
-        //     if (elevation_data_result.has_value()) {
-        //         std::vector<float> map_vector = elevation_data_result.value();
-        //         auto map_tensor_cpu = torch::from_blob(map_vector.data(), {1, elevation_grid_total_size},
-        //             opts);  // Creates view but lives until end of scope, so copy in next line is sufficient
-        //         observation.slice(1, height_map_start_index, height_map_start_index + elevation_grid_total_size).copy_(map_tensor_cpu);
-        //     } else {
-        //         shutdown_coordinator_.shutdown("Critical: Failed to load global elevation map in observation construction, exiting.");
-        //     }
-        // }
-
-        return observation;
-    }
-
     long long inference_iteration_counter_{};
     long long state_callback_iteration_counter_{};
-    int64_t start_ms_policy_inference_{};
+    int64_t start_ms_policy_inference_;
     std::chrono::steady_clock::time_point last_state_callback_time_{};      // default = epoch
     std::chrono::steady_clock::time_point last_inference_callback_time_{};  // default = epoch
     std::chrono::steady_clock::time_point last_command_callback_time_{};    // default = epoch
-    int model_observation_dim_;
 
     // TODO: Clean up once motion test is removed in favor of proper policy inference
     const std::string network_interface_;
@@ -481,11 +374,9 @@ private:
     timed_atomic<std::array<float, num_joints>> global_current_action_isaac_order{};
     timed_atomic<std::array<float, 3>> global_vel_command{{0.0f, 0.0f, 0.0f}};
 
-    torch::jit::Module policy_model_;
-    HistoryBuffer pos_hist_{history_length, num_joints, torch::kCPU};
-    HistoryBuffer vel_hist_{history_length, num_joints, torch::kCPU};
     LowLevelModeEnabler low_level_mode_enabler_;
     ShutdownCoordinator shutdown_coordinator_;
+    InferenceEngine inference_engine_;
 
     // Benefit of having a separate command timer compared to also publishing in the subscriber callback
     // is that separation means network jitter does not affect the commands as much
