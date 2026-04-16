@@ -80,9 +80,6 @@ public:
         RCLCPP_DEBUG(this->get_logger(), "Starting policy inference / control loop timer.");
         policy_inference_timer_ = this->create_wall_timer(20ms, std::bind(&CaTControlNode::policy_inference_callback, this));
         RCLCPP_DEBUG(this->get_logger(), "Started policy inference / control loop timer.");
-        // Important TODO: Add linear interpolation from start pos to standing pos with Kp = 30 and Kd = 1 same way as run_policy.cpp
-        // Important TODO: Set default global position targets used by publisher to be current position to avoid sudden movements while inference code
-        // is not producing anything
     }
 
     std::chrono::microseconds atomic_op_timeout_threshold{500};
