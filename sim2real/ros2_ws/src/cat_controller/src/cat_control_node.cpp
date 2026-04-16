@@ -8,6 +8,7 @@
 #include <format>
 #include <functional>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 #include "cat_controller/inference_engine.hpp"
@@ -28,9 +29,12 @@ class CaTControlNode : public rclcpp::Node
 {
 public:
     // TODO: Move release_motion_mode.cpp and binary into ros package and find it relative to node executable
-    explicit CaTControlNode(const std::string & network_interface)
-        : Node("cat_control_node"),
+    explicit CaTControlNode(const std::string & network_interface, const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
+        : Node("cat_control_node", options),
           network_interface_(network_interface),  // TODO: Make this a ros param
+          use_hardcoded_elevation_(declare_use_hardcoded_elevation()),
+          checkpoint_path_(declare_checkpoint_path()),
+          inference_engine_(checkpoint_path_, num_joints),
           low_level_mode_enabler_("/app/sim2real/build/src/release_motion_mode", network_interface_, 45.0),
           // This handles threadsafe exit, avoids race conditions when exiting, and takes a lambda for cleanup that is called only once in the end.
           // Any node can request a shutdown using shutdown_coordinator.shutdown();
@@ -44,14 +48,12 @@ public:
         static_assert(std::atomic<bool>::is_always_lock_free, "atomic bool is not lock free.");
         init_command_msg(command_msg_);
 
-        RCLCPP_INFO(this->get_logger(), "Loading torch policy checkpoint at path %s", checkpoint_path.string().c_str());
-        try {
-            inference_engine_(checkpoint_path, num_joints);
-            RCLCPP_INFO_STREAM(this->get_logger(), "Successfully loaded module checkpoint from " << checkpoint_path.string());
-        } catch (const std::exception & e) {
-            shutdown_coordinator_.shutdown(std::format("Failed to load module, error message: {}", e.what()));
-            return;
+        if (use_hardcoded_elevation_) {
+            RCLCPP_INFO(this->get_logger(), "use_hardcoded_elevation=true, setting hardcoded_elevation to zero!");
+            hardcoded_elevation_ = 0.0f;
         }
+        RCLCPP_INFO(this->get_logger(), "checkpoint_path='%s', use_hardcoded_elevation=%s", checkpoint_path_.string().c_str(),
+            use_hardcoded_elevation_ ? "true" : "false");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting robot state subscriber.");
         robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>("/lowstate", rclcpp::SensorDataQoS(),
@@ -59,7 +61,7 @@ public:
         RCLCPP_DEBUG(this->get_logger(), "Started robot state subscriber.");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting robot command publisher.");
-        command_publisher = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", rclcpp::SensorDataQoS());
+        command_publisher_ = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", rclcpp::SensorDataQoS());
         RCLCPP_DEBUG(this->get_logger(), "Started robot command publisher.");
 
         std::string error_message;
@@ -91,9 +93,9 @@ public:
     const static short num_joints = 12;
     const float action_scale = 0.8f;
     const float actuator_Kp = 25.0f;
-    const float actuator_Kd = 0.5;
-    const double joint_vel_abs_limit = 30;                         // rad/s
-    const double joint_torque_abs_limit = 46;                      // Nm
+    const float actuator_Kd = 0.5f;
+    const double joint_vel_abs_limit = 30.0f;                      // rad/s
+    const double joint_torque_abs_limit = 46.0f;                   // Nm
     std::array<float, 3> vel_command_mag_limit = {2.0, 2.0, 1.0};  // vel_x, vel_y, omega_z
     // Only roll and pitch, does not make sense to limit yaw
     const std::array<std::pair<float, float>, 2> base_orientation_limit_rad{std::pair<float, float>{-0.6, 0.6}, {-0.6, 0.6}};
@@ -307,11 +309,28 @@ private:
         //     RCLCPP_WARN(this->get_logger(), "NOT publishing torque command because node shutdown was requested.");
         //     return;
         // }
-        // command_publisher->publish(command_msg_);
+        // command_publisher_->publish(command_msg_);
     }
 
+    bool declare_use_hardcoded_elevation() { return this->declare_parameter<bool>("use_hardcoded_elevation"); }
+    std::filesystem::path declare_checkpoint_path()
+    {
+        const std::string checkpoint_path_str = this->declare_parameter<std::string>("checkpoint_path");
+        const std::filesystem::path checkpoint_path{checkpoint_path_str};
+
+        if (!std::filesystem::exists(checkpoint_path)) {
+            throw std::runtime_error(std::format("checkpoint_path={} does not exist, throwing.", checkpoint_path.string()));
+        }
+        return checkpoint_path;
+    }
+
+    // REMEMBER THAT ORDER MATTERS HERE FOR INITIALIZATION
+    // This is why checkpoint_path and use_hardcoded_elevation are at the top, it is necessary to init them using the parsed ROS params for the
+    // inference engine to initialize correctly!
+    const std::string network_interface_;
     const bool use_hardcoded_elevation_;
     double hardcoded_elevation_ = -0.3f;
+    const std::filesystem::path checkpoint_path_;
     long long inference_iteration_counter_{};
     long long state_callback_iteration_counter_{};
     int64_t start_ms_policy_inference_;
@@ -332,16 +351,16 @@ private:
     timed_atomic<std::array<float, num_joints>> global_current_action_isaac_order{};
     timed_atomic<std::array<float, 3>> global_vel_command{{0.0f, 0.0f, 0.0f}};
 
+    InferenceEngine inference_engine_;
     LowLevelModeEnabler low_level_mode_enabler_;
     ShutdownCoordinator shutdown_coordinator_;
-    InferenceEngine inference_engine_;
 
     // Benefit of having a separate command timer compared to also publishing in the subscriber callback
     // is that separation means network jitter does not affect the commands as much
     rclcpp::TimerBase::SharedPtr command_timer_;
     rclcpp::TimerBase::SharedPtr policy_inference_timer_;
     rclcpp::Subscription<unitree_go::msg::LowState>::SharedPtr robot_state_sub_;
-    rclcpp::Publisher<unitree_go::msg::LowCmd>::SharedPtr command_publisher;
+    rclcpp::Publisher<unitree_go::msg::LowCmd>::SharedPtr command_publisher_;
     // TODO: Add subscriber for PROCESSED elevation map (separate node will handle making it robot-centric so that this node just needs to pass array
     // of floats to InferenceEngine)
 };

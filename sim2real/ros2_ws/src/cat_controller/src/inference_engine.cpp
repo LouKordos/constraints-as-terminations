@@ -4,9 +4,9 @@ InferenceEngine::InferenceEngine(const std::filesystem::path & checkpoint_path, 
     : num_joints_(num_joints),
       pos_hist_(history_length, num_joints, torch::kCPU),
       vel_hist_(history_length, num_joints, torch::kCPU),
+      velocity_command_multiplier_(torch::tensor({2.0f, 2.0f, 0.25f})),
       current_action_(num_joints, 0.0f),
-      previous_action_(num_joints, 0.0f),
-      velocity_command_multiplier_(torch::tensor({2.0f, 2.0f, 0.25f}))
+      previous_action_(num_joints, 0.0f)
 {
     load_checkpoint(checkpoint_path);
     // and report success or type of error.
