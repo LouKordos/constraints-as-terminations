@@ -401,6 +401,7 @@ private:
     rclcpp::Time low_level_mode_enabled_time_{0, 0, RCL_ROS_TIME};
     std::atomic<bool> initial_state_latched_{false};
     std::atomic<bool> low_level_mode_enabled_{false};
+    double start_time_{0};
     unitree_go::msg::LowState initial_state_;
 
     unitree_go::msg::LowCmd command_msg_;
