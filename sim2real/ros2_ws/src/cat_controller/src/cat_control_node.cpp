@@ -247,7 +247,7 @@ private:
         auto time_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
         auto rel_time_ms = time_now_ms - start_ms_policy_inference_;
         if (walk_a_bit && rel_time_ms > 30000 && rel_time_ms < 34500) { vel_command[0] = 0.9f; }
-        auto generated_action = inference_engine_.generate_action();
+        auto generated_action = inference_engine_.generate_action(robot_state, vel_command);
         // Do not check if target exceeds joint limits because policy might learn to command out of range values temporarily for more rapid motion.
 
         std::array<float, num_joints> pd_target_sdk_order{};  // Go2 SDK native order, NOT Isaac Lab!!!
