@@ -493,7 +493,8 @@ private:
     rclcpp::TimerBase::SharedPtr policy_inference_timer_;
     rclcpp::Subscription<unitree_go::msg::LowState>::SharedPtr robot_state_sub_;
     rclcpp::Publisher<unitree_go::msg::LowCmd>::SharedPtr command_publisher;
-    // TODO: Add subscriber for elevation map
+    // TODO: Add subscriber for PROCESSED elevation map (separate node will handle making it robot-centric so that this node just needs to pass array
+    // of floats to InferenceEngine)
 };
 
 int main(int argc, char * argv[])
