@@ -44,46 +44,6 @@ public:
         static_assert(std::atomic<bool>::is_always_lock_free, "atomic bool is not lock free.");
         init_command_msg(command_msg_);
 
-        // TODO: Make this ROS param
-        // env 75, best one so far (with elevation map)
-        const std::filesystem::path checkpoint_path{"/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_21349_traced_deterministic.pt"};
-        // env 75, same as above just ealier checkpoint to show before vs. after energy minimization std::filesystem::path checkpoint_path
-        // std::filesystem::path checkpoint_path {"/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_6049_traced_deterministic.pt"};
-
-        // Safety precaution to ensure that trained policies do not receive significantly OOD observations.
-        // To add new checkpoint, add to this list, hardcoded value will be set to zero automatically.
-        // Otherwise, add to checkpoints_proper_elevation_map
-        const std::vector<std::string> checkpoint_filenames_zero_elevation_map = {"2025-12-28-15-28-51_19499_traced_deterministic.pt",
-            "2025-12-28-14-47-57_29499_traced_deterministic.pt", "2025-12-28-14-58-57_29649_traced_deterministic.pt"};
-        const std::vector<std::string> checkpoint_filenames_proper_elevation_map = {
-            "2025-06-28-17-13-04_21349_traced_deterministic.pt", "2025-06-28-17-13-04_6049_traced_deterministic.pt"};
-        RCLCPP_INFO(this->get_logger(), "Checkpoints registered to use zeroed out hardcoded height map: %s",
-            fmt::format("{}", fmt::join(checkpoint_filenames_zero_elevation_map, ", ")).c_str());
-        RCLCPP_INFO(this->get_logger(), "Checkpoints registered to use proper elevation map: %s",
-            fmt::format("{}", fmt::join(checkpoint_filenames_proper_elevation_map, ", ")).c_str());
-
-        const bool checkpoint_in_zero_elevation_map =
-            (std::find(checkpoint_filenames_zero_elevation_map.begin(), checkpoint_filenames_zero_elevation_map.end(),
-                 checkpoint_path.filename().string()) != checkpoint_filenames_zero_elevation_map.end());
-        const bool checkpoint_in_proper_elevation_map =
-            (std::find(checkpoint_filenames_proper_elevation_map.begin(), checkpoint_filenames_proper_elevation_map.end(),
-                 checkpoint_path.filename().string()) != checkpoint_filenames_proper_elevation_map.end());
-
-        if (!checkpoint_in_zero_elevation_map && !checkpoint_in_proper_elevation_map) {
-            shutdown_coordinator_.shutdown(
-                "Specified checkpoint file found in neither of the two allowed checkpoint lists, exiting! This is a safety precaution to prevent "
-                "passing incorrect observations into a policy, do not circumvent! Simply add the checkpoint to the correct list in the source code "
-                "above this message printout.");
-            return;
-        }
-
-        // TODO: Rework this to be a config file where each checkpoint is associated with certain configuration values
-        if (checkpoint_in_zero_elevation_map) {
-            RCLCPP_INFO(
-                this->get_logger(), "Checkpoint found in zero elevation map list, setting use_hardcoded_heights=0 and hardcoded_elevation=0.0f");
-            use_hardcoded_elevation = true;
-            hardcoded_elevation = 0.0f;
-        }  // Add adjustments for opposite scenario here if needed
         RCLCPP_INFO(this->get_logger(), "Loading torch policy checkpoint at path %s", checkpoint_path.string().c_str());
         try {
             inference_engine_(checkpoint_path, num_joints);
