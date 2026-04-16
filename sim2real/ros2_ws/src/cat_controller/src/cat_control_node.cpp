@@ -198,38 +198,54 @@ private:
             }
         }
 
-        // TODO: Remove because this was only used to check if /lowcmd works
-        if (!initial_state_latched_.load(std::memory_order_acquire)) {
-            const double seconds_since_low_level_enabled = (this->get_clock()->now() - low_level_mode_enabled_time_).seconds();
-
-            if (seconds_since_low_level_enabled > initial_state_latch_timeout_seconds_) {
-                shutdown_coordinator_.shutdown("Low-level mode was enabled, but initial /lowstate was not latched in time.");
+        const bool SINUSOIDAL_DEBUG_MOTION = true;
+        if (SINUSOIDAL_DEBUG_MOTION) {
+            if (!initial_state_latched_.load(std::memory_order_acquire)) {
+                const double seconds_since_low_level_enabled = (this->get_clock()->now() - low_level_mode_enabled_time_).seconds();
+                if (seconds_since_low_level_enabled > initial_state_latch_timeout_seconds_) {
+                    shutdown_coordinator_.shutdown("Low-level mode was enabled, but initial /lowstate was not latched in time.");
+                }
+                return;
             }
 
-            return;
+            const double t = this->get_clock()->now().seconds() - start_time_;
+            const double offset = 0.15 * (1.0 - std::cos(2.0 * M_PI * 0.25 * t));
+            const int fr_calf = 2;
+            const int fl_calf = 5;
+            command_msg_.motor_cmd[fr_calf].q = initial_state_.motor_state[fr_calf].q + offset;
+            command_msg_.motor_cmd[fr_calf].dq = 0.0;
+            command_msg_.motor_cmd[fr_calf].kp = actuator_Kp;
+            command_msg_.motor_cmd[fr_calf].kd = actuator_Kd;
+            command_msg_.motor_cmd[fr_calf].tau = 0.0;
+            command_msg_.motor_cmd[fl_calf].q = initial_state_.motor_state[fl_calf].q + offset;
+            command_msg_.motor_cmd[fl_calf].dq = 0.0;
+            command_msg_.motor_cmd[fl_calf].kp = actuator_Kp;
+            command_msg_.motor_cmd[fl_calf].kd = actuator_Kd;
+            command_msg_.motor_cmd[fl_calf].tau = 0.0;
+        } else {
+            auto setpoint_res = pd_setpoint_sdk_order.try_load_for(atomic_op_timeout_threshold);
+            if (!setpoint_res.has_value()) {
+                shutdown_coordinator_.shutdown(
+                    std::format("Failed to fetch desired action within {}us in send_pd_commands(), exiting.", atomic_op_timeout_threshold.count()));
+                return;
+            }
+            auto setpoint_sdk_order = setpoint_res.value();
+
+            for (int i = 0; i < num_joints; i++) {
+                command_msg_.motor_cmd[i].q = setpoint_sdk_order[i];
+                command_msg_.motor_cmd[i].dq = 0;
+                command_msg_.motor_cmd[i].kp = actuator_Kp;
+                command_msg_.motor_cmd[i].kd = actuator_Kd;
+                command_msg_.motor_cmd[i].tau = 0;
+            }
         }
-
-        /// TODO: Remove and use send_pd_commands from run_policy
-        const double t = this->get_clock()->now().seconds() - start_time_;
-        const double offset = 0.15 * (1.0 - std::cos(2.0 * M_PI * 0.25 * t));
-
-        const int fr_calf = 2;
-        const int fl_calf = 5;
-
-        command_msg_.motor_cmd[fr_calf].q = initial_state_.motor_state[fr_calf].q + offset;
-        command_msg_.motor_cmd[fr_calf].dq = 0.0;
-        command_msg_.motor_cmd[fr_calf].kp = actuator_Kp;
-        command_msg_.motor_cmd[fr_calf].kd = actuator_Kd;
-        command_msg_.motor_cmd[fr_calf].tau = 0.0;
-
-        command_msg_.motor_cmd[fl_calf].q = initial_state_.motor_state[fl_calf].q + offset;
-        command_msg_.motor_cmd[fl_calf].dq = 0.0;
-        command_msg_.motor_cmd[fl_calf].kp = actuator_Kp;
-        command_msg_.motor_cmd[fl_calf].kd = actuator_Kd;
-        command_msg_.motor_cmd[fl_calf].tau = 0.0;
 
         get_crc(command_msg_);
         // Commented out for safety for now
+        // if (shutdown_coordinator_.exit_requested()) {
+        //     RCLCPP_WARN(this->get_logger(), "NOT publishing torque command because node shutdown was requested.");
+        //     return;
+        // }
         // command_publisher->publish(command_msg_);
     }
 
