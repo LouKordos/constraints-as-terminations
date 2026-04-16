@@ -65,8 +65,9 @@ public:
         std::string error_message;
         RCLCPP_DEBUG(this->get_logger(), "Starting low level control mode enabler process.");
         if (!low_level_mode_enabler_.start(error_message)) {
-            shutdown_coordinator_.shutdown(error_message);
-            return;
+            // Throw here because we have not initialized anything that warrants proper shutdown. After the constructor, we use the shutdown
+            // coordinator to avoid exceptions
+            throw std::runtime_error(std::format("Failed to enable low level control mode, throwing. Error message: {}", error_message));
         }
         RCLCPP_INFO(this->get_logger(), "Started motion switcher helper using interface '%s'.", network_interface_.c_str());
 
