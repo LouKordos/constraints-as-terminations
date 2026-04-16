@@ -48,6 +48,10 @@ public:
         static_assert(std::atomic<bool>::is_always_lock_free, "atomic bool is not lock free.");
         init_command_msg(command_msg_);
 
+        this->state_sub_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+        this->command_timer_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+        this->inference_timer_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+
         if (use_hardcoded_elevation_) {
             RCLCPP_INFO(this->get_logger(), "use_hardcoded_elevation=true, setting hardcoded_elevation to zero!");
             hardcoded_elevation_ = 0.0f;
@@ -56,8 +60,10 @@ public:
             use_hardcoded_elevation_ ? "true" : "false");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting robot state subscriber.");
+        rclcpp::SubscriptionOptions state_sub_options;
+        state_sub_options.callback_group = state_sub_cbg_;
         robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>("/lowstate", rclcpp::SensorDataQoS(),
-            std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1, std::placeholders::_2));
+            std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1, std::placeholders::_2), state_sub_options);
         RCLCPP_DEBUG(this->get_logger(), "Started robot state subscriber.");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting robot command publisher.");
@@ -74,11 +80,11 @@ public:
         RCLCPP_INFO(this->get_logger(), "Started motion switcher helper using interface '%s'.", network_interface_.c_str());
 
         RCLCPP_DEBUG(this->get_logger(), "Starting robot command publish timer.");
-        command_timer_ = this->create_wall_timer(2ms, std::bind(&CaTControlNode::publish_commands, this));
+        command_timer_ = this->create_wall_timer(2ms, std::bind(&CaTControlNode::publish_commands, this), command_timer_cbg_);
         RCLCPP_DEBUG(this->get_logger(), "Started robot command publish timer.");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting policy inference / control loop timer.");
-        policy_inference_timer_ = this->create_wall_timer(20ms, std::bind(&CaTControlNode::policy_inference_callback, this));
+        policy_inference_timer_ = this->create_wall_timer(20ms, std::bind(&CaTControlNode::policy_inference_callback, this), inference_timer_cbg_);
         RCLCPP_DEBUG(this->get_logger(), "Started policy inference / control loop timer.");
     }
 
@@ -380,6 +386,9 @@ private:
     rclcpp::TimerBase::SharedPtr policy_inference_timer_;
     rclcpp::Subscription<unitree_go::msg::LowState>::SharedPtr robot_state_sub_;
     rclcpp::Publisher<unitree_go::msg::LowCmd>::SharedPtr command_publisher_;
+    rclcpp::CallbackGroup::SharedPtr state_sub_cbg_;
+    rclcpp::CallbackGroup::SharedPtr command_timer_cbg_;
+    rclcpp::CallbackGroup::SharedPtr inference_timer_cbg_;
     // TODO: Add subscriber for PROCESSED elevation map (separate node will handle making it robot-centric so that this node just needs to pass array
     // of floats to InferenceEngine)
 };
@@ -393,7 +402,10 @@ int main(int argc, char * argv[])
         return EXIT_FAILURE;
     }
 
-    rclcpp::spin(std::make_shared<CaTControlNode>(argv[1]));
+    auto node = std::make_shared<CaTControlNode>(argv[1]);
+    rclcpp::executors::MultiThreadedExecutor executor;
+    executor.add_node(node);
+    executor.spin();
     rclcpp::shutdown();
     return 0;
 }
