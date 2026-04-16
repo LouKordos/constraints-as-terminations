@@ -124,7 +124,6 @@ public:
         // is not producing anything
     }
 
-    // TODO: Move to ROS2 params
     std::chrono::microseconds atomic_op_timeout_threshold{500};
     std::chrono::milliseconds stale_state_age_threshold{50};
     const bool walk_a_bit = true;
