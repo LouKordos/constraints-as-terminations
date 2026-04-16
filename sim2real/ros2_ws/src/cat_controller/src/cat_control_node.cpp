@@ -78,8 +78,6 @@ public:
         RCLCPP_DEBUG(this->get_logger(), "Started robot command publish timer.");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting policy inference / control loop timer.");
-        start_ms_policy_inference_ =
-            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
         policy_inference_timer_ = this->create_wall_timer(20ms, std::bind(&CaTControlNode::policy_inference_callback, this));
         RCLCPP_DEBUG(this->get_logger(), "Started policy inference / control loop timer.");
         // Important TODO: Add linear interpolation from start pos to standing pos with Kp = 30 and Kd = 1 same way as run_policy.cpp
@@ -122,6 +120,8 @@ private:
             start_time_ = this->get_clock()->now().seconds();
             initial_state_latched_.store(true, std::memory_order_release);
             RCLCPP_INFO(this->get_logger(), "Latched. FR Calf: %f, FL Calf: %f", initial_state_.motor_state[2].q, initial_state_.motor_state[5].q);
+            start_ms_policy_inference_ =
+                std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
         }
 
         // Backdate a local steady_clock rather than using the DDS system_clock directly because the latter are vulnerable to NTP time-jumps, which
