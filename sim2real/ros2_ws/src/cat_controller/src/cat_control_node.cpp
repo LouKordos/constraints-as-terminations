@@ -108,7 +108,8 @@ private:
             return;
         }
 
-        // TODO: Remove because this was only used to check if /lowcmd works
+        // This code path is only used when SINUSOIDAL_DEBUG_MOTION is true in the command publisher, used to ensure that /lowcmd messages being
+        // published are actually being applied.
         if (low_level_mode_enabled_.load(std::memory_order_acquire) && !initial_state_latched_.load(std::memory_order_acquire)) {
             initial_state_ = *msg;
             start_time_ = this->get_clock()->now().seconds();
