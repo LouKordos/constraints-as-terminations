@@ -87,6 +87,16 @@ public:
         RCLCPP_DEBUG(this->get_logger(), "Starting policy inference / control loop timer.");
         policy_inference_timer_ = this->create_wall_timer(20ms, std::bind(&CaTControlNode::policy_inference_callback, this), inference_timer_cbg_);
         RCLCPP_DEBUG(this->get_logger(), "Started policy inference / control loop timer.");
+
+        // Dump all node parameters to logs
+        std::string param_dump = "=== Node Parameters ===\n";
+        auto param_list = this->list_parameters(std::vector<std::string>{}, 10);
+        for (const auto & param_name : param_list.names) {
+            rclcpp::Parameter param;
+            if (this->get_parameter(param_name, param)) { param_dump += fmt::format("  {}: {}\n", param_name, param.value_to_string()); }
+        }
+        param_dump += "============================";
+        RCLCPP_INFO(this->get_logger(), "\n%s", param_dump.c_str());
     }
 
     std::chrono::microseconds atomic_op_timeout_threshold{500};
