@@ -348,7 +348,6 @@ private:
     unitree_go::msg::LowCmd command_msg_;
     timed_atomic<stamped_robot_state> global_robot_state_{};
     timed_atomic<std::array<float, num_joints>> pd_setpoint_sdk_order{};
-    timed_atomic<std::array<float, num_joints>> global_current_action_isaac_order{};
     timed_atomic<std::array<float, 3>> global_vel_command{{0.0f, 0.0f, 0.0f}};
 
     InferenceEngine inference_engine_;
