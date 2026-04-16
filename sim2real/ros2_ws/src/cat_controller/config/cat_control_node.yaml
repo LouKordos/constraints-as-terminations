@@ -3,3 +3,24 @@ cat_control_node:
     checkpoint_path: "/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_21349_traced_deterministic.pt" # env 75, best one so far (with elevation map)
     # checkpoint_path: "/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_6049_traced_deterministic.pt" # env 75, same as above just ealier checkpoint to show before vs. after energy minimization 
     use_hardcoded_elevation: false
+    network_interface: "enx9c69d3002c7a"
+
+    use_hardcoded_elevation: false
+    hardcoded_elevation: -0.3
+    
+    atomic_op_timeout_us: 500
+    stale_state_age_ms: 50
+    initial_state_save_timeout_sec: 2.0
+    
+    walk_a_bit: true
+    sinusoidal_debug_motion: true
+    interpolation_duration_sec: 5.0
+    
+    action_scale: 0.8
+    actuator_kp: 25.0
+    actuator_kd: 0.5
+    joint_vel_abs_limit: 30.0
+    joint_torque_abs_limit: 46.0
+    
+    # Velocity Limits [vel_x, vel_y, omega_z]
+    vel_command_mag_limit: [2.0, 2.0, 1.0]
