@@ -262,7 +262,7 @@ private:
 
         if (!initial_low_level_state_.load(std::memory_order_acquire)) {
             const double seconds_since_low_level_enabled = (this->get_clock()->now() - low_level_mode_enabled_time_).seconds();
-            if (seconds_since_low_level_enabled > initial_state_latch_timeout_seconds_) {
+            if (seconds_since_low_level_enabled > initial_state_save_timeout_seconds_) {
                 shutdown_coordinator_.shutdown("Low-level mode was enabled, but initial /lowstate was not saved in time.");
             }
             return;
@@ -356,7 +356,7 @@ private:
     std::chrono::steady_clock::time_point last_inference_callback_time_{};  // default = epoch
     std::chrono::steady_clock::time_point last_command_callback_time_{};    // default = epoch
 
-    const double initial_state_latch_timeout_seconds_{2.0};
+    const double initial_state_save_timeout_seconds_{2.0};
     rclcpp::Time low_level_mode_enabled_time_{0, 0, RCL_ROS_TIME};
     std::atomic<bool> initial_low_level_state_{false};  // Robot state when low level mode was enabled
     std::atomic<bool> low_level_mode_enabled_{false};
