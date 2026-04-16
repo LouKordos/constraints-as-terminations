@@ -97,7 +97,7 @@ public:
     // Isaac Lab joint order, rad
     const std::array<std::pair<float, float>, num_joints> joint_position_limits{std::pair<float, float>{-0.9, 0.9}, {-0.9, 0.9}, {-0.9, 0.9},
         {-0.9, 0.9}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-1.4, 3.4}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}, {-3, -0.7}};
-    std::array<float, num_joints> default_joint_positions{0.1, -0.1, 0.1, -0.1, 0.8, 0.8, 1.0, 1.0, -1.5, -1.5, -1.5, -1.5};
+    std::array<float, num_joints> default_joint_positions_isaac_order{0.1, -0.1, 0.1, -0.1, 0.8, 0.8, 1.0, 1.0, -1.5, -1.5, -1.5, -1.5};
 
 private:
     void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg, const rclcpp::MessageInfo & message_info)
@@ -210,8 +210,8 @@ private:
 
         std::array<float, num_joints> pd_target_sdk_order{};  // Go2 SDK native order, NOT Isaac Lab!!!
         for (int i = 0; i < num_joints; i++) {
-            int j = sdk_to_isaac_idx[i];                                                               // Remap to go2 order
-            pd_target_sdk_order[i] = default_joint_positions[j] + generated_action[j] * action_scale;  // Scale same as Isaac Lab
+            int j = sdk_to_isaac_idx[i];                                                                           // Remap to go2 order
+            pd_target_sdk_order[i] = default_joint_positions_isaac_order[j] + generated_action[j] * action_scale;  // Scale same as Isaac Lab
         }
         if (!pd_setpoint_sdk_order.try_store_for(pd_target_sdk_order, atomic_op_timeout_threshold)) {
             shutdown_coordinator_.shutdown(
@@ -259,48 +259,67 @@ private:
             }
         }
 
+        if (!initial_state_latched_.load(std::memory_order_acquire)) {
+            const double seconds_since_low_level_enabled = (this->get_clock()->now() - low_level_mode_enabled_time_).seconds();
+            if (seconds_since_low_level_enabled > initial_state_latch_timeout_seconds_) {
+                shutdown_coordinator_.shutdown("Low-level mode was enabled, but initial /lowstate was not latched in time.");
+            }
+            return;
+        }
+
+        // Compute relative time since low level control mode was enabled and initial state was captured
+        const double t = this->get_clock()->now().seconds() - start_time_;
+        const double interpolation_duration = 5.0f;
+        std::array<float, num_joints> current_target_sdk{};
         const bool SINUSOIDAL_DEBUG_MOTION = true;
-        if (SINUSOIDAL_DEBUG_MOTION) {
-            if (!initial_state_latched_.load(std::memory_order_acquire)) {
-                const double seconds_since_low_level_enabled = (this->get_clock()->now() - low_level_mode_enabled_time_).seconds();
-                if (seconds_since_low_level_enabled > initial_state_latch_timeout_seconds_) {
-                    shutdown_coordinator_.shutdown("Low-level mode was enabled, but initial /lowstate was not latched in time.");
-                }
-                return;
-            }
 
-            const double t = this->get_clock()->now().seconds() - start_time_;
-            const double offset = 0.15 * (1.0 - std::cos(2.0 * M_PI * 0.25 * t));
-            const int fr_calf = 2;
-            const int fl_calf = 5;
-            command_msg_.motor_cmd[fr_calf].q = initial_state_.motor_state[fr_calf].q + offset;
-            command_msg_.motor_cmd[fr_calf].dq = 0.0;
-            command_msg_.motor_cmd[fr_calf].kp = actuator_Kp;
-            command_msg_.motor_cmd[fr_calf].kd = actuator_Kd;
-            command_msg_.motor_cmd[fr_calf].tau = 0.0;
-            command_msg_.motor_cmd[fl_calf].q = initial_state_.motor_state[fl_calf].q + offset;
-            command_msg_.motor_cmd[fl_calf].dq = 0.0;
-            command_msg_.motor_cmd[fl_calf].kp = actuator_Kp;
-            command_msg_.motor_cmd[fl_calf].kd = actuator_Kd;
-            command_msg_.motor_cmd[fl_calf].tau = 0.0;
-        } else {
-            auto setpoint_res = pd_setpoint_sdk_order.try_load_for(atomic_op_timeout_threshold);
-            if (!setpoint_res.has_value()) {
-                shutdown_coordinator_.shutdown(
-                    std::format("Failed to fetch desired action within {}us in send_pd_commands(), exiting.", atomic_op_timeout_threshold.count()));
-                return;
-            }
-            auto setpoint_sdk_order = setpoint_res.value();
-
+        if (t < interpolation_duration) {
+            // Interpolate from initial state to default standing position
             for (int i = 0; i < num_joints; i++) {
-                command_msg_.motor_cmd[i].q = setpoint_sdk_order[i];
-                command_msg_.motor_cmd[i].dq = 0;
-                command_msg_.motor_cmd[i].kp = actuator_Kp;
-                command_msg_.motor_cmd[i].kd = actuator_Kd;
-                command_msg_.motor_cmd[i].tau = 0;
+                int j = sdk_to_isaac_idx[i];
+                float default_pos = default_joint_positions_isaac_order[j];
+                float initial_pos = initial_state_.motor_state[i].q;
+                current_target_sdk[i] = (t / interpolation_duration) * default_pos + (1.0 - (t / interpolation_duration)) * initial_pos;
+            }
+            // Set to latest state so that no jumps occur when switching to applying this setpoint
+            pd_setpoint_sdk_order.try_store_for(current_target_sdk, atomic_op_timeout_threshold);
+
+        } else {
+            if (!interpolation_finished_.load(std::memory_order_acquire)) {
+                interpolation_finished_.store(true, std::memory_order_release);
+                RCLCPP_INFO(this->get_logger(), "Interpolation finished, active control started.");
+            }
+
+            if (SINUSOIDAL_DEBUG_MOTION) {
+                // Shift time so the sine wave starts smoothly at t=0 relative to interpolation end
+                const double debug_t = t - interpolation_duration;
+                const double offset = 0.1 * (1.0 - std::cos(2.0 * M_PI * 0.25 * debug_t));
+                const int fr_calf = 2;
+                const int fl_calf = 5;
+
+                // Base everything on the standing pose
+                for (int i = 0; i < num_joints; i++) { current_target_sdk[i] = default_joint_positions_isaac_order[sdk_to_isaac_idx[i]]; }
+                current_target_sdk[fr_calf] += offset;
+                current_target_sdk[fl_calf] += offset;
+
+            } else {
+                auto setpoint_res = pd_setpoint_sdk_order.try_load_for(atomic_op_timeout_threshold);
+                if (!setpoint_res.has_value()) {
+                    shutdown_coordinator_.shutdown(
+                        std::format("Failed to fetch desired action within {}us, exiting.", atomic_op_timeout_threshold.count()));
+                    return;
+                }
+                current_target_sdk = setpoint_res.value();
             }
         }
 
+        for (int i = 0; i < num_joints; i++) {
+            command_msg_.motor_cmd[i].q = current_target_sdk[i];
+            command_msg_.motor_cmd[i].dq = 0.0;
+            command_msg_.motor_cmd[i].kp = actuator_Kp;
+            command_msg_.motor_cmd[i].kd = actuator_Kd;
+            command_msg_.motor_cmd[i].tau = 0.0;
+        }
         get_crc(command_msg_);
         // Commented out for safety for now
         // if (shutdown_coordinator_.exit_requested()) {
@@ -340,6 +359,7 @@ private:
     rclcpp::Time low_level_mode_enabled_time_{0, 0, RCL_ROS_TIME};
     std::atomic<bool> initial_state_latched_{false};
     std::atomic<bool> low_level_mode_enabled_{false};
+    std::atomic<bool> interpolation_finished_{false};
     double start_time_{0};
     unitree_go::msg::LowState initial_state_;
 
