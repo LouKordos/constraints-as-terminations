@@ -290,11 +290,12 @@ private:
 
         if (t < interpolation_duration) {
             // Interpolate from initial state to default standing position
+            const float ratio = std::clamp(static_cast<float>(t / interpolation_duration), 0.0f, 1.0f);
             for (int i = 0; i < num_joints; i++) {
                 int j = sdk_to_isaac_idx[i];
                 float default_pos = default_joint_positions_isaac_order[j];
                 float initial_pos = initial_state_.motor_state[i].q;
-                current_target_sdk[i] = (t / interpolation_duration) * default_pos + (1.0 - (t / interpolation_duration)) * initial_pos;
+                current_target_sdk[i] = ratio * default_pos + (1.0f - ratio) * initial_pos;
             }
             // Set to latest state so that no jumps occur when switching to applying this setpoint
             pd_setpoint_sdk_order.try_store_for(current_target_sdk, atomic_op_timeout_threshold);
