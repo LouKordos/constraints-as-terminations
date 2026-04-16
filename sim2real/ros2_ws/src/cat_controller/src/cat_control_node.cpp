@@ -166,6 +166,10 @@ private:
     }
 
     // Sends latest generated actions to the robot at steady 500Hz, as policy only runs at 50Hz.
+    // This could also run in the state callback, but since these callbacks are run at 500Hz, it is important to keep them as lightweight as possible.
+    // Another benefit is that network latency spikes for the received state cannot directly influence the actions being published, only after they
+    // become large enough to trigger the stale state warning. Otherwise, the command timmer simply publishes actions based on latest state.
+    // Because the stale state threshold does not allow extreme delays, this will "smooth out" temporary jitter
     void publish_commands()
     {
         if (shutdown_coordinator_.handle_exit_if_requested() ||
