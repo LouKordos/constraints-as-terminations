@@ -8,6 +8,7 @@
 #include <format>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -132,40 +133,45 @@ private:
         // can cause cause the message age check during policy inference to falsely pass. Using steady_clock guarantees monotonic age calculations.
         auto steady_publish_time = time_utils::get_safe_monotonic_publish_time(message_info, this->get_logger(), steady_now, system_now);
         auto stamped_state = stamped_state_from_lowstate(*msg, state_callback_iteration_counter_++, steady_publish_time);
-        global_robot_state_.try_store_for(stamped_state, atomic_op_timeout_threshold);
 
-        // State safety check
-        // TODO: Use templates and functions to avoid repetition
-        if (stamped_state.body_rpy_xyz[0] < base_orientation_limit_rad[0].first ||
-            stamped_state.body_rpy_xyz[0] > base_orientation_limit_rad[0].second)
-        {
-            shutdown_coordinator_.shutdown(std::format("Base roll angle out of bounds, roll={}, bounds=[{},{}]", stamped_state.body_rpy_xyz[0],
-                base_orientation_limit_rad[0].first, base_orientation_limit_rad[0].second));
+        if (auto error_message = validate_robot_state(stamped_state)) {
+            shutdown_coordinator_.shutdown(*error_message);
+            return;
         }
+        // Only store if valid
+        global_robot_state_.try_store_for(stamped_state, atomic_op_timeout_threshold);
+    }
 
-        if (stamped_state.body_rpy_xyz[1] < base_orientation_limit_rad[1].first ||
-            stamped_state.body_rpy_xyz[1] > base_orientation_limit_rad[1].second)
-        {
-            shutdown_coordinator_.shutdown(std::format("Base pitch angle out of bounds, pitch={}, bounds=[{},{}]", stamped_state.body_rpy_xyz[1],
-                base_orientation_limit_rad[1].first, base_orientation_limit_rad[1].second));
+    template <typename T>
+    [[nodiscard]] constexpr bool is_out_of_bounds(const T & val, const std::pair<T, T> & bounds)
+    { return val < bounds.first || val > bounds.second; }
+
+    std::optional<std::string> validate_robot_state(const stamped_robot_state & state)
+    {
+        const std::array<std::string, 2> rpy_names = {"roll", "pitch"};
+        for (size_t i = 0; i < 2; ++i) {
+            if (is_out_of_bounds(state.body_rpy_xyz[i], base_orientation_limit_rad[i])) {
+                return std::format("Base {} angle out of bounds, value={}, bounds=[{},{}]", rpy_names[i], state.body_rpy_xyz[i],
+                    base_orientation_limit_rad[i].first, base_orientation_limit_rad[i].second);
+            }
         }
 
         for (int i = 0; i < num_joints; i++) {
-            if (stamped_state.joint_pos[i] < joint_position_limits[i].first || stamped_state.joint_pos[i] > joint_position_limits[i].second) {
-                shutdown_coordinator_.shutdown(std::format("Joint position for index {} out of bounds, pos={}, bounds=[{},{}]", i,
-                    stamped_state.joint_pos[i], joint_position_limits[i].first, joint_position_limits[i].second));
+            if (is_out_of_bounds(state.joint_pos[i], joint_position_limits[i])) {
+                return std::format("Joint position for index {} out of bounds, pos={}, bounds=[{},{}]", i, state.joint_pos[i],
+                    joint_position_limits[i].first, joint_position_limits[i].second);
             }
 
-            if (std::abs(stamped_state.joint_torque[i]) > joint_torque_abs_limit) {
-                shutdown_coordinator_.shutdown(std::format(
-                    "Joint torque for index {} out of bounds, torque={}, limit={}", i, stamped_state.joint_torque[i], joint_torque_abs_limit));
+            if (std::abs(state.joint_torque[i]) > joint_torque_abs_limit) {
+                return std::format("Joint torque for index {} out of bounds, torque={}, limit={}", i, state.joint_torque[i], joint_torque_abs_limit);
             }
 
-            if (std::abs(stamped_state.joint_vel[i]) > joint_vel_abs_limit) {
-                shutdown_coordinator_.shutdown(std::format(
-                    "Joint velocity for index {} out of bounds, velocity={}, limit={}", i, stamped_state.joint_vel[i], joint_vel_abs_limit));
+            if (std::abs(state.joint_vel[i]) > joint_vel_abs_limit) {
+                return std::format("Joint velocity for index {} out of bounds, velocity={}, limit={}", i, state.joint_vel[i], joint_vel_abs_limit);
             }
         }
+
+        return std::nullopt;  // State is valid and safe
     }
 
     void policy_inference_callback()
@@ -214,7 +220,8 @@ private:
         auto rel_time_ms = time_now_ms - start_ms_policy_inference_;
         if (walk_a_bit && rel_time_ms > 30000 && rel_time_ms < 34500) { vel_command[0] = 0.9f; }
         const auto & generated_action = inference_engine_.generate_action(robot_state, vel_command);
-        // Do not check if target exceeds joint limits because policy might learn to command out of range values temporarily for more rapid motion.
+        // Do not check if target exceeds joint limits because policy might learn to command out of range values temporarily for more rapid
+        // motion.
 
         std::array<float, num_joints> pd_target_sdk_order{};  // Go2 SDK native order, NOT Isaac Lab!!!
         for (int i = 0; i < num_joints; i++) {
@@ -231,10 +238,10 @@ private:
     }
 
     // Sends latest generated actions to the robot at steady 500Hz, as policy only runs at 50Hz.
-    // This could also run in the state callback, but since these callbacks are run at 500Hz, it is important to keep them as lightweight as possible.
-    // Another benefit is that network latency spikes for the received state cannot directly influence the actions being published, only after they
-    // become large enough to trigger the stale state warning. Otherwise, the command timmer simply publishes actions based on latest state.
-    // Because the stale state threshold does not allow extreme delays, this will "smooth out" temporary jitter
+    // This could also run in the state callback, but since these callbacks are run at 500Hz, it is important to keep them as lightweight as
+    // possible. Another benefit is that network latency spikes for the received state cannot directly influence the actions being published, only
+    // after they become large enough to trigger the stale state warning. Otherwise, the command timmer simply publishes actions based on latest
+    // state. Because the stale state threshold does not allow extreme delays, this will "smooth out" temporary jitter
     void publish_commands()
     {
         if (shutdown_coordinator_.handle_exit_if_requested() ||
@@ -389,8 +396,8 @@ private:
     rclcpp::CallbackGroup::SharedPtr state_sub_cbg_;
     rclcpp::CallbackGroup::SharedPtr command_timer_cbg_;
     rclcpp::CallbackGroup::SharedPtr inference_timer_cbg_;
-    // TODO: Add subscriber for PROCESSED elevation map (separate node will handle making it robot-centric so that this node just needs to pass array
-    // of floats to InferenceEngine)
+    // TODO: Add subscriber for PROCESSED elevation map (separate node will handle making it robot-centric so that this node just needs to pass
+    // array of floats to InferenceEngine)
 };
 
 int main(int argc, char * argv[])
