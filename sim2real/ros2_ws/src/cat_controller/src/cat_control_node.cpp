@@ -69,6 +69,8 @@ public:
         RCLCPP_DEBUG(this->get_logger(), "Started robot command publish timer.");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting policy inference / control loop timer.");
+        start_ms_policy_inference_ =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
         policy_inference_timer_ = this->create_wall_timer(20ms, std::bind(&CaTControlNode::policy_inference_callback, this));
         RCLCPP_DEBUG(this->get_logger(), "Started policy inference / control loop timer.");
         // Important TODO: Add linear interpolation from start pos to standing pos with Kp = 30 and Kd = 1 same way as run_policy.cpp
@@ -78,6 +80,7 @@ public:
 
     // TODO: Move to ROS2 params
     std::chrono::microseconds atomic_op_timeout_threshold{500};
+    std::chrono::milliseconds stale_state_age_threshold{50};
     const bool walk_a_bit = true;
     bool use_hardcoded_elevation = false;
     double hardcoded_elevation = -0.3f;
@@ -88,8 +91,9 @@ public:
     const float action_scale = 0.8f;
     const float actuator_Kp = 25.0f;
     const float actuator_Kd = 0.5;
-    const double joint_vel_abs_limit = 30;     // rad/s
-    const double joint_torque_abs_limit = 46;  // Nm
+    const double joint_vel_abs_limit = 30;                         // rad/s
+    const double joint_torque_abs_limit = 46;                      // Nm
+    std::array<float, 3> vel_command_mag_limit = {2.0, 2.0, 1.0};  // vel_x, vel_y, omega_z
     // Only roll and pitch, does not make sense to limit yaw
     const std::array<std::pair<float, float>, 2> base_orientation_limit_rad{std::pair<float, float>{-0.6, 0.6}, {-0.6, 0.6}};
     // Isaac Lab joint order, rad
@@ -164,6 +168,72 @@ private:
         {
             return;
         }
+
+        auto robot_state_res = global_robot_state_.try_load_for(atomic_op_timeout_threshold);
+        if (!robot_state_res.has_value()) {
+            shutdown_coordinator_.shutdown(std::format("Failed to retrieve robot state within {}us, exiting.", atomic_op_timeout_threshold.count()));
+            return;
+        }
+        auto robot_state = robot_state_res.value();
+        auto now = std::chrono::steady_clock::now();
+        auto delta = now - robot_state.timestamp;
+        if (delta > stale_state_age_threshold && robot_state.counter > 0) {  // Discard first iteration
+            shutdown_coordinator_.shutdown(
+                std::format("State timestamp too old, allowed threshold={}ms, actual state age={}ms. Exiting to prevent outdated states.",
+                    stale_state_age_threshold.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count()));
+            return;
+        }
+
+        std::array<float, 3> vel_command{0.0, 0.0, 0.0};
+        if (auto vcmd = global_vel_command.try_load_for(atomic_op_timeout_threshold); vcmd.has_value()) {
+            vel_command = vcmd.value();
+        } else {
+            shutdown_coordinator_.shutdown(std::format("Failed to fetch vel_command within {}us, exiting.", atomic_op_timeout_threshold.count()));
+            return;
+        }
+
+        // Clip velocity command components
+        for (int i = 0; i < 3; i++) {
+            if (std::abs(vel_command[i]) > vel_command_mag_limit[i]) {
+                vel_command[i] = std::max(-vel_command_mag_limit[i], std::min(vel_command_mag_limit[i], vel_command[i]));
+                RCLCPP_WARN(
+                    this->get_logger(), "Had to clip vel_command[{}]={}, vel_command_mag_limit[i]={}", i, vel_command[i], vel_command_mag_limit[i]);
+            }
+        }
+
+        auto time_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        auto rel_time_ms = time_now_ms - start_ms_policy_inference_;
+        if (walk_a_bit && rel_time_ms > 30000 && rel_time_ms < 34500) { vel_command[0] = 0.9f; }
+
+        auto observation = construct_observation_tensor(
+            robot_state, vel_command, previous_action, model_observation_dim_ == observation_dim_history, robot_state.counter == 0);
+        inference_input[0] = observation;
+        raw_current_action = model.forward(inference_input).toTensor().contiguous();
+        std::memcpy(current_action.data(), raw_current_action.data_ptr<float>(), num_joints * sizeof(float));
+        if (!global_current_action_isaac_order.try_store_for(current_action, atomic_op_timeout_threshold)) {
+            shutdown_coordinator_.shutdown(
+                std::format("Failed to set global current_action within {}us, exiting.", atomic_op_timeout_threshold.count()));
+            return;
+        }
+
+        std::array<float, num_joints> pd_target_sdk_order{};  // Go2 native order, NOT Isaac Lab!!!
+        for (int i = 0; i < num_joints; i++) {
+            int j = sdk_to_isaac_idx[i];                                                             // Remap to go2 order
+            pd_target_sdk_order[i] = default_joint_positions[j] + current_action[j] * action_scale;  // Scale same as Isaac Lab
+        }
+        // Do not check if target exceeds joint limits because policy might learn to command out of range values temporarily for more rapid motion.
+        if (shutdown_coordinator_.exit_requested()) {  // Check before actually applying the action
+            RCLCPP_WARN(this->get_logger(), "Not actually updating global computed action because shutdown was requested.");
+            return;
+        }
+
+        if (!pd_setpoint_sdk_order.try_store_for(pd_target_sdk_order, atomic_op_timeout_threshold)) {
+            shutdown_coordinator_.shutdown(
+                std::format("Failed to update global PD target within {}us, exiting.", atomic_op_timeout_threshold.count()));
+            return;
+        }
+        previous_action = current_action;
+        inference_iteration_counter_++;
     }
 
     // Sends latest generated actions to the robot at steady 500Hz, as policy only runs at 50Hz.
@@ -390,6 +460,7 @@ private:
 
     long long inference_iteration_counter_{};
     long long state_callback_iteration_counter_{};
+    int64_t start_ms_policy_inference_{};
     std::chrono::steady_clock::time_point last_state_callback_time_{};      // default = epoch
     std::chrono::steady_clock::time_point last_inference_callback_time_{};  // default = epoch
     std::chrono::steady_clock::time_point last_command_callback_time_{};    // default = epoch
@@ -406,6 +477,10 @@ private:
 
     unitree_go::msg::LowCmd command_msg_;
     timed_atomic<stamped_robot_state> global_robot_state_{};
+    timed_atomic<std::array<float, num_joints>> pd_setpoint_sdk_order{};
+    timed_atomic<std::array<float, num_joints>> global_current_action_isaac_order{};
+    timed_atomic<std::array<float, 3>> global_vel_command{{0.0f, 0.0f, 0.0f}};
+
     torch::jit::Module policy_model_;
     HistoryBuffer pos_hist_{history_length, num_joints, torch::kCPU};
     HistoryBuffer vel_hist_{history_length, num_joints, torch::kCPU};
