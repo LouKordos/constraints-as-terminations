@@ -239,8 +239,8 @@ private:
         for (int i = 0; i < 3; i++) {
             if (std::abs(vel_command[i]) > vel_command_mag_limit[i]) {
                 vel_command[i] = std::max(-vel_command_mag_limit[i], std::min(vel_command_mag_limit[i], vel_command[i]));
-                RCLCPP_WARN(
-                    this->get_logger(), "Had to clip vel_command[{}]={}, vel_command_mag_limit[i]={}", i, vel_command[i], vel_command_mag_limit[i]);
+                RCLCPP_WARN_STREAM(this->get_logger(),
+                    "Had to clip vel_command[" << i << "]=" << vel_command[i] << ", vel_command_mag_limit[" << i << "]=" << vel_command_mag_limit[i]);
             }
         }
 
