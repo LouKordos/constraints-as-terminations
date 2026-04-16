@@ -166,9 +166,10 @@ private:
 
     void policy_inference_callback()
     {
-        if (shutdown_coordinator_.handle_exit_if_requested() ||
-            time_utils::shutdown_if_deadline_exceeded(last_inference_callback_time_, std::chrono::milliseconds{30}, shutdown_coordinator_))
-        {
+        // Skip the deadline check for the first few iterations due to PyTorch warmup
+        if (inference_iteration_counter_ <= 5) {
+            last_inference_callback_time_ = std::chrono::steady_clock::now();
+        } else if (time_utils::shutdown_if_deadline_exceeded(last_inference_callback_time_, std::chrono::milliseconds{30}, shutdown_coordinator_)) {
             return;
         }
 
