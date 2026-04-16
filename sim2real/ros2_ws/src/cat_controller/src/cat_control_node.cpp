@@ -112,11 +112,12 @@ private:
 
         // This code path is only used when SINUSOIDAL_DEBUG_MOTION is true in the command publisher, used to ensure that /lowcmd messages being
         // published are actually being applied.
-        if (low_level_mode_enabled_.load(std::memory_order_acquire) && !initial_state_latched_.load(std::memory_order_acquire)) {
+        if (low_level_mode_enabled_.load(std::memory_order_acquire) && !initial_low_level_state_.load(std::memory_order_acquire)) {
             initial_state_ = *msg;
             start_time_ = this->get_clock()->now().seconds();
-            initial_state_latched_.store(true, std::memory_order_release);
-            RCLCPP_INFO(this->get_logger(), "Latched. FR Calf: %f, FL Calf: %f", initial_state_.motor_state[2].q, initial_state_.motor_state[5].q);
+            initial_low_level_state_.store(true, std::memory_order_release);
+            RCLCPP_INFO(this->get_logger(), "Low level mode enabled, saving initial state. FR Calf: %f, FL Calf: %f", initial_state_.motor_state[2].q,
+                initial_state_.motor_state[5].q);
             start_ms_policy_inference_ =
                 std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
         }
@@ -259,10 +260,10 @@ private:
             }
         }
 
-        if (!initial_state_latched_.load(std::memory_order_acquire)) {
+        if (!initial_low_level_state_.load(std::memory_order_acquire)) {
             const double seconds_since_low_level_enabled = (this->get_clock()->now() - low_level_mode_enabled_time_).seconds();
             if (seconds_since_low_level_enabled > initial_state_latch_timeout_seconds_) {
-                shutdown_coordinator_.shutdown("Low-level mode was enabled, but initial /lowstate was not latched in time.");
+                shutdown_coordinator_.shutdown("Low-level mode was enabled, but initial /lowstate was not saved in time.");
             }
             return;
         }
@@ -357,7 +358,7 @@ private:
 
     const double initial_state_latch_timeout_seconds_{2.0};
     rclcpp::Time low_level_mode_enabled_time_{0, 0, RCL_ROS_TIME};
-    std::atomic<bool> initial_state_latched_{false};
+    std::atomic<bool> initial_low_level_state_{false};  // Robot state when low level mode was enabled
     std::atomic<bool> low_level_mode_enabled_{false};
     std::atomic<bool> interpolation_finished_{false};
     double start_time_{0};
