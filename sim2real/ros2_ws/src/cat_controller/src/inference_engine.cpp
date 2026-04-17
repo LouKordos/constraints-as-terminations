@@ -20,11 +20,12 @@ InferenceEngine::InferenceEngine(const std::filesystem::path & checkpoint_path, 
 
 // Runs inference using the passed observations for a trained policy.
 // IMPORTANT: The action joint order is the same as during training and needs conversion to SDK joint order before applying them!
-const std::vector<float> & InferenceEngine::generate_action(const stamped_robot_state & robot_state, const std::array<float, 3> & vel_command)
+const std::vector<float> & InferenceEngine::generate_action(
+    const stamped_robot_state & robot_state, const std::array<float, 3> & vel_command, const std::vector<float> & elevation_map_processed)
 {
     torch::InferenceMode guard;  // Almost no cost, thread-local, and disables more than gradguard
-    auto observation = construct_observation_tensor(
-        robot_state, vel_command, previous_action_, model_observation_dim_ == observation_dim_history, robot_state.counter == 0);
+    auto observation = construct_observation_tensor(robot_state, vel_command, elevation_map_processed, previous_action_,
+        model_observation_dim_ == observation_dim_history, robot_state.counter == 0);
     inference_input_[0] = observation;
     raw_current_action_ = policy_model_.forward(inference_input_).toTensor().contiguous();
     std::memcpy(current_action_.data(), raw_current_action_.data_ptr<float>(), num_joints_ * sizeof(float));
@@ -61,7 +62,7 @@ void InferenceEngine::load_checkpoint(const std::filesystem::path & checkpoint_p
 
 // TODO: NOT FUNCTIONAL YET BECAUSE OF MISSING ELEVATION MAP PROCESSING!
 torch::Tensor InferenceEngine::construct_observation_tensor(const stamped_robot_state & robot_state, const std::array<float, 3> & vel_command,
-    const std::vector<float> & previous_action, bool use_history, bool reset_history)
+    const std::vector<float> & elevation_map_processed, const std::vector<float> & previous_action, bool use_history, bool reset_history)
 {
     auto opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU);
     const int obs_dim = use_history ? observation_dim_history : observation_dim_no_history;
@@ -106,20 +107,11 @@ torch::Tensor InferenceEngine::construct_observation_tensor(const stamped_robot_
     const int prev_action_start_index = use_history ? (9 + 2 * history_length * num_joints_) : (33);
     observation.slice(1, prev_action_start_index, prev_action_start_index + num_joints_).copy_(prev_action);
 
-    // const int height_map_start_index = prev_action_start_index + num_joints;
-    // if (use_hardcoded_elevation) {
-    //     observation.slice(1, height_map_start_index, obs_dim).fill_(hardcoded_elevation);
-    // } else {
-    //     auto elevation_data_result = global_elevation_map_filtered.try_load_for(std::chrono::microseconds(250));
-    //     if (elevation_data_result.has_value()) {
-    //         std::vector<float> map_vector = elevation_data_result.value();
-    //         auto map_tensor_cpu = torch::from_blob(map_vector.data(), {1, elevation_grid_total_size},
-    //             opts);  // Creates view but lives until end of scope, so copy in next line is sufficient
-    //         observation.slice(1, height_map_start_index, height_map_start_index + elevation_grid_total_size).copy_(map_tensor_cpu);
-    //     } else {
-    //         shutdown_coordinator_.shutdown("Critical: Failed to load global elevation map in observation construction, exiting.");
-    //     }
-    // }
+    const int height_map_start_index = prev_action_start_index + num_joints_;
+    const int map_size = static_cast<int>(elevation_map_processed.size());
+    // Creates view but lives until end of scope, so copy in next line is sufficient
+    auto map_tensor_cpu = torch::from_blob(const_cast<float *>(elevation_map_processed.data()), {1, map_size}, opts);
+    observation.slice(1, height_map_start_index, height_map_start_index + map_size).copy_(map_tensor_cpu);
 
     return observation;
 }

@@ -252,6 +252,9 @@ private:
             shutdown_coordinator_.shutdown(std::format("Failed to fetch vel_command within {}us, exiting.", atomic_op_timeout_threshold_.count()));
             return;
         }
+        auto time_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        auto rel_time_ms = time_now_ms - start_ms_policy_inference_;
+        if (walk_a_bit_ && rel_time_ms > 30000 && rel_time_ms < 34500) { vel_command[0] = 0.9f; }
 
         // Clip velocity command components
         for (int i = 0; i < 3; i++) {
@@ -264,13 +267,25 @@ private:
             }
         }
 
-        auto time_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-        auto rel_time_ms = time_now_ms - start_ms_policy_inference_;
-        if (walk_a_bit_ && rel_time_ms > 30000 && rel_time_ms < 34500) { vel_command[0] = 0.9f; }
-        const auto & generated_action = inference_engine_.generate_action(robot_state, vel_command);
-        // Do not check if target exceeds joint limits because policy might learn to command out of range values temporarily for more rapid
-        // motion.
+        // Very important TODO: When elevation map processing is in separate node, move dimensions to params and use std::array to avoid heap
+        // allocations!
+        std::vector<float> current_elevation_map;
+        if (use_hardcoded_elevation_) {
+            current_elevation_map.assign(elevation_grid_total_size, -0.3f);
+        } else {
+            auto map_res = global_processed_elevation_map_.try_load_for(atomic_op_timeout_threshold_);
+            if (map_res.has_value()) {
+                current_elevation_map = map_res.value();
+            } else {
+                shutdown_coordinator_.shutdown(
+                    std::format("Failed to fetch elevation map within {}us, exiting.", atomic_op_timeout_threshold_.count()));
+                return;
+            }
+        }
 
+        const auto & generated_action = inference_engine_.generate_action(robot_state, vel_command, current_elevation_map);
+
+        // Do not check if target exceeds joint limits because policy might learn to command out of range values temporarily during walking.
         std::array<float, NUM_JOINTS> pd_target_sdk_order{};  // Go2 SDK native order, NOT Isaac Lab!!!
         for (int i = 0; i < NUM_JOINTS; i++) {
             int j = sdk_to_isaac_idx[i];                                                                            // Remap to go2 order
@@ -440,6 +455,11 @@ private:
     timed_atomic<stamped_robot_state> global_robot_state_{};
     timed_atomic<std::array<float, NUM_JOINTS>> pd_setpoint_sdk_order{};
     timed_atomic<std::array<float, 3>> global_vel_command{{0.0f, 0.0f, 0.0f}};
+    // TODO: USE PARAMS!
+    const int elevation_grid_width = 13;
+    const int elevation_grid_height = 11;
+    const int elevation_grid_total_size = elevation_grid_width * elevation_grid_height;
+    timed_atomic<std::vector<float>> global_processed_elevation_map_{std::vector<float>(elevation_grid_total_size)};
 
     InferenceEngine inference_engine_;
     LowLevelModeEnabler low_level_mode_enabler_;

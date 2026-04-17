@@ -43,14 +43,15 @@ class InferenceEngine
 public:
     InferenceEngine(const std::filesystem::path & checkpoint_path, const int num_joints);
     // Readonly due to const &
-    const std::vector<float> & generate_action(const stamped_robot_state & robot_state, const std::array<float, 3> & vel_command);
+    const std::vector<float> & generate_action(
+        const stamped_robot_state & robot_state, const std::array<float, 3> & vel_command, const std::vector<float> & elevation_map_processed);
     inline static constexpr int observation_dim_no_history = 188;
     inline static constexpr int observation_dim_history = 236;
     inline static constexpr int history_length = 3;
 
 private:
     torch::Tensor construct_observation_tensor(const stamped_robot_state & robot_state, const std::array<float, 3> & vel_command,
-        const std::vector<float> & previous_action, bool use_history, bool reset_history = false);
+        const std::vector<float> & elevation_map_processed, const std::vector<float> & previous_action, bool use_history, bool reset_history = false);
     void load_checkpoint(const std::filesystem::path & checkpoint_path);
 
     int num_joints_;
