@@ -19,8 +19,7 @@ git clone https://github.com/unitreerobotics/unitree_ros2 || (cd unitree_ros2 &&
 #  Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
 TARGET_HEADER="$BASE_DIR/ros2_ws/src/cat_controller/include/cat_controller/motor_crc.h"
 TARGET_SRC="$BASE_DIR/ros2_ws/src/cat_controller/src/motor_crc.cpp"
-
-# Only copy and modify if the files don't already exist
+# Only copy and modify if the files don't already exist to avoid pointless recompilation
 if [[ ! -f "$TARGET_HEADER" || ! -f "$TARGET_SRC" ]]; then
     echo "Copying and patching unitree motor_crc files..."
     cp $BASE_DIR/ros2_ws/src/third_party/unitree_ros2/example/src/include/common/motor_crc.h "$TARGET_HEADER"
