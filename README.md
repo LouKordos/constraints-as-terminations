@@ -84,7 +84,7 @@ Now you can launch the ROS nodes. In a second tmux pane, run the following:
 3. `source /app/ros2_ws/install/setup.bash`
 
 Then ensure you see `/lowstate` and under `ros2 topic list`
-To start the required ROS nodes, run `ros2 launch cat_bringup bringup.launch.py | grep -v "Failed to parse type hash for topic"`. Odom uses vicon by default (adjustable in the launch arg file of cat_bringup), and requires [https://github.com/dasc-lab/ros2-vicon-bridge](https://github.com/dasc-lab/ros2-vicon-bridge). Lastly, open RViz2 and ensure you are seeing livox, odom and the robot model.
+To start the required ROS nodes, run `ros2 launch cat_bringup bringup.launch.py | grep -v "Failed to parse type hash for topic"`. Odom uses vicon by default (adjustable in the launch arg file of cat_bringup), and requires [https://github.com/dasc-lab/ros2-vicon-bridge](https://github.com/dasc-lab/ros2-vicon-bridge). Lastly, open `ros2_ws/src/cat_bringup/rviz/go2_elevation_mapping.rviz` to inspect elevation map, pointcloud and tf tree.
 
 ### Elevation Mapping
 This is a WIP, I will add more detailed instructions when everything is working properly. A future refactoring will combine all packages into a single ros workspace, including the main policy inference and FastLIO2 and any other dependencies, so that only a single launch file needs to be run and the rest starts up automatically. However, for the time being clone my [fork](https://github.com/LouKordos/elevation_mapping_cupy/tree/ros2_humble) **and `git checkout ros2_humble`**, then build the docker container. Inside the docker shell:
