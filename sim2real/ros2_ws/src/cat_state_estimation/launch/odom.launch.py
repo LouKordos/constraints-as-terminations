@@ -47,7 +47,7 @@ def generate_launch_description():
         condition=IfCondition(use_vicon)
     )
 
-    tf_odometry_node = Node( 
+    tf_base_to_lidar_node = Node( 
         package='tf2_ros',
         executable='static_transform_publisher',
         name='base_to_livox_static_transform',
@@ -83,6 +83,8 @@ def generate_launch_description():
         use_vicon_arg,
         tf_vicon_node,
         tf_vicon_base_node,
-        tf_odometry_node,
-        go2_odometry_include
+        tf_base_to_lidar_node,
+        go2_odometry_include,
+        state_publisher_node,
+        state_converter_node
     ])
