@@ -348,12 +348,11 @@ private:
 
         // Compute relative time since low level control mode was enabled and initial state was captured
         const double t = this->get_clock()->now().seconds() - start_time_;
-        const double interpolation_duration = 5.0f;
         std::array<float, NUM_JOINTS> current_target_sdk{};
 
-        if (t < interpolation_duration) {
+        if (t < interpolation_duration_) {
             // Interpolate from initial state to default standing position
-            const float ratio = std::clamp(static_cast<float>(t / interpolation_duration), 0.0f, 1.0f);
+            const float ratio = std::clamp(static_cast<float>(t / interpolation_duration_), 0.0f, 1.0f);
             for (int i = 0; i < NUM_JOINTS; i++) {
                 int j = sdk_to_isaac_idx[i];
                 float default_pos = DEFAULT_JOINT_POSITIONS_ISAAC_ORDER[j];
