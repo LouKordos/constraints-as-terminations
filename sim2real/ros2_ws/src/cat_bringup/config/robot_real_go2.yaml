@@ -1,0 +1,24 @@
+use_vicon: true # Set to false if you want to use go2_odometry instead
+livox_publish_freq: 30.0 # Hz
+network_interface: "enx9c69d3002c7a"
+
+frames:
+  base: base
+  livox: livox_frame
+  vicon_base: vicon/Go2_Loukas/Go2_Loukas
+
+topics:
+  odom_pose: /odometry/filtered
+  vicon_pose: /vicon/Go2_Loukas/Go2_Loukas/pose
+  lowstate: /lowstate
+  livox_points: /livox/lidar
+
+# Static transform from base to the livox_frame. Update these arguments with your measured physical offsets!
+transforms:
+  base_to_livox:
+    x: 0.34
+    y: 0.0
+    z: 0.155
+    yaw: 0.0
+    pitch: 0.784
+    roll: 0.0
