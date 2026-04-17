@@ -15,7 +15,7 @@ def generate_launch_description():
 
     use_vicon_arg = DeclareLaunchArgument(
         "use_vicon",
-        default_value="true",
+        default_value="false",
         description="Decides which frame names to use for the static transform between lidar and base frame"
     )
     use_vicon = LaunchConfiguration("use_vicon")
