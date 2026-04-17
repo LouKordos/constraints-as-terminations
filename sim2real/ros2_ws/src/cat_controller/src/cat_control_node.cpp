@@ -372,6 +372,8 @@ private:
         else {
             if (!interpolation_finished_.load(std::memory_order_acquire)) {
                 interpolation_finished_.store(true, std::memory_order_release);
+                // Ensure the final standing pose is the setpoint while inference computes the first action
+                for (int i = 0; i < NUM_JOINTS; i++) { current_target_sdk[i] = DEFAULT_JOINT_POSITIONS_ISAAC_ORDER[sdk_to_isaac_idx[i]]; }
                 // Update setpoint with the final standing pose while we wait for the inference thread's first action
                 pd_setpoint_sdk_order.try_store_for(current_target_sdk, atomic_op_timeout_threshold_);
                 RCLCPP_INFO(this->get_logger(), "Interpolation finished, active control started.");
