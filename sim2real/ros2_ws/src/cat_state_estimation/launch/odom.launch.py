@@ -9,16 +9,67 @@ from launch_ros.actions import Node
 from unitree_description import GO2_DESCRIPTION_URDF_PATH
 
 def generate_launch_description():
-    # TODO: Make parameters
-    vicon_base_frame = "vicon/Go2_Loukas/Go2_Loukas"
-    odometry_base_frame = "base"
-
     use_vicon_arg = DeclareLaunchArgument(
         "use_vicon",
         default_value="false",
         description="Decides which frame names to use for the static transform between lidar and base frame"
     )
+    base_frame_arg = DeclareLaunchArgument(
+        "base_frame",
+        default_value="base",
+        description="Base frame name passed from cat_bringup/launch/bringup.launch.py."
+    )
+    livox_frame_arg = DeclareLaunchArgument(
+        "livox_frame",
+        default_value="livox_frame",
+        description="Livox frame name passed from cat_bringup/launch/bringup.launch.py."
+    )
+    vicon_base_frame_arg = DeclareLaunchArgument(
+        "vicon_base_frame",
+        default_value="vicon/Go2_Loukas/Go2_Loukas",
+        description="Vicon base frame name passed from cat_bringup/launch/bringup.launch.py."
+    )
+    base_to_livox_x_arg = DeclareLaunchArgument(
+        "base_to_livox_x",
+        default_value="0.34",
+        description="Base-to-Livox X offset passed from cat_bringup/launch/bringup.launch.py."
+    )
+    base_to_livox_y_arg = DeclareLaunchArgument(
+        "base_to_livox_y",
+        default_value="0.0",
+        description="Base-to-Livox Y offset passed from cat_bringup/launch/bringup.launch.py."
+    )
+    base_to_livox_z_arg = DeclareLaunchArgument(
+        "base_to_livox_z",
+        default_value="0.155",
+        description="Base-to-Livox Z offset passed from cat_bringup/launch/bringup.launch.py."
+    )
+    base_to_livox_yaw_arg = DeclareLaunchArgument(
+        "base_to_livox_yaw",
+        default_value="0.0",
+        description="Base-to-Livox yaw passed from cat_bringup/launch/bringup.launch.py."
+    )
+    base_to_livox_pitch_arg = DeclareLaunchArgument(
+        "base_to_livox_pitch",
+        default_value="0.784",
+        description="Base-to-Livox pitch passed from cat_bringup/launch/bringup.launch.py."
+    )
+    base_to_livox_roll_arg = DeclareLaunchArgument(
+        "base_to_livox_roll",
+        default_value="0.0",
+        description="Base-to-Livox roll passed from cat_bringup/launch/bringup.launch.py."
+    )
+
     use_vicon = LaunchConfiguration("use_vicon")
+    vicon_base_frame = LaunchConfiguration("vicon_base_frame")
+    odometry_base_frame = LaunchConfiguration("base_frame")
+    livox_frame = LaunchConfiguration("livox_frame")
+    x_offset = LaunchConfiguration("base_to_livox_x")
+    y_offset = LaunchConfiguration("base_to_livox_y")
+    z_offset = LaunchConfiguration("base_to_livox_z")
+    yaw_offset = LaunchConfiguration("base_to_livox_yaw")
+    pitch_offset = LaunchConfiguration("base_to_livox_pitch")
+    roll_offset = LaunchConfiguration("base_to_livox_roll")
 
     go2_odometry_launch_file = PathJoinSubstitution(
         [FindPackageShare("go2_odometry"), "launch", "go2_odometry_switch.launch.py"]
@@ -28,22 +79,11 @@ def generate_launch_description():
         condition=UnlessCondition(use_vicon)        
     )
 
-    # Static transform from base to the livox_frame
-    # Update these arguments with your measured physical offsets!
-    # args: 'x y z yaw pitch roll parent_frame child_frame' (meters and radians)
-    # TODO: Make params
-    x_offset = 0.34
-    y_offset = 0.0
-    z_offset = 0.155
-    roll_offset = 0.0
-    pitch_offset = 0.784
-    yaw_offset = 0.0
-
     tf_vicon_node = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         name='base_to_livox_static_transform',
-        arguments=[str(x_offset), str(y_offset), str(z_offset), str(yaw_offset), str(pitch_offset), str(roll_offset), vicon_base_frame, 'livox_frame'],
+        arguments=[x_offset, y_offset, z_offset, yaw_offset, pitch_offset, roll_offset, vicon_base_frame, livox_frame],
         output='screen',
         condition=IfCondition(use_vicon)
     )
@@ -63,7 +103,7 @@ def generate_launch_description():
         package='tf2_ros',
         executable='static_transform_publisher',
         name='base_to_livox_static_transform',
-        arguments=[str(x_offset), str(y_offset), str(z_offset), str(yaw_offset), str(pitch_offset), str(roll_offset), odometry_base_frame, 'livox_frame'],
+        arguments=[x_offset, y_offset, z_offset, yaw_offset, pitch_offset, roll_offset, odometry_base_frame, livox_frame],
         output='screen',
         condition=UnlessCondition(use_vicon)
     )
@@ -93,6 +133,15 @@ def generate_launch_description():
 
     return LaunchDescription([
         use_vicon_arg,
+        base_frame_arg,
+        livox_frame_arg,
+        vicon_base_frame_arg,
+        base_to_livox_x_arg,
+        base_to_livox_y_arg,
+        base_to_livox_z_arg,
+        base_to_livox_yaw_arg,
+        base_to_livox_pitch_arg,
+        base_to_livox_roll_arg,
         tf_vicon_node,
         tf_vicon_base_node,
         tf_base_to_lidar_node,

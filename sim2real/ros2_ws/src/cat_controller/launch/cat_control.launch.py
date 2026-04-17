@@ -13,35 +13,57 @@ def generate_launch_description():
         "cat_control_node.yaml"
     ])
 
-    use_vicon_arg = DeclareLaunchArgument(
-        "use_vicon",
-        default_value="false",
-        description="Determines which state topic to wait for."
+    pose_topic_arg = DeclareLaunchArgument(
+        "pose_topic",
+        description="Pose topic that the controller health check waits for. Passed from cat_bringup/launch/bringup.launch.py."
     )
-    use_vicon = LaunchConfiguration("use_vicon")
+    lowstate_topic_arg = DeclareLaunchArgument(
+        "lowstate_topic",
+        default_value="/lowstate",
+        description="Low-level state topic that the controller health check waits for. Passed from cat_bringup/launch/bringup.launch.py."
+    )
+    livox_points_topic_arg = DeclareLaunchArgument(
+        "livox_points_topic",
+        default_value="/livox/lidar",
+        description="Livox topic that the controller health check waits for. Passed from cat_bringup/launch/bringup.launch.py."
+    )
+    network_interface_arg = DeclareLaunchArgument(
+        "network_interface",
+        description="Network interface parameter override for cat_control_node. Passed from cat_bringup/launch/bringup.launch.py."
+    )
+
+    pose_topic = LaunchConfiguration("pose_topic")
+    lowstate_topic = LaunchConfiguration("lowstate_topic")
+    livox_points_topic = LaunchConfiguration("livox_points_topic")
+    network_interface = LaunchConfiguration("network_interface")
 
     starting_log = LogInfo(
-        msg="[HEALTH CHECK] Waiting for Odometry/Vicon and Livox topics to publish data..."
+        msg=[
+            "[HEALTH CHECK] Waiting for ",
+            lowstate_topic,
+            ", ",
+            pose_topic,
+            ", and ",
+            livox_points_topic,
+            " to publish data..."
+        ]
     )
-    odom_topic = PythonExpression([
-        "'vicon/Go2_Loukas/Go2_Loukas/pose' if '", use_vicon, "' == 'true' else '/odometry/filtered'"
-    ])
 
     health_check_cmd = ExecuteProcess(
         cmd=["sh", "-c", [
-            "ros2 topic echo --once /lowstate > /dev/null && "
-            "ros2 topic echo --once ", odom_topic, " > /dev/null && ",
-            "ros2 topic echo --once /livox/lidar > /dev/null"
+            "ros2 topic echo --once ", lowstate_topic, " > /dev/null && "
+            "ros2 topic echo --once ", pose_topic, " > /dev/null && "
+            "ros2 topic echo --once ", livox_points_topic, " > /dev/null"
         ]],
         output='log'
     )
 
     cat_control_node = Node(
         package="cat_controller",
-        executable="cat_control_node",
-        name="cat_control_node",
+        executable="cat_controller",
+        name="cat_controller",
         output="screen",
-        parameters=[config_path]
+        parameters=[config_path, {"network_interface": network_interface}]
     )
 
     start_controller_event = RegisterEventHandler(
@@ -55,7 +77,10 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        use_vicon_arg,
+        pose_topic_arg,
+        lowstate_topic_arg,
+        livox_points_topic_arg,
+        network_interface_arg,
         starting_log,
         health_check_cmd,
         start_controller_event
