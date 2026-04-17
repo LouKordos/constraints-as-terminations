@@ -81,8 +81,8 @@ public:
         RCLCPP_DEBUG(this->get_logger(), "Starting robot state subscriber.");
         rclcpp::SubscriptionOptions state_sub_options;
         state_sub_options.callback_group = state_sub_cbg_;
-        robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>("/lowstate", rclcpp::SensorDataQoS(),
-            std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1, std::placeholders::_2), state_sub_options);
+        robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>(
+            "/lowstate", rclcpp::SensorDataQoS(), std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1), state_sub_options);
         RCLCPP_DEBUG(this->get_logger(), "Started robot state subscriber.");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting robot command publisher.");
@@ -186,7 +186,7 @@ private:
         return path;
     }
 
-    void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg, const rclcpp::MessageInfo & message_info)
+    void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg)
     {
         auto steady_now = std::chrono::steady_clock::now();
         if (shutdown_coordinator_.handle_exit_if_requested() ||
@@ -358,7 +358,7 @@ private:
             if (SINUSOIDAL_DEBUG_MOTION) {
                 // Shift time so the sine wave starts smoothly at t=0 relative to interpolation end
                 const double debug_t = t - interpolation_duration;
-                const double offset = 0.1 * (1.0 - std::cos(2.0 * M_PI * 0.25 * debug_t));
+                const double offset = 0.15 * (1.0 - std::cos(2.0 * M_PI * 0.25 * debug_t));
                 const int fr_calf = 2;
                 const int fl_calf = 5;
 
