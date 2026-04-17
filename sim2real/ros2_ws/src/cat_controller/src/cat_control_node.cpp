@@ -273,7 +273,7 @@ private:
         // allocations!
         std::vector<float> current_elevation_map;
         if (use_hardcoded_elevation_) {
-            current_elevation_map.assign(elevation_grid_total_size, -0.3f);
+            current_elevation_map.assign(elevation_grid_total_size, hardcoded_elevation_);
         } else {
             auto map_res = global_processed_elevation_map_.try_load_for(atomic_op_timeout_threshold_);
             if (map_res.has_value()) {
