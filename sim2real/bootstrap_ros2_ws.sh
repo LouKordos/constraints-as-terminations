@@ -17,9 +17,18 @@ git clone --recurse-submodules https://github.com/LouKordos/FAST_LIO_ROS2.git ||
 git clone https://github.com/unitreerobotics/unitree_ros2 || (cd unitree_ros2 && git pull)
 
 #  Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
-cp $BASE_DIR/ros2_ws/src/third_party/unitree_ros2/example/src/include/common/motor_crc.h $BASE_DIR/ros2_ws/src/cat_controller/include/cat_controller/motor_crc.h
-cp $BASE_DIR/ros2_ws/src/third_party/unitree_ros2/example/src/src/common/motor_crc.cpp $BASE_DIR/ros2_ws/src/cat_controller/src/motor_crc.cpp
-sed -i 's|#include "motor_crc.h"|#include "cat_controller/motor_crc.h"|' "$BASE_DIR/ros2_ws/src/cat_controller/src/motor_crc.cpp"
+TARGET_HEADER="$BASE_DIR/ros2_ws/src/cat_controller/include/cat_controller/motor_crc.h"
+TARGET_SRC="$BASE_DIR/ros2_ws/src/cat_controller/src/motor_crc.cpp"
+
+# Only copy and modify if the files don't already exist
+if [[ ! -f "$TARGET_HEADER" || ! -f "$TARGET_SRC" ]]; then
+    echo "Copying and patching unitree motor_crc files..."
+    cp $BASE_DIR/ros2_ws/src/third_party/unitree_ros2/example/src/include/common/motor_crc.h "$TARGET_HEADER"
+    cp $BASE_DIR/ros2_ws/src/third_party/unitree_ros2/example/src/src/common/motor_crc.cpp "$TARGET_SRC"
+    sed -i 's|#include "motor_crc.h"|#include "cat_controller/motor_crc.h"|' "$TARGET_SRC"
+else
+    echo "motor_crc files already exist, skipping copy to preserve timestamps."
+fi
 
 cd $BASE_DIR/ros2_ws
 ROSDEP_MARKER=/rosdep-bootstrap-ros-ws.marker
