@@ -37,7 +37,9 @@ inline std::chrono::steady_clock::time_point get_safe_monotonic_publish_time(con
 
     // Prevent NTP backward-jumps from creating negative age
     if (message_age < std::chrono::nanoseconds(0)) {
-        RCLCPP_WARN(logger, "Negative computed message age in state callback! Ensure PTP/NTP time is synced.");
+        RCLCPP_WARN(logger,
+            "Negative computed message age in state callback! Ensure PTP/NTP time is synced. message_age=%fms, publish_timestamp_ns=%ld",
+            message_age.count() / 1e+6, publish_timestamp_ns);
         message_age = std::chrono::nanoseconds(0);
     }
 
