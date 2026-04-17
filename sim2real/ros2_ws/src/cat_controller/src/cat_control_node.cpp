@@ -387,11 +387,11 @@ private:
         }
         get_crc(command_msg_);
         // Commented out for safety for now
-        // if (shutdown_coordinator_.exit_requested()) {
-        //     RCLCPP_WARN(this->get_logger(), "NOT publishing torque command because node shutdown was requested.");
-        //     return;
-        // }
-        // command_publisher_->publish(command_msg_);
+        if (shutdown_coordinator_.exit_requested()) {
+            RCLCPP_WARN(this->get_logger(), "NOT publishing torque command because node shutdown was requested.");
+            return;
+        }
+        command_publisher_->publish(command_msg_);
     }
 
     // REMEMBER THAT ORDER MATTERS HERE FOR INITIALIZATION
