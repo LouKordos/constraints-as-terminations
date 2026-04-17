@@ -103,14 +103,14 @@ else
         echo -e "\n\033[1;32mNo warnings detected during compilation.\033[0m"
     fi
 
-    pkill -f tracy-capture || echo "No tracy capture instances running."
-    mkdir -p /app/logs/tracy-capture/
-    mkdir -p /app/tracy-profiles/
-    TRACY_LOG_FILE="/app/logs/tracy-capture/tracy-capture-$(date -u '+%Y-%m-%d-%H-%M-%S').log"
-    # Start a new tracy-capture instance and redirect output to the log file 
-    /tracy-for-capture/capture/build/tracy-capture -o /app/logs/tracy-profiles/$(date -u '+%Y-%m-%d-%H-%M-%S').tracy > "$TRACY_LOG_FILE" 2>&1 & 
-    TRACY_PID=$!
-    echo "Tracy capture started with PID $TRACY_PID. Logs are being written to $TRACY_LOG_FILE"
+    # pkill -f tracy-capture || echo "No tracy capture instances running."
+    # mkdir -p /app/logs/tracy-capture/
+    # TRACY_LOG_FILE="/app/logs/tracy-capture/tracy-capture-$(date -u '+%Y-%m-%d-%H-%M-%S').log"
+    # # Start a new tracy-capture instance and redirect output to the log file 
+    # /tracy-for-capture/capture/build/tracy-capture -o /app/logs/tracy-profiles/$(date -u '+%Y-%m-%d-%H-%M-%S').tracy > "$TRACY_LOG_FILE" 2>&1 & 
+    # TRACY_PID=$!
+    # echo "Tracy capture started with PID $TRACY_PID. Logs are being written to $TRACY_LOG_FILE"
+    # chmod -R 777 /app/logs
 
     echo "Remember to source /app/sim2real/ros2_ws/install/setup.bash if you are working with ROS custom packages! bashrc already sources /opt/ros/$ROS_DISTRO/setup.bash"
     echo "Also remember to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."
