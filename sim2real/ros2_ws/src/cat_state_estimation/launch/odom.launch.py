@@ -48,6 +48,25 @@ def generate_launch_description():
         condition=UnlessCondition(use_vicon)
     )
 
+    state_publisher_node = Node(
+        package="robot_state_publisher",
+        executable="robot_state_publisher",
+        name="robot_state_publisher",
+        output="screen",
+        parameters=[{"robot_description": robot_desc}],
+        arguments=[GO2_DESCRIPTION_URDF_PATH],
+        condition=IfCondition(use_vicon)
+    )
+
+    state_converter_node = Node(
+        package="go2_odometry",
+        executable="state_converter_node",
+        name="state_converter_node",
+        parameters=[],
+        output="screen",
+        condition=IfCondition(use_vicon)
+    )
+
     return LaunchDescription([
         use_vicon_arg,
         tf_vicon_node,
