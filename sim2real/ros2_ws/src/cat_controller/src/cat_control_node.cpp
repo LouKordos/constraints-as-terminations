@@ -56,7 +56,7 @@ public:
           checkpoint_path_(validate_checkpoint_path(checkpoint_path_str_)),
           inference_engine_(checkpoint_path_, NUM_JOINTS),
           low_level_mode_enabler_(
-              ament_index_cpp::get_package_prefix("cat_controller") + "/lib/cat_controller/release_motion_mode", network_interface_, 45.0),
+              ament_index_cpp::get_package_prefix("cat_controller") + "/lib/cat_controller/release_motion_mode", network_interface_, 10),
 
           shutdown_coordinator_(this->get_logger(), this->get_node_base_interface()->get_context(), [this]() {
               // Very important to put any cleanup for the node here!
