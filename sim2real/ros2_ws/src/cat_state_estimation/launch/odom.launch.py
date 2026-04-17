@@ -12,16 +12,12 @@ def generate_launch_description():
     vicon_base_frame = "vicon/Go2_Loukas/Go2_Loukas"
     odometry_base_frame = "base"
 
-    with open(GO2_DESCRIPTION_URDF_PATH, "r") as info:
-        robot_desc = info.read()
-
     use_vicon_arg = DeclareLaunchArgument(
         "use_vicon",
         default_value="true",
         description="Decides which frame names to use for the static transform between lidar and base frame"
     )
     use_vicon = LaunchConfiguration("use_vicon")
-
 
     go2_odometry_launch_file = PathJoinSubstitution(
         [FindPackageShare("go2_odometry"), "launch", "go2_odometry_switch.launch.py"]
@@ -60,6 +56,9 @@ def generate_launch_description():
         condition=UnlessCondition(use_vicon)
     )
 
+    # This isn't really best practice, but directly copied from go2_odometry to get the robot model showing up in RViz
+    with open(GO2_DESCRIPTION_URDF_PATH, "r") as info:
+        robot_desc = info.read()
     state_publisher_node = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
