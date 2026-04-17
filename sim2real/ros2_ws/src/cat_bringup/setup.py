@@ -1,7 +1,7 @@
 from setuptools import find_packages, setup
 import os, glob
 
-package_name = 'go2_livox_bringup'
+package_name = 'cat_bringup'
 
 setup(
     name=package_name,
@@ -17,7 +17,7 @@ setup(
     zip_safe=True,
     maintainer='Loukas K.',
     maintainer_email='loukas.kordos@uni-tuebingen.de',
-    description='Launch required nodes for odometry, elevation mapping, state publisher, mid360 lidar readouts',
+    description='Main launch orchestrator for CaT Sim2Real',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={

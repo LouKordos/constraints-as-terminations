@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>go2_livox_bringup</name>
+  <name>cat_bringup</name>
   <version>0.0.1</version>
-  <description>Launch required nodes for odometry, elevation mapping, state publisher, mid360 lidar readouts</description>
+  <description>Main high level launch orchestrator</description>
   <maintainer email="loukas.kordos@uni-tuebingen.de">Loukas K.</maintainer>
   <license>TODO: License declaration</license>
 
