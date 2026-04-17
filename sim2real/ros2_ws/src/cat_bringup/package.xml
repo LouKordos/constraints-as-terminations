@@ -13,6 +13,9 @@
   <depend>livox_ros_driver2</depend>
   <depend>go2_odometry</depend>
 
+  <exec_depend>cat_controller</exec_depend>
+  <exec_depend>cat_state_estimation</exec_depend>
+
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
