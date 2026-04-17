@@ -123,6 +123,18 @@ RUN echo 'echo "1. Source /app/sim2real/ros2_ws/install/setup.bash if you are wo
 RUN echo 'echo "2. Export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."' >> /root/.bashrc
 RUN echo 'echo "3. Run tmux inside the docker container for persistent sessions, access it from a recent version of Konsole, that way OSC-52 copying should work through the container."' >> /root/.bashrc
 
+RUN echo "# Don't put duplicate lines or lines starting with space in the history. See bash(1) for more options" >> /root/.bashrc
+RUN echo "HISTCONTROL=ignoreboth" >> /root/.bashrc
+RUN echo "# append to the history file, don't overwrite it" >> /root/.bashrc
+RUN echo "shopt -s histappend" >> /root/.bashrc
+RUN echo "HISTSIZE=10000" >> /root/.bashrc
+RUN echo "HISTFILESIZE=10000" >> /root/.bashrc
+RUN echo "# After each command, reload history" >> /root/.bashrc
+RUN echo 'export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"' >> /root/.bashrc
+RUN echo "# check the window size after each command and, if necessary," >> /root/.bashrc
+RUN echo "# update the values of LINES and COLUMNS." >> /root/.bashrc
+RUN echo "shopt -s checkwinsize" >> /root/.bashrc
+
 COPY . /app
 COPY ./sim2real/.vimrc /root/.vimrc
 COPY ./sim2real/.tmux.conf /root/.tmux.conf
