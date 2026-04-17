@@ -32,13 +32,13 @@ bool LowLevelModeEnabler::start(std::string & error_message)
     }
 
     if (fork_result == 0) {
-        const char * loader_path = "/lib64/ld-linux-x86-64.so.2";
         const char * library_path = "/usr/local/lib:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu";
-
-        execl(loader_path, loader_path, "--library-path", library_path, helper_binary_path_.c_str(), network_interface_.c_str(),
-            static_cast<char *>(nullptr));
-        std::cerr << "execl() failed for release_motion_mode via ld-linux: " << std::strerror(errno) << std::endl;
-        _exit(127);
+        // Replaces the ROS LD_LIBRARY_PATH for this child process only so that it finds the correct cyclonedds and not the ros one.
+        // Otherwise the version mismatch causes segfaults
+        setenv("LD_LIBRARY_PATH", "/usr/local/lib", 1);
+        execl(helper_binary_path_.c_str(), "release_motion_mode", network_interface_.c_str(), static_cast<char *>(nullptr));
+        std::cerr << "execl() failed for release_motion_mode: " << std::strerror(errno) << std::endl;
+        _exit(169);
     }
 
     child_pid_ = fork_result;
