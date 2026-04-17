@@ -52,6 +52,7 @@ public:
           vel_command_mag_limit_(declare_and_get_param<std::vector<double>>("vel_command_mag_limit")),
 
           interpolation_duration_(declare_and_get_param<double>("interpolation_duration_sec")),
+          stabilization_duration_(declare_and_get_param<double>("stabilization_duration_sec")),
           initial_state_save_timeout_seconds_(declare_and_get_param<double>("initial_state_save_timeout_sec")),
 
           checkpoint_path_(validate_checkpoint_path(checkpoint_path_str_)),
@@ -362,7 +363,13 @@ private:
             // Set to latest state so that no jumps occur when switching to applying this setpoint
             pd_setpoint_sdk_order.try_store_for(current_target_sdk, atomic_op_timeout_threshold_);
 
-        } else {
+        } else if (t < interpolation_duration_ + stabilization_duration_) {
+            for (int i = 0; i < NUM_JOINTS; i++) { current_target_sdk[i] = DEFAULT_JOINT_POSITIONS_ISAAC_ORDER[sdk_to_isaac_idx[i]]; }
+            pd_setpoint_sdk_order.try_store_for(current_target_sdk, atomic_op_timeout_threshold_);
+            // Keep interpolation_finished_ false so policy_inference_callback stays blocked
+        }
+
+        else {
             if (!interpolation_finished_.load(std::memory_order_acquire)) {
                 interpolation_finished_.store(true, std::memory_order_release);
                 // Update setpoint with the final standing pose while we wait for the inference thread's first action
@@ -372,7 +379,7 @@ private:
 
             if (sinusoidal_debug_motion_) {
                 // Shift time so the sine wave starts smoothly at t=0 relative to interpolation end
-                const double debug_t = t - interpolation_duration;
+                const double debug_t = t - (interpolation_duration_ + stabilization_duration_);
                 const double offset = 0.2 * (1.0 - std::cos(2.0 * M_PI * 0.25 * debug_t));
                 const int fr_calf = 2;
                 const int fl_calf = 5;
@@ -431,6 +438,7 @@ private:
     const std::vector<double> vel_command_mag_limit_;
 
     const double interpolation_duration_;
+    const double stabilization_duration_;
     const double initial_state_save_timeout_seconds_;
 
     const std::filesystem::path checkpoint_path_;
