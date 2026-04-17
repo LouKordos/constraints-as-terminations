@@ -16,6 +16,7 @@
 #include "cat_controller/inference_engine.hpp"
 #include "cat_controller/low_level_mode_enabler.hpp"
 #include "cat_controller/motor_crc.h"  // Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
+#include "cat_controller/old_elevation_map_processor.hpp"
 #include "cat_controller/shutdown_coordinator.hpp"
 #include "cat_controller/stamped_robot_state.hpp"
 #include "cat_controller/time_utils.hpp"
@@ -106,6 +107,13 @@ public:
         RCLCPP_DEBUG(this->get_logger(), "Starting policy inference / control loop timer.");
         policy_inference_timer_ = this->create_wall_timer(20ms, std::bind(&CaTControlNode::policy_inference_callback, this), inference_timer_cbg_);
         RCLCPP_DEBUG(this->get_logger(), "Started policy inference / control loop timer.");
+
+        // TODO: Remove once you have clean elevation mapping code
+        const char * ros_log_dir = std::getenv("ROS_LOG_DIR");
+        std::string log_directory = ros_log_dir ? std::string(ros_log_dir) + "/" : "/tmp/";
+        RCLCPP_DEBUG(this->get_logger(), "Starting ElevationMapProcessor logging to %s", log_directory.c_str());
+        elevation_processor_ = std::make_unique<ElevationMapProcessor>(
+            log_directory, "min_filter", 1, shutdown_coordinator_, this->get_logger(), global_robot_state_, global_processed_elevation_map_);
 
         // Dump all node parameters to logs
         std::string param_dump = "=== Node Parameters ===\n";
@@ -475,6 +483,9 @@ private:
     rclcpp::CallbackGroup::SharedPtr inference_timer_cbg_;
     // TODO: Add subscriber for PROCESSED elevation map (separate node will handle making it robot-centric so that this node just needs to pass
     // array of floats to InferenceEngine)
+
+    // TODO: Remove once you have clean elevation mapping processing node
+    std::unique_ptr<ElevationMapProcessor> elevation_processor_;
 };
 
 int main(int argc, char * argv[])

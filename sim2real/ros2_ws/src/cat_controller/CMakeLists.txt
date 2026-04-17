@@ -18,13 +18,29 @@ find_package(Torch REQUIRED)
 find_package(fmt REQUIRED)
 find_package(ament_index_cpp)
 
+include(FetchContent)
+FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
+FetchContent_MakeAvailable(json)
+find_package(cppzmq REQUIRED)
+
 add_library(inference_engine STATIC src/inference_engine.cpp)
 target_include_directories(inference_engine PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
 target_link_libraries(inference_engine PUBLIC ${TORCH_LIBRARIES})
 
 add_executable(cat_controller src/cat_control_node.cpp src/motor_crc.cpp src/low_level_mode_enabler.cpp)
 target_include_directories(cat_controller PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
-target_link_libraries(cat_controller PUBLIC inference_engine rclcpp::rclcpp tf2::tf2 ${std_msgs_TARGETS} ${unitree_go_TARGETS} ${unitree_api_TARGETS} fmt::fmt ament_index_cpp::ament_index_cpp)
+target_link_libraries(cat_controller PUBLIC 
+  inference_engine 
+  rclcpp::rclcpp 
+  tf2::tf2 
+  ament_index_cpp::ament_index_cpp 
+  ${std_msgs_TARGETS} 
+  ${unitree_go_TARGETS} 
+  ${unitree_api_TARGETS} 
+  fmt::fmt 
+  nlohmann_json::nlohmann_json
+  cppzmq
+)
 
 add_executable(projected_gravity_equivalence_test_node src/projected_gravity_equivalence_test_node.cpp)
 target_link_libraries(projected_gravity_equivalence_test_node PUBLIC rclcpp::rclcpp tf2::tf2)
