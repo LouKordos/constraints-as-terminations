@@ -44,6 +44,7 @@ Training and Isaac lab-related tasks were tested without docker, by using `creat
 
 ## Sim2Real
 For deploying on the real robot, the `sim2real` directory is relevant. It uses docker containers for ROS and you should build and run using `build-and-run.sh`. Check the options inside the script.
+**IMPORTANT NOTE: The code in src, such as `run_policy.cpp` is deprecated and should not be used for anything. The main updated code is in ros2_ws/src!**
 
 Initial setup steps:
 1. Run `xhost +local:docker` on the host (outside docker) so that GUI applications such as RViz2 work through docker.
