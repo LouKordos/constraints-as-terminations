@@ -32,7 +32,6 @@ bool LowLevelModeEnabler::start(std::string & error_message)
     }
 
     if (fork_result == 0) {
-        const char * library_path = "/usr/local/lib:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu";
         // Replaces the ROS LD_LIBRARY_PATH for this child process only so that it finds the correct cyclonedds and not the ros one.
         // Otherwise the version mismatch causes segfaults
         setenv("LD_LIBRARY_PATH", "/usr/local/lib", 1);
