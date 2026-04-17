@@ -6,15 +6,12 @@ set -x # After verbose source
 
 BASE_DIR=/app/sim2real/ # In case you want to run outside docker
 
-# TODO: Use dependencies.repos and vcs, pin commits
 # Use third_party for any external packages because it's ignored by git. For custom code, use ros2_ws directly as that will be tracked by git.
-mkdir -p $BASE_DIR/ros2_ws/src/third_party && cd $BASE_DIR/ros2_ws/src/third_party
-git clone https://github.com/inria-paris-robotics-lab/go2_odometry.git || (cd go2_odometry && git pull)
-git clone https://github.com/inria-paris-robotics-lab/unitree_description.git || (cd unitree_description && git pull)
-git clone https://github.com/Ericsii/livox_ros_driver2 -b feature/use-standard-unit || (cd livox_ros_driver2 && git pull)
-git clone --recurse-submodules https://github.com/LouKordos/FAST_LIO_ROS2.git || (cd FAST_LIO_ROS2 && git pull)
-# git clone https://github.com/LouKordos/LiDAR_IMU_Init.git/ || (cd LiDAR_IMU_Init && git pull)
-git clone https://github.com/unitreerobotics/unitree_ros2 || (cd unitree_ros2 && git pull)
+echo "Importing repositories via vcs..."
+git config --global url."https://github.com/".insteadOf git@github.com:
+vcs import $BASE_DIR/ros2_ws/src < $BASE_DIR/dependencies.repos
+echo "Initializing git submodules for imported packages..."
+find $BASE_DIR/ros2_ws/src -type d -name ".git" -execdir git submodule update --init --recursive \;
 
 #  Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
 TARGET_HEADER="$BASE_DIR/ros2_ws/src/cat_controller/include/cat_controller/motor_crc.h"
