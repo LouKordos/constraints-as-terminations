@@ -357,7 +357,6 @@ private:
         const double t = this->get_clock()->now().seconds() - start_time_;
         const double interpolation_duration = 5.0f;
         std::array<float, NUM_JOINTS> current_target_sdk{};
-        const bool SINUSOIDAL_DEBUG_MOTION = true;
 
         if (t < interpolation_duration) {
             // Interpolate from initial state to default standing position
@@ -379,7 +378,7 @@ private:
                 RCLCPP_INFO(this->get_logger(), "Interpolation finished, active control started.");
             }
 
-            if (SINUSOIDAL_DEBUG_MOTION) {
+            if (sinusoidal_debug_motion_) {
                 // Shift time so the sine wave starts smoothly at t=0 relative to interpolation end
                 const double debug_t = t - interpolation_duration;
                 const double offset = 0.2 * (1.0 - std::cos(2.0 * M_PI * 0.25 * debug_t));
