@@ -17,7 +17,7 @@ setup(
     zip_safe=True,
     maintainer='root',
     maintainer_email='loukas.kordos@uni-tuebingen.de',
-    description='TODO: Package description',
+    description='Package for odom and lidar setup',
     license='TODO: License declaration',
     extras_require={
         'test': [
