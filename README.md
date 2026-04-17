@@ -43,7 +43,7 @@ class ConstraintsCfg:
 Training and Isaac lab-related tasks were tested without docker, by using `create-isaac-lab-env-uv.py`. Check the slurm config and the `justfile` for available commands, as well as the `scripts` directory.
 
 ## Sim2Real
-For deploying on the real robot, the `sim2real` directory is relevant. It uses docker containers for ROS and you should build and run using `build-and-run.sh`. Check the options inside the script.
+For deploying on the real robot, the `sim2real` directory is relevant. It uses docker for ROS and you should build and run using `build-and-run.sh`. Check the options inside the script.
 **IMPORTANT NOTE: The code in src, such as `run_policy.cpp` is deprecated and should not be used for anything. The main updated code is in ros2_ws/src!**
 
 Initial setup steps:
@@ -72,13 +72,11 @@ To check if everything is set up properly:
 
 
 ### Run the policy
-The `build-and-run.sh` script is responsible for building both the docker container and the actual code base, so you simply run it after cloning the repository and then once more inside the container. The script will automatically enter a shell inside the container and it is recommended to use tmux so that OSC-52 can be used for copying via SSH. 
+The `build-and-run.sh` script is responsible for building both the docker container and the actual code base, so you simply run it after cloning the repository and then once more inside the container. The script will automatically enter a shell inside the container and it is recommended to use tmux so that OSC-52 can be used for copying via SSH. Since run_policy is the old code-path, follow the steps below to use the up-to-date ROS node for controlling the robot:
 
-**Important:** Launching the ROS nodes first will cause issues because the Unitree Go2 publishes odometry and some other topics only when high level control mode is enabled (low level control mode **disabled**), and disables them once you want to control the actuators directly. Follow the steps below to correctly start up the policy:
-
-1. **In a new terminal without ROS sourced**: Execute `build-and-run.sh` inside the docker container as a first step, press enter and wait for it to enter low level control mode, so that the robot disables the publishers for these topics. Ensure the robot is standing in place for a few seconds at least, then cancel using `CTRL+C`.
-2. Adjust `/app/ros2_ws/src/third_party/livox_ros_driver2/config/MID360_config.json`: The host ip should be set to the machine that is running the docker container, the LIDAR IP should be the one you set in Livox Viewer (same subnet as robot).
-3. Adjust extrinsics in `/app/ros2_ws/src/cat_state_estimation/launch/livox.launch.py` depending on how and where you mounted your LIDAR. This will create a static transform publisher to define where the lidar is relative to the base link.
+1. Execute `build-and-run.sh` inside the docker container as a first step.
+2. Adjust `/app/ros2_ws/src/third_party/livox_ros_driver2/config/MID360_config.json`: The host IP entries should be set to the machine that is running the docker container, the LIDAR IP should be the one you set in Livox Viewer (same subnet as robot).
+3. Adjust extrinsics in `/app/ros2_ws/src/cat_bringup/config/robot_real_go2.yaml`, depending on how and where you mounted your LIDAR. This will create a static transform publisher to define where the lidar is relative to the base link.
 
 Now you can launch the ROS nodes. In a second tmux pane, run the following: 
 1. `bootstrap_ros2_ws.sh`
@@ -86,7 +84,7 @@ Now you can launch the ROS nodes. In a second tmux pane, run the following:
 3. `source /app/ros2_ws/install/setup.bash`
 
 Then ensure you see `/lowstate` and under `ros2 topic list`
-To start the required ROS nodes, run `ros2 launch cat_state_estimation bringup.launch.py | grep -v "Failed to parse type hash for topic"`. Note that you can pass `use_vicon:=True` to replace odometry with vicon motion tracking. This requires a tf publisher using something like [https://github.com/dasc-lab/ros2-vicon-bridge](https://github.com/dasc-lab/ros2-vicon-bridge). Lastly, open rviz2 and ensure `/tf` and the `/odom` frame work properly.
+To start the required ROS nodes, run `ros2 launch cat_bringup bringup.launch.py | grep -v "Failed to parse type hash for topic"`. Odom uses vicon by default (adjustable in the launch arg file of cat_bringup), and requires [https://github.com/dasc-lab/ros2-vicon-bridge](https://github.com/dasc-lab/ros2-vicon-bridge). Lastly, open RViz2 and ensure you are seeing livox, odom and the robot model.
 
 ### Elevation Mapping
 This is a WIP, I will add more detailed instructions when everything is working properly. A future refactoring will combine all packages into a single ros workspace, including the main policy inference and FastLIO2 and any other dependencies, so that only a single launch file needs to be run and the rest starts up automatically. However, for the time being clone my [fork](https://github.com/LouKordos/elevation_mapping_cupy/tree/ros2_humble) **and `git checkout ros2_humble`**, then build the docker container. Inside the docker shell:
