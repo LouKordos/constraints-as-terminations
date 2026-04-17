@@ -69,8 +69,8 @@ def generate_launch_description():
             "[HEALTH CHECK] Waiting for ",
             lowstate_topic,
             ", ",
-            pose_topic,
-            ", and ",
+            # pose_topic,
+            # ", and ",
             livox_points_topic,
             " to publish data..."
         ]
@@ -83,7 +83,7 @@ def generate_launch_description():
             "--timeout-sec",
             "30.0",
             lowstate_topic,
-            pose_topic,
+            # pose_topic,
             livox_points_topic,
         ],
         output="screen",
