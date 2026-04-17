@@ -8,19 +8,6 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
-    livox_config_path = os.path.join(get_package_share_directory('livox_ros_driver2'), 'config', 'MID360_config.json')
-
-    # Static transform from base to the livox_frame
-    # Update these arguments with your measured physical offsets!
-    # args: 'x y z yaw pitch roll parent_frame child_frame' (meters and radians)
-    # TODO: Make params
-    x_offset = 0.34
-    y_offset = 0.0
-    z_offset = 0.155
-    roll_offset = 0.0
-    pitch_offset = 0.784
-    yaw_offset = 0.0
-    
     livox_config_path = PathJoinSubstitution([
         FindPackageShare("livox_ros_driver2"), "config", "MID360_config.json"
     ])
