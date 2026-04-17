@@ -1,5 +1,5 @@
 from setuptools import find_packages, setup
-import os
+import os, glob
 
 package_name = 'cat_state_estimation'
 
