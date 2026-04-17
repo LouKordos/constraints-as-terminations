@@ -77,7 +77,7 @@ The `build-and-run.sh` script is responsible for building both the docker contai
 
 1. **In a new terminal without ROS sourced**: Execute `build-and-run.sh` inside the docker container as a first step, press enter and wait for it to enter low level control mode, so that the robot disables the publishers for these topics. Ensure the robot is standing in place for a few seconds at least, then cancel using `CTRL+C`.
 2. Adjust `/app/ros2_ws/src/third_party/livox_ros_driver2/config/MID360_config.json`: The host ip should be set to the machine that is running the docker container, the LIDAR IP should be the one you set in Livox Viewer (same subnet as robot).
-3. Adjust extrinsics in `/app/ros2_ws/src/go2_livox_bringup/launch/livox.launch.py` depending on how and where you mounted your LIDAR. This will create a static transform publisher to define where the lidar is relative to the base link.
+3. Adjust extrinsics in `/app/ros2_ws/src/cat_state_estimation/launch/livox.launch.py` depending on how and where you mounted your LIDAR. This will create a static transform publisher to define where the lidar is relative to the base link.
 
 Now you can launch the ROS nodes. In a second tmux pane, run the following: 
 1. `bootstrap_ros2_ws.sh`
@@ -85,7 +85,7 @@ Now you can launch the ROS nodes. In a second tmux pane, run the following:
 3. `source /app/ros2_ws/install/setup.bash`
 
 Then ensure you see `/lowstate` and under `ros2 topic list`
-To start the required ROS nodes, run `ros2 launch go2_livox_bringup bringup.launch.py | grep -v "Failed to parse type hash for topic"`. Note that you can pass `use_vicon:=True` to replace odometry with vicon motion tracking. This requires a tf publisher using something like [https://github.com/dasc-lab/ros2-vicon-bridge](https://github.com/dasc-lab/ros2-vicon-bridge). Lastly, open rviz2 and ensure `/tf` and the `/odom` frame work properly.
+To start the required ROS nodes, run `ros2 launch cat_state_estimation bringup.launch.py | grep -v "Failed to parse type hash for topic"`. Note that you can pass `use_vicon:=True` to replace odometry with vicon motion tracking. This requires a tf publisher using something like [https://github.com/dasc-lab/ros2-vicon-bridge](https://github.com/dasc-lab/ros2-vicon-bridge). Lastly, open rviz2 and ensure `/tf` and the `/odom` frame work properly.
 
 ### Elevation Mapping
 This is a WIP, I will add more detailed instructions when everything is working properly. A future refactoring will combine all packages into a single ros workspace, including the main policy inference and FastLIO2 and any other dependencies, so that only a single launch file needs to be run and the rest starts up automatically. However, for the time being clone my [fork](https://github.com/LouKordos/elevation_mapping_cupy/tree/ros2_humble) **and `git checkout ros2_humble`**, then build the docker container. Inside the docker shell:
