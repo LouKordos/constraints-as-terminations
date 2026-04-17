@@ -36,7 +36,6 @@ FetchContent_MakeAvailable(json)
 
 find_package(Threads REQUIRED)
 find_package(unitree_sdk2 REQUIRED)
-list(APPEND CMAKE_PREFIX_PATH "/torch/libtorch/")
 find_package(Torch REQUIRED)
 find_package(cppzmq REQUIRED)
 
