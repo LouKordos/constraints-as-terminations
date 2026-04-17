@@ -29,7 +29,7 @@ def generate_launch_description():
     )
     network_interface_arg = DeclareLaunchArgument(
         "network_interface",
-        description="Network interface parameter override for cat_control_node. Passed from cat_bringup/launch/bringup.launch.py."
+        description="Network interface parameter override for cat_controller. Passed from cat_bringup/launch/bringup.launch.py."
     )
 
     pose_topic = LaunchConfiguration("pose_topic")
