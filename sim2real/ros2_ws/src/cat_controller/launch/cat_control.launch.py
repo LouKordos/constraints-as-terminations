@@ -1,16 +1,43 @@
-import os
 from launch import LaunchDescription
-from launch.actions import RegisterEventHandler, ExecuteProcess, LogInfo, DeclareLaunchArgument
+from launch.actions import (
+    DeclareLaunchArgument,
+    EmitEvent,
+    ExecuteProcess,
+    LogInfo,
+    RegisterEventHandler,
+)
 from launch.event_handlers import OnProcessExit
-from launch.substitutions import LaunchConfiguration, PythonExpression, PathJoinSubstitution
+from launch.events import Shutdown
+from launch.substitutions import FindExecutable, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+
+def _handle_health_check_exit(event, context, controller_node):
+    if event.returncode == 0:
+        return [
+            LogInfo(msg="[HEALTH CHECK PASSED] All sensors active. Starting CaT Control Node..."),
+            controller_node,
+        ]
+
+    return [
+        LogInfo(
+            msg=f"[HEALTH CHECK FAILED] Topic wait helper exited with code {event.returncode}. Shutting down bringup."
+        ),
+        EmitEvent(event=Shutdown(reason="Controller health check failed")),
+    ]
+
 
 def generate_launch_description():
     config_path = PathJoinSubstitution([
         FindPackageShare("cat_controller"),
         "config",
         "cat_control_node.yaml"
+    ])
+    wait_for_topics_script = PathJoinSubstitution([
+        FindPackageShare("cat_controller"),
+        "launch",
+        "wait_for_topics.py"
     ])
 
     pose_topic_arg = DeclareLaunchArgument(
@@ -50,12 +77,16 @@ def generate_launch_description():
     )
 
     health_check_cmd = ExecuteProcess(
-        cmd=["sh", "-c", [
-            "ros2 topic echo --once ", lowstate_topic, " > /dev/null && "
-            "ros2 topic echo --once ", pose_topic, " > /dev/null && "
-            "ros2 topic echo --once ", livox_points_topic, " > /dev/null"
-        ]],
-        output='log'
+        cmd=[
+            FindExecutable(name="python3"),
+            wait_for_topics_script,
+            "--timeout-sec",
+            "30.0",
+            lowstate_topic,
+            pose_topic,
+            livox_points_topic,
+        ],
+        output="screen",
     )
 
     cat_control_node = Node(
@@ -69,10 +100,7 @@ def generate_launch_description():
     start_controller_event = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=health_check_cmd,
-            on_exit=[
-                LogInfo(msg="[HEALTH CHECK PASSED] All sensors active. Starting CaT Control Node..."),
-                cat_control_node
-            ]
+            on_exit=lambda event, context: _handle_health_check_exit(event, context, cat_control_node)
         )
     )
 
