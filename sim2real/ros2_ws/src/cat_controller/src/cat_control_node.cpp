@@ -239,7 +239,7 @@ private:
         auto robot_state = robot_state_res.value();
         auto now = std::chrono::steady_clock::now();
         auto delta = now - robot_state.timestamp;
-        if (delta > stale_state_age_threshold_ && robot_state.counter > 0) {  // Discard first iteration
+        if (delta > stale_state_age_threshold_ && inference_iteration_counter_ > 0) {  // Discard first iteration
             shutdown_coordinator_.shutdown(
                 std::format("State timestamp too old, allowed threshold={}ms, actual state age={}ms. Exiting to prevent outdated states.",
                     stale_state_age_threshold_.count(), std::chrono::duration_cast<std::chrono::milliseconds>(delta).count()));
