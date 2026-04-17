@@ -5,12 +5,15 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.actions import Node
-
+from unitree_description import GO2_DESCRIPTION_URDF_PATH
 
 def generate_launch_description():
     # TODO: Make parameters
     vicon_base_frame = "vicon/Go2_Loukas/Go2_Loukas"
     odometry_base_frame = "base"
+
+    with open(GO2_DESCRIPTION_URDF_PATH, "r") as info:
+        robot_desc = info.read()
 
     use_vicon_arg = DeclareLaunchArgument(
         "use_vicon",
@@ -18,6 +21,15 @@ def generate_launch_description():
         description="Decides which frame names to use for the static transform between lidar and base frame"
     )
     use_vicon = LaunchConfiguration("use_vicon")
+
+
+    go2_odometry_launch_file = PathJoinSubstitution(
+        [FindPackageShare("go2_odometry"), "launch", "go2_odometry_switch.launch.py"]
+    )
+    go2_odometry_include = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([go2_odometry_launch_file]),
+        condition=UnlessCondition(use_vicon)        
+    )
 
     tf_vicon_node = Node(
         package='tf2_ros',
@@ -72,4 +84,5 @@ def generate_launch_description():
         tf_vicon_node,
         tf_vicon_base_node,
         tf_odometry_node,
+        go2_odometry_include
     ])
