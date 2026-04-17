@@ -358,7 +358,7 @@ private:
             if (SINUSOIDAL_DEBUG_MOTION) {
                 // Shift time so the sine wave starts smoothly at t=0 relative to interpolation end
                 const double debug_t = t - interpolation_duration;
-                const double offset = 0.15 * (1.0 - std::cos(2.0 * M_PI * 0.25 * debug_t));
+                const double offset = 0.2 * (1.0 - std::cos(2.0 * M_PI * 0.25 * debug_t));
                 const int fr_calf = 2;
                 const int fl_calf = 5;
 
