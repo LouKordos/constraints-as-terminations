@@ -19,7 +19,6 @@ def generate_launch_description():
     )
     livox_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([livox_launch_file]),
-        launch_arguments={"use_vicon": use_vicon}.items()
     )
 
     odom_launch_file = PathJoinSubstitution(
