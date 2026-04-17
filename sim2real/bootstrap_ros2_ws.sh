@@ -40,6 +40,7 @@ rosdep install --from-paths $BASE_DIR/ros2_ws/src --ignore-src -r -y
 export CMAKE_EXPORT_COMPILE_COMMANDS=ON
 COLCON_ARGS=(
     --cmake-args
+    "-G Ninja"
     "-DCMAKE_BUILD_TYPE=Release"
     "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
     "-DBUILD_TESTING=OFF"
