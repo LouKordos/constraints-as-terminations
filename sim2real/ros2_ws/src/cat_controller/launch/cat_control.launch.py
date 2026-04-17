@@ -71,7 +71,7 @@ def generate_launch_description():
             ", ",
             # pose_topic,
             # ", and ",
-            livox_points_topic,
+            # livox_points_topic,
             " to publish data..."
         ]
     )
@@ -84,7 +84,7 @@ def generate_launch_description():
             "30.0",
             lowstate_topic,
             # pose_topic,
-            livox_points_topic,
+            # livox_points_topic,
         ],
         output="screen",
     )
