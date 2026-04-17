@@ -112,30 +112,6 @@ else
     TRACY_PID=$!
     echo "Tracy capture started with PID $TRACY_PID. Logs are being written to $TRACY_LOG_FILE"
 
-    BAG_TS="$(date -u +'%Y-%m-%d_%H-%M-%S')"
-    BAG_DIR="/app/logs/bags/utc_${BAG_TS}"
-    LOG_DIR="/app/logs/bags/utc_${BAG_TS}"
-    mkdir -p "${BAG_DIR}" "${LOG_DIR}"
-    # Launch recorder in isolated subshell:
-    (
-        export ROS_DOMAIN_ID=0
-        set +x
-        source /opt/ros/$ROS_DISTRO/setup.bash
-        set -x
-        cd "${BAG_DIR}"
-        exec ros2 bag record --output "${BAG_DIR}/bag" /rosout /tf /tf_static /joint_states /lowstate /lowcmd /robot_description /initialpose /imu_lowstate /imu /odometry/filtered /livox/lidar /livox/imu /statistics /elevation_map_points /elevation_mapping_node/elevation_map_filter --regex "^/[oO]dom.*" > "${LOG_DIR}/ros2_bag_${BAG_TS}.log" 2>&1
-    ) &
-    BAG_PID=$!
-    trap 'echo "Stopping ROS2 recorder (PID $BAG_PID, bag dir $BAG_DIR)…"; kill -SIGINT "$BAG_PID"' EXIT
-    echo "→ Recording ROS2 topics to ${BAG_DIR} (PID $BAG_PID)"
-
-    chmod -R 777 /app/logs
-
-    if [[ "${BUILD_TYPE}" = "Debug" ]]; then
-        gdb --args ${BUILD_DIR}/src/$BINARY_NAME $BINARY_ARGV
-    else
-        ${BUILD_DIR}/src/$BINARY_NAME $BINARY_ARGV
-    fi
     echo "Remember to source /app/sim2real/ros2_ws/install/setup.bash if you are working with ROS custom packages! bashrc already sources /opt/ros/$ROS_DISTRO/setup.bash"
     echo "Also remember to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."
 fi
