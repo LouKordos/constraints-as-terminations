@@ -3,11 +3,16 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import RegisterEventHandler, ExecuteProcess, LogInfo, DeclareLaunchArgument
 from launch.event_handlers import OnProcessExit
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration, PythonExpression, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
-    config_path = os.path.join(get_package_share_directory("cat_controller"), "config", "cat_control_node.yaml")
+    config_path = PathJoinSubstitution([
+        FindPackageShare("cat_controller"),
+        "config",
+        "cat_control_node.yaml"
+    ])
 
     use_vicon_arg = DeclareLaunchArgument(
         "use_vicon",
