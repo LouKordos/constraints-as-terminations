@@ -73,13 +73,6 @@ public:
         this->command_timer_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
         this->inference_timer_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
-        if (use_hardcoded_elevation_) {
-            RCLCPP_INFO(this->get_logger(), "use_hardcoded_elevation=true, setting hardcoded_elevation to zero!");
-            hardcoded_elevation_ = 0.0f;
-        }
-        RCLCPP_INFO(this->get_logger(), "checkpoint_path='%s', use_hardcoded_elevation=%s", checkpoint_path_.string().c_str(),
-            use_hardcoded_elevation_ ? "true" : "false");
-
         RCLCPP_DEBUG(this->get_logger(), "Starting robot state subscriber.");
         rclcpp::SubscriptionOptions state_sub_options;
         state_sub_options.callback_group = state_sub_cbg_;
