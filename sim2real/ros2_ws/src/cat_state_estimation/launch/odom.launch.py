@@ -69,6 +69,7 @@ def generate_launch_description():
         condition=IfCondition(use_vicon)
     )
 
+    # Converts /lowstate into a standard ROS message format, check go2_odometry package from INRIA for details
     state_converter_node = Node(
         package="go2_odometry",
         executable="state_converter_node",
