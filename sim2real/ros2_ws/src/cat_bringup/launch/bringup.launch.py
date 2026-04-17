@@ -6,20 +6,8 @@ from launch.substitutions import PathJoinSubstitution, LaunchConfiguration, Find
 from launch_ros.substitutions import FindPackageShare
 from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.actions import Node
-from unitree_description import GO2_DESCRIPTION_URDF_PATH
 
 def generate_launch_description():
-    go2_odometry_launch_file = PathJoinSubstitution(
-        [FindPackageShare("go2_odometry"), "launch", "go2_odometry_switch.launch.py"]
-    )
-
-    livox_launch_file = PathJoinSubstitution(
-        [FindPackageShare("go2_livox_bringup"), "launch", "livox.launch.py"]
-    )
-
-    with open(GO2_DESCRIPTION_URDF_PATH, "r") as info:
-        robot_desc = info.read()
-
     use_vicon_arg = DeclareLaunchArgument(
         "use_vicon",
         default_value="false",
@@ -27,17 +15,33 @@ def generate_launch_description():
     )
     use_vicon = LaunchConfiguration("use_vicon")
 
+    livox_launch_file = PathJoinSubstitution(
+        [FindPackageShare("cat_state_estimation"), "launch", "livox.launch.py"]
+    )
     livox_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([livox_launch_file]),
         launch_arguments={"use_vicon": use_vicon}.items()
     )
-    odometry_include = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([go2_odometry_launch_file]),
-        condition=UnlessCondition(use_vicon)        
+
+    odom_launch_file = PathJoinSubstitution(
+        [FindPackageShare("cat_state_estimation"), "launch", "odom.launch.py"]
+    )
+    odom_include = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([odom_launch_file]),
+        launch_arguments={"use_vicon": use_vicon}.items()
+    )
+
+    controller_launch_file = PathJoinSubstitution(
+        [FindPackageShare("cat_controller"), "launch", "cat_control.launch.py"]
+    )
+    controller_include = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([controller_launch_file]),
+        launch_arguments={"use_vicon": use_vicon}.items()
     )
 
     return LaunchDescription([
         use_vicon_arg,
         livox_include,
-        odometry_include
+        odom_include,
+        controller_include
     ])
