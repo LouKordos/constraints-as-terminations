@@ -17,6 +17,8 @@
   <depend>fmt</depend>
   <depend>tf2</depend>
   <depend>ament_index_cpp</depend>
+  <depend>grid_map_core</depend>
+  <depend>grid_map_ros</depend>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

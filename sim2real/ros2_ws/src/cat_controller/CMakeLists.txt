@@ -26,6 +26,8 @@ find_package(unitree_go REQUIRED)
 find_package(unitree_api REQUIRED)
 find_package(Torch REQUIRED)
 find_package(fmt REQUIRED)
+find_package(grid_map_core REQUIRED)
+find_package(grid_map_ros REQUIRED)
 
 include(FetchContent)
 FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
@@ -62,8 +64,15 @@ target_link_libraries(
   ${geometry_msgs_TARGETS}
   ${grid_map_msgs_TARGETS}
   ${cat_perception_msgs_TARGETS}
+  grid_map_core::grid_map_core
   fmt::fmt
   nlohmann_json::nlohmann_json
+)
+
+# This is discouraged for recent ROS which is why I avoided it up until now, but grid_map_ros maintainers have not updated the way it's packaged yet...
+# So I have no choice
+ament_target_dependencies(elevation_map_processing_node
+  grid_map_ros
 )
 
 add_executable(projected_gravity_equivalence_test_node src/projected_gravity_equivalence_test_node.cpp)

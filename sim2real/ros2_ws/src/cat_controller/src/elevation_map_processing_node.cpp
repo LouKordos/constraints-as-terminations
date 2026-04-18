@@ -8,7 +8,9 @@
 #include "cat_controller/shutdown_coordinator.hpp"
 #include "cat_controller/time_utils.hpp"
 #include "cat_perception_msgs/msg/processed_elevation_map.hpp"
+#include "grid_map_core/GridMap.hpp"
 #include "grid_map_msgs/msg/grid_map.hpp"
+#include "grid_map_ros/grid_map_ros.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 class ElevationMapProcessingNode : public rclcpp::Node
