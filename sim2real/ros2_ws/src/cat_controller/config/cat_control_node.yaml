@@ -2,15 +2,15 @@ cat_controller:
   ros__parameters:
     checkpoint_path: "/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_21349_traced_deterministic.pt" # env 75, best one so far (with elevation map)
     # checkpoint_path: "/app/sim2real/traced_checkpoints/2025-06-28-17-13-04_6049_traced_deterministic.pt" # env 75, same as above just ealier checkpoint to show before vs. after energy minimization 
-    use_hardcoded_elevation: false
+    use_hardcoded_elevation: true
     hardcoded_elevation: -0.3
     
     atomic_op_timeout_us: 500
     stale_state_age_ms: 50
     initial_state_save_timeout_sec: 2.0
     
-    walk_a_bit: true
-    sinusoidal_debug_motion: true
+    walk_a_bit: false
+    sinusoidal_debug_motion: false
     interpolation_duration_sec: 5.0
     stabilization_duration_sec: 4.0
     
