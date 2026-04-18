@@ -27,6 +27,20 @@ public:
               true)),
           processing_interval_(  // Needs duration double first to avoid truncation
               std::chrono::round<std::chrono::milliseconds>(std::chrono::duration<double, std::milli>(1000.0 / processing_frequency_hz_))),
+          processed_map_grid_width_(declare_and_get_param<int>("processed_map_grid_width", "Number of cells in width direction", true)),
+          processed_map_grid_height_(declare_and_get_param<int>("processed_map_grid_height", "Number of cells in height direction", true)),
+          processed_grid_resolution_(
+              declare_and_get_param<double>("processed_grid_resolution", "Grid resolution (spacing) between cells in meters.", true)),
+          elevation_sensor_offset_x_(declare_and_get_param<double>("elevation_sensor_offset_x",
+              "In meters. Shifts sensor position relative to base. Policy was trained with offset in positive X direction to focus more data towards "
+              "front of robot for walking.",
+              true)),
+          elevation_sensor_offset_y_(
+              declare_and_get_param<double>("elevation_sensor_offset_y", "In meters. Shifts sensor position relative to base", true)),
+          elevation_sensor_offset_z_(
+              declare_and_get_param<double>("elevation_sensor_offset_z", "In meters. Shifts sensor position relative to base", true)),
+          invalid_cell_fill_value_(declare_and_get_param<double>(
+              "invalid_cell_fill_value", "In meters. Used for Nan/inf in height map, since policy excepts purely numerical data.", true)),
           shutdown_coordinator_(
               this->get_logger(), this->get_node_base_interface()->get_context(), [this]() { this->map_processing_timer_->cancel(); })
     {
@@ -122,6 +136,13 @@ private:
     const std::string processed_map_topic_name_;
     const double processing_frequency_hz_;
     const std::chrono::milliseconds processing_interval_;  // Needed for wall timer
+    const int processed_map_grid_width_;
+    const int processed_map_grid_height_;
+    const double processed_grid_resolution_;
+    const double elevation_sensor_offset_x_;
+    const double elevation_sensor_offset_y_;
+    const double elevation_sensor_offset_z_;
+    const double invalid_cell_fill_value_;
 
     rclcpp::Subscription<grid_map_msgs::msg::GridMap>::SharedPtr map_subscriber_;
     rclcpp::Publisher<cat_perception_msgs::msg::ProcessedElevationMap>::SharedPtr processed_map_publisher_;
