@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.22)
+
+# Silence FetchContent CMP0135 warning for CMake 3.24+
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)
+endif()
+
 project(cat_controller)
 
 set(CMAKE_CXX_STANDARD 23)
