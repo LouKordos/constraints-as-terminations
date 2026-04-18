@@ -10,9 +10,6 @@ SKIP_MULTIARCH_DOCKER_BUILD=true
 BUILD_DIR="${SCRIPT_DIR}/build"
 LOG_FILE="${SCRIPT_DIR}/build.log"
 CONTAINER_NAME="constraints-as-terminations-cat_sim2real-1"
-BINARY_NAME="run_policy"
-BINARY_ARGV="eth0" # Separated so that it can be passed to gdb as well
-# BINARY_NAME="sdk_stand_example ens4"
 export CLICOLOR=1
 export CLICOLOR_FORCE=1
 
