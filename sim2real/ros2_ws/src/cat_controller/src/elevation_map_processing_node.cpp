@@ -9,7 +9,19 @@
 class ElevationMapProcessingNode : public rclcpp::Node
 {
 public:
-    explicit ElevationMapProcessingNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions()) : Node("elevation_map_processing_node", options)
+    explicit ElevationMapProcessingNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
+        : Node("elevation_map_processing_node", options),
+          source_map_topic_name_(declare_and_get_param<std::string>("source_map_topic_name", "Topic name of source elevation map", true)),
+          source_map_layer_name_(declare_and_get_param<std::string>(
+              "source_map_layer_name", "Layer name of source elevation map such as min_filter, smooth, etc.", true)),
+          processed_map_topic_name_(
+              declare_and_get_param<std::string>("processed_map_topic_name", "Where to publish the processed elevation map messages", true)),
+          processing_frequency_hz_(declare_and_get_param<double>("processing_frequency_hz",
+              "How often to process the latest map in Hz. Note that this is independent of how often an elevation map is received, as the "
+              "transformation to body will occur more frequently using the latest tf.",
+              true)),
+          processing_interval_(  // Needs duration double first to avoid truncation
+              std::chrono::round<std::chrono::milliseconds>(std::chrono::duration<double, std::milli>(1000.0 / processing_frequency_hz_))),
           shutdown_coordinator_(
               this->get_logger(), this->get_node_base_interface()->get_context(), [this]() { this->map_processing_timer_->cancel(); })
     {
@@ -82,6 +94,13 @@ private:
     }
 
     std::chrono::steady_clock::time_point last_processing_callback_time_;
+
+    const std::string source_map_topic_name_;
+    const std::string source_map_layer_name_;
+    const std::string processed_map_topic_name_;
+    const double processing_frequency_hz_;
+    const std::chrono::milliseconds processing_interval_;  // Needed for wall timer
+
     rclcpp::Subscription<grid_map_msgs::msg::GridMap>::SharedPtr map_subscriber_;
     rclcpp::Publisher<cat_perception_msgs::msg::ProcessedElevationMap>::SharedPtr processed_map_publisher_;
     rclcpp::TimerBase::SharedPtr map_processing_timer_;
