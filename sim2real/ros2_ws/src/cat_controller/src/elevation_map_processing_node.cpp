@@ -1,6 +1,7 @@
 #include <ament_index_cpp/get_package_prefix.hpp>
 #include <chrono>
 
+#include "cat_controller/shutdown_coordinator.hpp"
 #include "cat_perception_msgs/msg/processed_elevation_map.hpp"
 #include "grid_map_msgs/msg/grid_map.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -9,6 +10,8 @@ class ElevationMapProcessingNode : public rclcpp::Node
 {
 public:
     explicit ElevationMapProcessingNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions()) : Node("elevation_map_processing_node", options)
+          shutdown_coordinator_(
+              this->get_logger(), this->get_node_base_interface()->get_context(), [this]() { this->map_processing_timer_->cancel(); })
     {
         // TODO: Init elevation map processor
         // TODO: setup sub,pub,timer
@@ -29,6 +32,12 @@ private:
     // Takes a GridMap and applies required transformation and interpolation to prepare it for policy inference
     void process_and_publish_map()
     {
+        auto steady_now = std::chrono::steady_clock::now();
+        if (shutdown_coordinator_.handle_exit_if_requested() ||
+            time_utils::shutdown_if_deadline_exceeded(last_processing_callback_time_, std::chrono::milliseconds{50}, shutdown_coordinator_))
+        {
+            return;
+        }
         // TODO: Load global atomic map, do NOT copy just use const &
         // TODO: Check global threadsafe elevation map age, exit if too old
         // TODO: Probably keep private working copy of current_procesed_map and call reserve in constructor on that to avoid heap allocs? Downside is
@@ -71,9 +80,12 @@ private:
             throw;
         }
     }
+
+    std::chrono::steady_clock::time_point last_processing_callback_time_;
     rclcpp::Subscription<grid_map_msgs::msg::GridMap>::SharedPtr map_subscriber_;
     rclcpp::Publisher<cat_perception_msgs::msg::ProcessedElevationMap>::SharedPtr processed_map_publisher_;
     rclcpp::TimerBase::SharedPtr map_processing_timer_;
+    ShutdownCoordinator shutdown_coordinator_;
 };
 
 int main(int argc, char * argv[])
