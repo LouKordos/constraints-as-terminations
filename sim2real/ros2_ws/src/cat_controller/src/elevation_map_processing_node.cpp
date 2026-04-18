@@ -41,6 +41,25 @@ private:
         // TODO: Log info
     }
 
+    template <typename T>
+    T declare_and_get_param(const std::string & name, const std::string & description = "", bool read_only = false)
+    {
+        rcl_interfaces::msg::ParameterDescriptor desc;
+        desc.description = description;
+        desc.read_only = read_only;
+
+        // We can again throw here because it only happens during constructor of node
+        try {
+            this->declare_parameter<T>(name, desc);  // Declare without default to require specifying a value
+            return this->get_parameter(name).get_value<T>();
+        } catch (const rclcpp::exceptions::ParameterUninitializedException & e) {
+            RCLCPP_FATAL(this->get_logger(), "CRITICAL: Mandatory parameter '%s' is missing from config!", name.c_str());
+            throw;
+        } catch (const rclcpp::exceptions::InvalidParameterTypeException & e) {
+            RCLCPP_FATAL(this->get_logger(), "CRITICAL: Parameter '%s' has the wrong type in YAML!", name.c_str());
+            throw;
+        }
+    }
     rclcpp::Subscription<grid_map_msgs::msg::GridMap>::SharedPtr map_subscriber_;
     rclcpp::Publisher<cat_perception_msgs::msg::ProcessedElevationMap>::SharedPtr processed_map_publisher_;
     rclcpp::TimerBase::SharedPtr map_processing_timer_;

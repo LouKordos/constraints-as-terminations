@@ -1,0 +1,7 @@
+elevation_map_processing_node:
+  ros_parameters:
+    source_map_topic_name: "/elevation_mapping_node/elevation_map_filter" # Where to get raw elevation map from
+    source_map_layer_name: "min_filter" # Check what layers are being published by elevation mapping node
+
+    processed_map_topic_name: "/processed_elevation_map" # Where to publish
+    processing_frequency_hz: 50.0 # Note that this is independent of how often an elevation map is received, as the transformation to body will occur more frequently using the latest tf.
