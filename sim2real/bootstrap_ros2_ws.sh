@@ -52,6 +52,7 @@ COLCON_ARGS=(
     "-DPYTHON_EXECUTABLE=$(which python3)"
     "-DCMAKE_CXX_FLAGS=-Wall -Wextra -Wpedantic -Wshadow"
     --parallel-workers $(nproc)
+    --event-handlers console_cohesion+
 )
 
 FIRST_BUILD_MARKER=/colcon-ros2_ws_clean_build.marker
