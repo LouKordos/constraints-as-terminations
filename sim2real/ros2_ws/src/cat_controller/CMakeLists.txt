@@ -42,6 +42,22 @@ target_link_libraries(cat_controller PUBLIC
   cppzmq # TODO: Remove unused dependencies after migration to new processor
 )
 
+add_library(elevation_map_processor src/elevation_map_processor.cpp)
+target_include_directories(elevation_map_processor PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
+# TODO: find eigen and gridmap
+# TODO: target_link_libraries()
+# TODO: Add to package.xml
+
+add_executable(elevation_map_processing_node src/elevation_map_processing_node.cpp)
+target_include_directories(elevation_map_processing_node PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
+target_link_libraries(
+  elevation_map_processing_node
+  rclcpp::rclcpp
+  ament_index_cpp::ament_index_cpp
+  ${std_msgs_TARGETS}
+  nlohmann_json::nlohmann_json
+)
+
 add_executable(projected_gravity_equivalence_test_node src/projected_gravity_equivalence_test_node.cpp)
 target_link_libraries(projected_gravity_equivalence_test_node PUBLIC rclcpp::rclcpp tf2::tf2)
 
@@ -54,6 +70,7 @@ target_link_libraries(release_motion_mode PRIVATE unitree_sdk2 Threads::Threads)
 # This makes ros2 run find the executable when the ws is sourced
 install(TARGETS
   cat_controller
+  elevation_map_processing_node
   projected_gravity_equivalence_test_node
   release_motion_mode
   DESTINATION lib/${PROJECT_NAME}
