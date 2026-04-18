@@ -60,7 +60,6 @@ void InferenceEngine::load_checkpoint(const std::filesystem::path & checkpoint_p
     model_observation_dim_ = in_features;
 }
 
-// TODO: NOT FUNCTIONAL YET BECAUSE OF MISSING ELEVATION MAP PROCESSING!
 torch::Tensor InferenceEngine::construct_observation_tensor(const stamped_robot_state & robot_state, const std::array<float, 3> & vel_command,
     const std::vector<float> & elevation_map_processed, const std::vector<float> & previous_action, bool use_history, bool reset_history)
 {
