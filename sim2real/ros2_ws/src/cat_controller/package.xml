@@ -9,6 +9,9 @@
 
   <depend>rclcpp</depend>
   <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>grid_map_msgs</depend>
+  <depend>cat_perception_msgs</depend>
   <depend>unitree_api</depend>
   <depend>unitree_go</depend>
   <depend>fmt</depend>
