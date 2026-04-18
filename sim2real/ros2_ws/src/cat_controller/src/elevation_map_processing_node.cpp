@@ -35,7 +35,7 @@ public:
         rclcpp::SubscriptionOptions map_sub_options;
         map_sub_options.callback_group = map_sub_cbg_;
         map_subscriber_ = this->create_subscription<grid_map_msgs::msg::GridMap>(source_map_topic_name_, rclcpp::SensorDataQoS().keep_last(1),
-            std::bind(&ElevationMapProcessingNode::source_map_subscriber_callback, std::placeholders::_1), map_sub_options);
+            std::bind(&ElevationMapProcessingNode::source_map_subscriber_callback, this, std::placeholders::_1), map_sub_options);
         RCLCPP_DEBUG(this->get_logger(), "Successfully started elevation map subscriber.");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting processed elevation map publisher.");
