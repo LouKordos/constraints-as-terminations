@@ -89,6 +89,9 @@ To start the required ROS nodes, run `ros2 launch cat_bringup bringup.launch.py 
 ### Elevation Mapping
 This is a WIP, I will add more detailed instructions when everything is working properly. A future refactoring will combine all packages into a single ros workspace, including the main policy inference and FastLIO2 and any other dependencies, so that only a single launch file needs to be run and the rest starts up automatically. However, for the time being clone my [fork](https://github.com/LouKordos/elevation_mapping_cupy/tree/ros2_humble) **and `git checkout ros2_humble`**, then build the docker container. Inside the docker shell:
 
+TODO: Explain how to set params, link the upstream implementation ros2 branch, exlain separate container and that end goal is to see the elevation mapping topic inside the cat_control docker container of this repo. Add disclaimer that it is very important to publish lidar at high frequency or use deskewed because emcupy does not performa data aggregation or deskewing, which can lead to problems during dynamic motion. Same for time sync, highly important to avoid noisy height data coming from elevation mapping cupy, since it needs to get accurate transforms
+TODO: NOte that it is recommended to use min_filter and inpainting plugins to avoid NaN values for cells. Test the elevation mapping extensively before feeding into policy, during dynamic walking and with obstacles to ensure that the ground truth is good and to avoid garbage-in-garbage-out
+
 1. `export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`
 2. `export ROS_DOMAIN_ID=0`
 3. `ros2 topic list` to ensure that you see all the robot topics. If not, refer to steps above ("Network configuration")
