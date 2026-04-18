@@ -46,12 +46,6 @@ target_link_libraries(cat_controller PUBLIC
   cppzmq # TODO: Remove unused dependencies after migration to new processor
 )
 
-# add_library(elevation_map_processor src/elevation_map_processor.cpp)
-# target_include_directories(elevation_map_processor PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
-# TODO: find eigen and gridmap
-# TODO: target_link_libraries()
-# TODO: Add to package.xml
-
 add_executable(elevation_map_processing_node src/elevation_map_processing_node.cpp)
 target_include_directories(elevation_map_processing_node PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
 target_link_libraries(
