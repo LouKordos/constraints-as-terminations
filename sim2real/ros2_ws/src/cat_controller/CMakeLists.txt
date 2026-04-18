@@ -12,6 +12,9 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(grid_map_msgs REQUIRED)
+find_package(cat_perception_msgs REQUIRED)
 find_package(unitree_go REQUIRED)
 find_package(unitree_api REQUIRED)
 find_package(Torch REQUIRED)
@@ -34,16 +37,17 @@ target_link_libraries(cat_controller PUBLIC
   rclcpp::rclcpp 
   tf2::tf2 
   ament_index_cpp::ament_index_cpp 
-  ${std_msgs_TARGETS} 
-  ${unitree_go_TARGETS} 
-  ${unitree_api_TARGETS} 
-  fmt::fmt 
+  ${std_msgs_TARGETS}
+  ${unitree_go_TARGETS}
+  ${unitree_api_TARGETS}
+  ${cat_perception_msgs_TARGETS}
+  fmt::fmt
   nlohmann_json::nlohmann_json
   cppzmq # TODO: Remove unused dependencies after migration to new processor
 )
 
-add_library(elevation_map_processor src/elevation_map_processor.cpp)
-target_include_directories(elevation_map_processor PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
+# add_library(elevation_map_processor src/elevation_map_processor.cpp)
+# target_include_directories(elevation_map_processor PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
 # TODO: find eigen and gridmap
 # TODO: target_link_libraries()
 # TODO: Add to package.xml
@@ -55,6 +59,9 @@ target_link_libraries(
   rclcpp::rclcpp
   ament_index_cpp::ament_index_cpp
   ${std_msgs_TARGETS}
+  ${geometry_msgs_TARGETS}
+  ${grid_map_msgs_TARGETS}
+  ${cat_perception_msgs_TARGETS}
   nlohmann_json::nlohmann_json
 )
 
