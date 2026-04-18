@@ -88,7 +88,7 @@ private:
         {
             return;
         }
-        // TODO: Load global atomic map, copy into working copy to avoid
+        // TODO: Load global atomic map
         // No need for age check of global elevation map here, since the policy will handle that and stop the robot if the received message is too old
 
         // TODO: Probably keep private working copy of current_procesed_map and call reserve in constructor on that to avoid heap allocs?
