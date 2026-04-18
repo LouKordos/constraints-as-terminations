@@ -56,6 +56,7 @@ target_link_libraries(
   ${geometry_msgs_TARGETS}
   ${grid_map_msgs_TARGETS}
   ${cat_perception_msgs_TARGETS}
+  fmt::fmt
   nlohmann_json::nlohmann_json
 )
 

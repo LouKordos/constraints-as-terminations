@@ -1,7 +1,12 @@
+#include <fmt/core.h>
+#include <fmt/ranges.h>
+
 #include <ament_index_cpp/get_package_prefix.hpp>
 #include <chrono>
+#include <string>
 
 #include "cat_controller/shutdown_coordinator.hpp"
+#include "cat_controller/time_utils.hpp"
 #include "cat_perception_msgs/msg/processed_elevation_map.hpp"
 #include "grid_map_msgs/msg/grid_map.hpp"
 #include "rclcpp/rclcpp.hpp"
