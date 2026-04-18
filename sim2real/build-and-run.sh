@@ -112,7 +112,8 @@ else
     # chmod -R 777 /app/logs
 
     echo "Note that the following will fail if you have not followed the README.md setup steps! Just follow them and re-run this script in that case."
-    source ${SCRIPT_DIR}/ros2_ws/install/setup.bash && ros2 launch cat_bringup bringup.launch.py | grep -v "Failed to parse type hash for topic"
+    source ${SCRIPT_DIR}/ros2_ws/install/setup.bash
+    ros2 launch cat_bringup bringup.launch.py | grep -v "Failed to parse type hash for topic"
     
     echo "Remember to source /app/sim2real/ros2_ws/install/setup.bash if you are working with ROS custom packages! bashrc already sources /opt/ros/$ROS_DISTRO/setup.bash"
     echo "Also remember to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."
