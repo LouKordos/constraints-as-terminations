@@ -13,6 +13,16 @@ public:
         // TODO: Init elevation map processor
         // TODO: setup sub,pub,timer
         // TODO: Initialize and RESERVE working copy processed elevation map vector to avoid heap allocs
+
+        // Dump all node parameters to logs
+        std::string param_dump = "=== Node Parameters ===\n";
+        auto param_list = this->list_parameters(std::vector<std::string>{}, 10);
+        for (const auto & param_name : param_list.names) {
+            rclcpp::Parameter param;
+            if (this->get_parameter(param_name, param)) { param_dump += fmt::format("  {}: {}\n", param_name, param.value_to_string()); }
+        }
+        param_dump += "============================";
+        RCLCPP_INFO(this->get_logger(), "\n%s", param_dump.c_str());
     }
 
 private:
