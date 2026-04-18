@@ -45,7 +45,7 @@ target_link_libraries(cat_controller PUBLIC
 add_executable(projected_gravity_equivalence_test_node src/projected_gravity_equivalence_test_node.cpp)
 target_link_libraries(projected_gravity_equivalence_test_node PUBLIC rclcpp::rclcpp tf2::tf2)
 
-# Isolated helper binary for entering low level control mode because ROS approach did not work
+# Isolated helper binary for entering low level control mode because ROS approach is not functional
 find_package(unitree_sdk2 REQUIRED)
 find_package(Threads REQUIRED)
 add_executable(release_motion_mode src/release_motion_mode.cpp)
