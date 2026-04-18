@@ -16,7 +16,8 @@ public:
     }
 
 private:
-    void sample_and_publish_processed_map()
+    // Takes a GridMap and applies required transformation and interpolation to prepare it for policy inference
+    void process_and_publish_map()
     {
         // TODO: Load global atomic map, do NOT copy just use const &
         // TODO: Check global threadsafe elevation map age, exit if too old
