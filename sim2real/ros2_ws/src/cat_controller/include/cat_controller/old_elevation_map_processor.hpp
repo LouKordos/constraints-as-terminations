@@ -1,5 +1,10 @@
 #pragma once
 
+/*
+IMPOORTANT NOTE: This is an old class used before switching to ROS and is only kept for the transition to ROS.
+Disregard it entirely when looking at the code base, it is deprecated and outdated and should NOT be used!
+*/
+
 #include <atomic>
 #include <chrono>
 #include <cmath>
