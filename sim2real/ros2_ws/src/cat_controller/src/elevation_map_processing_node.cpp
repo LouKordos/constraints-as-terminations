@@ -86,12 +86,11 @@ private:
         {
             return;
         }
-        // TODO: Load global atomic map, do NOT copy just use const &
-        // TODO: Check global threadsafe elevation map age, exit if too old
-        // TODO: Probably keep private working copy of current_procesed_map and call reserve in constructor on that to avoid heap allocs? Downside is
-        // thread safety but since node is self contained it should be fine
-        // process map to convert into polciy observation format as in python
-        // TODO: Create custom msg, publish, log
+        // TODO: Load global atomic map, copy into working copy to avoid
+        // No need for age check of global elevation map here, since the policy will handle that and stop the robot if the received message is too old
+
+        // TODO: Probably keep private working copy of current_procesed_map and call reserve in constructor on that to avoid heap allocs?
+        // TODO: Process map to convert into polciy observation format as in python
 
         // TODO: for interpolation, first implement a manual bilinear interpolation that does the same as python
         // Keep this TODO: Test with grid_map builtin interpolation and check the differences because that is cleaner. I don't mind using nearest
