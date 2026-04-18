@@ -93,12 +93,14 @@ private:
         // TODO: Process map to convert into polciy observation format as in python
 
         // TODO: for interpolation, first implement a manual bilinear interpolation that does the same as python
-        // Keep this TODO: Test with grid_map builtin interpolation and check the differences because that is cleaner. I don't mind using nearest
         // neighbor since invalid cells are very rare in my use case anyway
 
         // TODO: gridmap heavily relies on exceptions, make sure to fully catch all of them, log and return only std::expected, NODE SHOULD NOT THROW
         // EXCEPTIONS BUT HANDLE USING shutdown_coordinator instead! Proboably use IsInside to avoid try catch block around hot loop of ~150 lookups?
 
+        // TODO: Create custom msg, publish, log
+
+        // Keep this TODO: Test with grid_map builtin interpolation and check the differences because that is cleaner. I don't mind using nearest
         // TODO: After confirmed working, start simplifying and cleaning up until there are differences when running the rosbag-checker on it
     }
 
