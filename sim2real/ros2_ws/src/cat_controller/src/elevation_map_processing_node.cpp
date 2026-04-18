@@ -25,8 +25,25 @@ public:
           shutdown_coordinator_(
               this->get_logger(), this->get_node_base_interface()->get_context(), [this]() { this->map_processing_timer_->cancel(); })
     {
-        // TODO: Init elevation map processor
-        // TODO: setup sub,pub,timer
+        RCLCPP_DEBUG(this->get_logger(), "Starting elevation map subscriber.");
+        this->map_sub_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+        rclcpp::SubscriptionOptions map_sub_options;
+        map_sub_options.callback_group = map_sub_cbg_;
+        map_subscriber_ = this->create_subscription<grid_map_msgs::msg::GridMap>(source_map_topic_name_, rclcpp::SensorDataQoS().keep_last(1),
+            std::bind(&ElevationMapProcessingNode::source_map_subscriber_callback, std::placeholders::_1), map_sub_options);
+        RCLCPP_DEBUG(this->get_logger(), "Successfully started elevation map subscriber.");
+
+        RCLCPP_DEBUG(this->get_logger(), "Starting processed elevation map publisher.");
+        processed_map_publisher_ =
+            this->create_publisher<cat_perception_msgs::msg::ProcessedElevationMap>(processed_map_topic_name_, rclcpp::SensorDataQoS().keep_last(1));
+        RCLCPP_DEBUG(this->get_logger(), "Successfully started processed elevation map publisher.");
+
+        RCLCPP_DEBUG(this->get_logger(), "Starting processing timer.");
+        this->processing_timer_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+        map_processing_timer_ = this->create_wall_timer(
+            processing_interval_, std::bind(&ElevationMapProcessingNode::process_and_publish_map, this), processing_timer_cbg_);
+        RCLCPP_DEBUG(this->get_logger(), "Successfully started processing timer.");
+
         // TODO: Initialize and RESERVE working copy processed elevation map vector to avoid heap allocs
 
         // Dump all node parameters to logs
@@ -104,6 +121,9 @@ private:
     rclcpp::Subscription<grid_map_msgs::msg::GridMap>::SharedPtr map_subscriber_;
     rclcpp::Publisher<cat_perception_msgs::msg::ProcessedElevationMap>::SharedPtr processed_map_publisher_;
     rclcpp::TimerBase::SharedPtr map_processing_timer_;
+    rclcpp::CallbackGroup::SharedPtr map_sub_cbg_;
+    rclcpp::CallbackGroup::SharedPtr processing_timer_cbg_;
+
     ShutdownCoordinator shutdown_coordinator_;
 };
 
