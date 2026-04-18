@@ -103,7 +103,7 @@ private:
         // TODO: After confirmed working, start simplifying and cleaning up until there are differences when running the rosbag-checker on it
     }
 
-    void source_map_subscriber_callback(const grid_map_msgs::msg::GridMap & msg)
+    void source_map_subscriber_callback(const grid_map_msgs::msg::GridMap::ConstSharedPtr msg)
     {
         // TODO: store globally using atomic shared ptr probably, need to check best approach here to avoid expensive copies and heap allocs here.
         // TODO: Log info
