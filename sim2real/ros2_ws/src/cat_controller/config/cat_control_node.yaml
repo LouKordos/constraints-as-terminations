@@ -12,6 +12,7 @@ cat_controller:
     walk_a_bit: true
     sinusoidal_debug_motion: true
     interpolation_duration_sec: 5.0
+    stabilization_duration_sec: 4.0
     
     action_scale: 0.8
     actuator_kp: 25.0
