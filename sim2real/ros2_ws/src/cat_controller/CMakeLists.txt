@@ -39,7 +39,7 @@ target_link_libraries(cat_controller PUBLIC
   ${unitree_api_TARGETS} 
   fmt::fmt 
   nlohmann_json::nlohmann_json
-  cppzmq
+  cppzmq # TODO: Remove unused dependencies after migration to new processor
 )
 
 add_executable(projected_gravity_equivalence_test_node src/projected_gravity_equivalence_test_node.cpp)
