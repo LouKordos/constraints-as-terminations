@@ -42,8 +42,6 @@ public:
           processed_map_topic_name_(
               declare_and_get_param<std::string>("processed_map_topic_name", "Where to publish the processed elevation map messages", true)),
           robot_base_frame_name_(declare_and_get_param<std::string>("robot_base_frame_name", "Base / CoM frame of the robot", true)),
-          robot_world_frame_name_(declare_and_get_param<std::string>(
-              "robot_world_frame_name", "Should be the same as the map frame used in elevation_mapping_cupy producing the source maps!!!", true)),
           processing_frequency_hz_(declare_and_get_param<double>("processing_frequency_hz",
               "How often to process the latest map in Hz. Note that this is independent of how often an elevation map is received, as the "
               "transformation to base will occur more frequently using the latest tf.",
@@ -148,7 +146,7 @@ private:
         try {
             // Arg order is to,from
             base_to_world_tf = tf_buffer_->lookupTransform(
-                robot_world_frame_name_, robot_base_frame_name_, tf_lookup_start_stamp, tf2::durationFromSec(tf_lookup_timeout_));
+                latest_map->getFrameId(), robot_base_frame_name_, tf_lookup_start_stamp, tf2::durationFromSec(tf_lookup_timeout_));
         } catch (const tf2::TransformException & e) {
             shutdown_coordinator_.shutdown(std::format("tf lookup failed, exiting. Exception message: {}", e.what()));
             return;
@@ -200,7 +198,7 @@ private:
         }
 
         cat_perception_msgs::msg::ProcessedElevationMap processed_msg;
-        processed_msg.header.frame_id = robot_world_frame_name_;
+        processed_msg.header.frame_id = latest_map->getFrameId();
         processed_msg.header.stamp = processing_start_stamp;
         processed_msg.source_pose_stamp = tf2_ros::toRclcpp(tf_lookup_start_stamp);
         // Pass RCL_ROS_TIME to make it compatible with replaying
@@ -274,7 +272,6 @@ private:
     const std::string source_map_layer_name_;
     const std::string processed_map_topic_name_;
     const std::string robot_base_frame_name_;
-    const std::string robot_world_frame_name_;
     const double processing_frequency_hz_;
     const std::chrono::milliseconds processing_interval_;  // Needed for wall timer
     const double tf_lookup_timeout_;
