@@ -1,5 +1,10 @@
 #pragma once
 
+/*
+Author: Loukas Kordos
+Disclaimer: This code was proudly written without LLMs :)
+*/
+
 #include <torch/script.h>
 #include <torch/torch.h>
 

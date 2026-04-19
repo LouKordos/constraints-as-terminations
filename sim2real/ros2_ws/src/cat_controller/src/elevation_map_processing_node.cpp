@@ -1,3 +1,8 @@
+/*
+Author: Loukas Kordos
+Disclaimer: This code was proudly written without LLMs :)
+*/
+
 #include <fmt/core.h>
 #include <fmt/ranges.h>
 

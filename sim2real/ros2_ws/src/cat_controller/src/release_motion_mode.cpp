@@ -1,4 +1,9 @@
 /*
+Author: Loukas Kordos
+Disclaimer: This code was proudly written without LLMs :)
+*/
+
+/*
 This helper is intentionally built as a separate executable and is NOT linked into the ROS node process.
 
 Reason: Unitree's MotionSwitcherClient depends on the SDK2 / CycloneDDS stack that already works in the non-ROS environment, but when the helper

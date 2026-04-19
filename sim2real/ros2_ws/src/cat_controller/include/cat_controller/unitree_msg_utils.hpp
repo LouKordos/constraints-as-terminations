@@ -1,5 +1,10 @@
 #pragma once
 
+/*
+Author: Loukas Kordos
+Disclaimer: This code was proudly written without LLMs :)
+*/
+
 #include <tf2/LinearMath/Quaternion.hpp>
 #include <tf2/LinearMath/Vector3.hpp>
 

@@ -1,6 +1,11 @@
 #ifndef TIMED_ATOMIC_HPP
 #define TIMED_ATOMIC_HPP
 
+/*
+Author: Loukas Kordos
+Disclaimer: This code was proudly written without LLMs :)
+*/
+
 #include <chrono>
 #include <expected>
 #include <memory>

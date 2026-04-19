@@ -1,5 +1,10 @@
 #pragma once
 
+/*
+Author: Loukas Kordos
+Disclaimer: This code was proudly written without LLMs :)
+*/
+
 #include <sys/types.h>
 
 #include <chrono>

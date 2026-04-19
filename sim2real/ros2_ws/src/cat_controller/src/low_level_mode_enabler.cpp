@@ -1,3 +1,8 @@
+/*
+Author: Loukas Kordos
+Disclaimer: This code was proudly written without LLMs :)
+*/
+
 #include "cat_controller/low_level_mode_enabler.hpp"
 
 #include <sys/types.h>
