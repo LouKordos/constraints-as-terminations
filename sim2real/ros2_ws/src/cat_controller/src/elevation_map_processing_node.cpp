@@ -41,8 +41,6 @@ public:
               true)),
           elevation_sensor_offset_y_(
               declare_and_get_param<double>("elevation_sensor_offset_y", "In meters. Shifts sensor position relative to base", true)),
-          elevation_sensor_offset_z_(
-              declare_and_get_param<double>("elevation_sensor_offset_z", "In meters. Shifts sensor position relative to base", true)),
           invalid_cell_fill_value_(declare_and_get_param<double>(
               "invalid_cell_fill_value", "In meters. Used for Nan/inf in height map, since policy excepts purely numerical data.", true)),
           shutdown_coordinator_(
@@ -160,7 +158,6 @@ private:
     const double processed_map_grid_resolution_;
     const double elevation_sensor_offset_x_;
     const double elevation_sensor_offset_y_;
-    const double elevation_sensor_offset_z_;
     const double invalid_cell_fill_value_;
 
     rclcpp::Subscription<grid_map_msgs::msg::GridMap>::SharedPtr map_subscriber_;

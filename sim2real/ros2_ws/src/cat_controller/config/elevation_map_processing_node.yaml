@@ -11,5 +11,4 @@ elevation_map_processing_node:
     processed_map_grid_resolution: 0.08 # Meters
     elevation_sensor_offset_x: 0.2 # Meters, shifts sensor position relative to base, because policy was trained with a gridmap that is offset towards the front of the robot
     elevation_sensor_offset_y: 0.0 # Meters, shifts sensor position relative to base
-    elevation_sensor_offset_z: 0.0 # Meters, shifts sensor position relative to base,
     invalid_cell_fill_value: -0.27 # Meters
