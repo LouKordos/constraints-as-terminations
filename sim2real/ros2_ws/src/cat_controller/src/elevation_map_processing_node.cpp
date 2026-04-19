@@ -46,7 +46,7 @@ public:
               "robot_world_frame_name", "Should be the same as the map frame used in elevation_mapping_cupy producing the source maps!!!", true)),
           processing_frequency_hz_(declare_and_get_param<double>("processing_frequency_hz",
               "How often to process the latest map in Hz. Note that this is independent of how often an elevation map is received, as the "
-              "transformation to body will occur more frequently using the latest tf.",
+              "transformation to base will occur more frequently using the latest tf.",
               true)),
           processing_interval_(  // Needs duration double first to avoid truncation
               std::chrono::round<std::chrono::milliseconds>(std::chrono::duration<double, std::milli>(1000.0 / processing_frequency_hz_))),
@@ -64,12 +64,12 @@ public:
               declare_and_get_param<double>("elevation_sensor_offset_y", "In meters. Shifts sensor position relative to base", true)),
           invalid_cell_fill_value_(declare_and_get_param<double>(
               "invalid_cell_fill_value", "In meters. Used for Nan/inf in height map, since policy excepts purely numerical data.", true)),
-          use_negative_body_height_as_fill_value_(declare_and_get_param<bool>("use_negative_body_height_as_fill_value",
-              "If true, invalid_cell_fill_value is NOT used, and invalid cells are instead set to -body_height, which is arguably more accurate",
+          use_negative_base_height_as_fill_value_(declare_and_get_param<bool>("use_negative_base_height_as_fill_value",
+              "If true, invalid_cell_fill_value is NOT used, and invalid cells are instead set to -base_height, which is arguably more accurate",
               true)),
-          min_allowed_body_height_(declare_and_get_param<double>("min_allowed_body_height",
+          min_allowed_base_height_(declare_and_get_param<double>("min_allowed_base_height",
               "In meters. Used to safely shut down robot when state estimation / odom reports unreasonable values.", true)),
-          max_allowed_body_height_(declare_and_get_param<double>("max_allowed_body_height",
+          max_allowed_base_height_(declare_and_get_param<double>("max_allowed_base_height",
               "In meters. Used to safely shut down robot when state estimation / odom reports unreasonable values.", true)),
           shutdown_coordinator_(
               this->get_logger(), this->get_node_base_interface()->get_context(), [this]() { this->map_processing_timer_->cancel(); })
@@ -153,27 +153,27 @@ private:
             shutdown_coordinator_.shutdown(std::format("tf lookup failed, exiting. Exception message: {}", e.what()));
             return;
         }
-        double fill_value = use_negative_body_height_as_fill_value_ ? -base_to_world_tf.transform.translation.z : invalid_cell_fill_value_;
+        double fill_value = use_negative_base_height_as_fill_value_ ? -base_to_world_tf.transform.translation.z : invalid_cell_fill_value_;
 
-        if (base_to_world_tf.transform.translation.z < min_allowed_body_height_ ||
-            base_to_world_tf.transform.translation.z > max_allowed_body_height_)
+        if (base_to_world_tf.transform.translation.z < min_allowed_base_height_ ||
+            base_to_world_tf.transform.translation.z > max_allowed_base_height_)
         {
             shutdown_coordinator_.shutdown(
-                std::format("Reported body height is out of pre-defined safe bounds, exiting for safety. This indicates odom or state estimation is "
-                            "having issues or you are climbing a hill :) Reported body z in world frame={}, min_allowed={}, max_allowed={}",
-                    base_to_world_tf.transform.translation.z, min_allowed_body_height_, max_allowed_body_height_));
+                std::format("Reported base height is out of pre-defined safe bounds, exiting for safety. This indicates odom or state estimation is "
+                            "having issues or you are climbing a hill :) Reported base z in world frame={}, min_allowed={}, max_allowed={}",
+                    base_to_world_tf.transform.translation.z, min_allowed_base_height_, max_allowed_base_height_));
             return;
         }
         // check bounds and exit if z is too large or small, indicates odom or state estimation is inaccruate
 
         double yaw = tf2::getYaw(base_to_world_tf.transform.rotation);
         // ROS2 standard uses right-handed coordinate frame => positive rotation is CCW, so euler convention matches that
-        auto rot_body_to_world_yaw = Eigen::Rotation2Dd(yaw);
+        auto rot_base_to_world_yaw = Eigen::Rotation2Dd(yaw);
 
         // We do not vectorize the rotation math here using Eigen matrices, as the computational cost of ~150 2D rotations is negligible (<1us)
         // and the loop's execution time is mostly dominated by the memory access and interpolation inside grid_map::atPosition().
         for (size_t i = 0; i < lookup_points_world_frame_.size(); i++) {
-            lookup_points_world_frame_[i] = rot_body_to_world_yaw * lookup_points_robot_frame_[i];
+            lookup_points_world_frame_[i] = rot_base_to_world_yaw * lookup_points_robot_frame_[i];
             lookup_points_world_frame_[i].x() += base_to_world_tf.transform.translation.x;
             lookup_points_world_frame_[i].y() += base_to_world_tf.transform.translation.y;
 
@@ -281,9 +281,9 @@ private:
     const double elevation_sensor_offset_x_;
     const double elevation_sensor_offset_y_;
     const double invalid_cell_fill_value_;
-    const bool use_negative_body_height_as_fill_value_;
-    const double min_allowed_body_height_;
-    const double max_allowed_body_height_;
+    const bool use_negative_base_height_as_fill_value_;
+    const double min_allowed_base_height_;
+    const double max_allowed_base_height_;
 
     rclcpp::Subscription<grid_map_msgs::msg::GridMap>::SharedPtr map_subscriber_;
     rclcpp::Publisher<cat_perception_msgs::msg::ProcessedElevationMap>::SharedPtr processed_map_publisher_;
@@ -294,7 +294,7 @@ private:
     // Usually, I would use my own custom timed_atomic here to avoid hanging in a safety critical thread, but since the cat_control_node will have an
     // age check on the received message and simply stop the robot if no new messages arrive, it is acceptable to use a simple atomic shared pointer.
     std::atomic<std::shared_ptr<grid_map::GridMap>> global_grid_map_;
-    // List of sample positions in body frame for elevation map. These stay constant in body frame but we need to transform them into world frame
+    // List of sample positions in base frame for elevation map. These stay constant in base frame but we need to transform them into world frame
     std::vector<Eigen::Vector2d> lookup_points_robot_frame_;
     // Only to be accessed from timer callback, but elevated to member var to avoid reallocation every iteration
     std::vector<Eigen::Vector2d> lookup_points_world_frame_;
