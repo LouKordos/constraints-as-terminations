@@ -72,6 +72,9 @@ public:
           shutdown_coordinator_(
               this->get_logger(), this->get_node_base_interface()->get_context(), [this]() { this->map_processing_timer_->cancel(); })
     {
+        if (tf_lookup_timeout_ < 0.75 * (1.0 / processing_frequency_hz_)) {
+            shutdown_coordinator_.shutdown("Tf lookup timeout longer than 75% of processing timer interval, this is dangerous, exiting.");
+        }
         tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
