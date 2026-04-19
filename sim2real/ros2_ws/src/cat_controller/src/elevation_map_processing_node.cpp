@@ -31,12 +31,17 @@ public:
               "source_map_layer_name", "Layer name of source elevation map such as min_filter, smooth, etc.", true)),
           processed_map_topic_name_(
               declare_and_get_param<std::string>("processed_map_topic_name", "Where to publish the processed elevation map messages", true)),
+          robot_base_frame_name_(declare_and_get_param<std::string>("robot_base_frame_name", "Base / CoM frame of the robot", true)),
+          robot_world_frame_name_(declare_and_get_param<std::string>(
+              "robot_world_frame_name", "Should be the same as the map frame used in elevation_mapping_cupy producing the source maps!!!", true)),
           processing_frequency_hz_(declare_and_get_param<double>("processing_frequency_hz",
               "How often to process the latest map in Hz. Note that this is independent of how often an elevation map is received, as the "
               "transformation to body will occur more frequently using the latest tf.",
               true)),
           processing_interval_(  // Needs duration double first to avoid truncation
               std::chrono::round<std::chrono::milliseconds>(std::chrono::duration<double, std::milli>(1000.0 / processing_frequency_hz_))),
+          tf_lookup_timeout_(
+              declare_and_get_param<double>("tf_lookup_timeout", "How long to wait in seconds until shutting down node due to tf timeout", true)),
           processed_map_grid_width_(declare_and_get_param<int>("processed_map_grid_width", "Number of cells in width direction", true)),
           processed_map_grid_height_(declare_and_get_param<int>("processed_map_grid_height", "Number of cells in height direction", true)),
           processed_map_grid_resolution_(
@@ -176,8 +181,11 @@ private:
     const std::string source_map_topic_name_;
     const std::string source_map_layer_name_;
     const std::string processed_map_topic_name_;
+    const std::string robot_base_frame_name_;
+    const std::string robot_world_frame_name_;
     const double processing_frequency_hz_;
     const std::chrono::milliseconds processing_interval_;  // Needed for wall timer
+    const double tf_lookup_timeout_;
     const int processed_map_grid_width_;
     const int processed_map_grid_height_;
     const double processed_map_grid_resolution_;
