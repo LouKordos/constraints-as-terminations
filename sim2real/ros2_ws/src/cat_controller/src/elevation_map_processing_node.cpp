@@ -220,8 +220,8 @@ private:
         processing_iteration_counter_++;
 
         // AFTER CONFIRMED WORKING:
-        // TODO: PROFILE HOW LONG HOTLOOP OVER INDICES TAKES!!!
-        // TODO: Profile how long atomic shared ptr update takes
+        // TODO: profile hotloop using Tracy
+        // TODO: Profile atomic shared ptr read and write using tracy
         // TODO: Simplify and cleanup there are differences when running the rosbag-checker on it
     }
 
