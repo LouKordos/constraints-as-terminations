@@ -122,7 +122,7 @@ public:
     }
 
 private:
-    // Takes a GridMap and applies required transformation and interpolation to prepare it for policy inference
+    // Loads a GridMap and applies required transformation and interpolation to prepare it for policy inference
     void process_and_publish_map()
     {
         auto steady_now = std::chrono::steady_clock::now();
