@@ -6,6 +6,7 @@
 #include <chrono>
 #include <string>
 
+#include "Eigen/Dense"
 #include "cat_controller/shutdown_coordinator.hpp"
 #include "cat_controller/time_utils.hpp"
 #include "cat_perception_msgs/msg/processed_elevation_map.hpp"
@@ -93,7 +94,7 @@ private:
         std::shared_ptr<grid_map::GridMap> latest_map = global_grid_map_.load();
         // Always need to check for null pointer, e.g. for scenario when no map has been received yet.
         if (!latest_map) {
-            RCLCPP_WARN(this->get_logger(), "Global map is null pointer, skipping processing iteration...");
+            RCLCPP_WARN(this->get_logger(), "Global map is null pointer, skipping processing...");
             return;
         }
         // No need for age check of elevation map here since the policy will handle that and stop the robot if the received message is too old
