@@ -13,6 +13,11 @@
   <depend>livox_ros_driver2</depend>
   <depend>go2_odometry</depend>
 
+  <depend>grid_map_core</depend>
+  <depend>grid_map_ros</depend>
+  <depend>grid_map_msgs</depend>
+  <depend>cat_perception_msgs</depend>
+
   <exec_depend>cat_controller</exec_depend>
   <exec_depend>cat_state_estimation</exec_depend>
 
