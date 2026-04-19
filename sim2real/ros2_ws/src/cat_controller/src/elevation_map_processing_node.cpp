@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <string>
+#include <vector>
 
 #include "Eigen/Dense"
 #include "cat_controller/shutdown_coordinator.hpp"
@@ -74,6 +75,17 @@ public:
         }
         param_dump += "============================";
         RCLCPP_INFO(this->get_logger(), "\n%s", param_dump.c_str());
+
+        // TODO: Check if correct
+        double span_x = (processed_map_grid_width_ - 1) * processed_map_grid_resolution_;
+        double span_y = (processed_map_grid_height_ - 1) * processed_map_grid_resolution_;
+        for (size_t y_idx = 0; y_idx < processed_map_grid_height_; y_idx++) {
+            for (size_t x_idx = 0; x_idx < processed_map_grid_width_; x_idx++) {
+                double x_pos = -span_x / 2.0 + x_idx * processed_map_grid_resolution_ + elevation_sensor_offset_x_;
+                double y_pos = -span_y / 2.0 + y_idx * processed_map_grid_resolution_ + elevation_sensor_offset_y_;
+                lookup_points_robot_frame_.emplace_back(Eigen::Vector2d(x_pos, y_pos));
+            }
+        }
     }
 
 private:
@@ -173,6 +185,8 @@ private:
     // Usually, I would use my own custom timed_atomic here to avoid hanging in a safety critical thread, but since the cat_control_node will have an
     // age check on the received message and simply stop the robot if no new messages arrive, it is acceptable to use a simple atomic shared pointer.
     std::atomic<std::shared_ptr<grid_map::GridMap>> global_grid_map_;
+    // List of sample positions in body frame for elevation map. These stay constant in body frame but we need to transform them into world frame
+    std::vector<Eigen::Vector2d> lookup_points_robot_frame_;
 
     ShutdownCoordinator shutdown_coordinator_;
 };
