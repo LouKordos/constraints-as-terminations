@@ -263,7 +263,7 @@ private:
     }
 
     std::chrono::steady_clock::time_point last_processing_callback_time_;
-    uint64_t processing_iteration_counter_;
+    uint64_t processing_iteration_counter_{0};
 
     const std::string source_map_topic_name_;
     const std::string source_map_layer_name_;
