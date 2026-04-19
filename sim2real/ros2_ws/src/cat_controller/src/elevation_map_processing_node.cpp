@@ -66,6 +66,10 @@ public:
           use_negative_body_height_as_fill_value_(declare_and_get_param<bool>("use_negative_body_height_as_fill_value",
               "If true, invalid_cell_fill_value is NOT used, and invalid cells are instead set to -body_height, which is arguably more accurate",
               true)),
+          min_allowed_body_height_(declare_and_get_param<double>("min_allowed_body_height",
+              "In meters. Used to safely shut down robot when state estimation / odom reports unreasonable values.", true)),
+          max_allowed_body_height_(declare_and_get_param<double>("max_allowed_body_height",
+              "In meters. Used to safely shut down robot when state estimation / odom reports unreasonable values.", true)),
           shutdown_coordinator_(
               this->get_logger(), this->get_node_base_interface()->get_context(), [this]() { this->map_processing_timer_->cancel(); })
     {
@@ -146,6 +150,17 @@ private:
             return;
         }
 
+        if (base_to_world_tf.transform.translation.z < min_allowed_body_height_ ||
+            base_to_world_tf.transform.translation.z > max_allowed_body_height_)
+        {
+            shutdown_coordinator_.shutdown(
+                std::format("Reported body height is out of pre-defined safe bounds, exiting for safety. This indicates odom or state estimation is "
+                            "having issues or you are climbing a hill :) Reported body z in world frame={}, min_allowed={}, max_allowed={}",
+                    base_to_world_tf.transform.translation.z, min_allowed_body_height_, max_allowed_body_height_));
+            return;
+        }
+        // check bounds and exit if z is too large or small, indicates odom or state estimation is inaccruate
+
         double yaw = tf2::getYaw(base_to_world_tf.transform.rotation);
         // ROS2 standard uses right-handed coordinate frame => positive rotation is CCW, so euler convention matches that
         auto rot_body_to_world_yaw = Eigen::Rotation2Dd(yaw);
@@ -223,6 +238,8 @@ private:
     const double elevation_sensor_offset_y_;
     const double invalid_cell_fill_value_;
     const bool use_negative_body_height_as_fill_value_;
+    const double min_allowed_body_height_;
+    const double max_allowed_body_height_;
 
     rclcpp::Subscription<grid_map_msgs::msg::GridMap>::SharedPtr map_subscriber_;
     rclcpp::Publisher<cat_perception_msgs::msg::ProcessedElevationMap>::SharedPtr processed_map_publisher_;

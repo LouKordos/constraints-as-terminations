@@ -19,3 +19,6 @@ elevation_map_processing_node:
     robot_base_frame_name: "vicon/Go2_Loukas/Go2_Loukas" # Base link of the robot
     robot_world_frame_name: "vicon/world" # Should be the same as the map frame used in elevation_mapping_cupy producing the source maps!!!
     tf_lookup_timeout: 0.01 # seconds, how long to wait until shutting down the node
+
+    min_allowed_body_height: 0.0 # In meters. Used to safely shut down robot when state estimation / odom reports unreasonable values.
+    max_allowed_body_height: 1.0 # In meters. Used to safely shut down robot when state estimation / odom reports unreasonable values.
