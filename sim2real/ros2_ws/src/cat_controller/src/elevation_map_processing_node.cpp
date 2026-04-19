@@ -89,6 +89,7 @@ public:
         }
 
         lookup_points_world_frame_ = lookup_points_robot_frame_;
+        processed_elevation_map_values_.resize(processed_map_grid_width_ * processed_map_grid_height_, invalid_cell_fill_value_);
 
         RCLCPP_DEBUG(this->get_logger(), "Starting elevation map subscriber.");
         this->map_sub_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
@@ -265,6 +266,7 @@ private:
     std::vector<Eigen::Vector2d> lookup_points_robot_frame_;
     // Only to be accessed from timer callback, but elevated to member var to avoid reallocation every iteration
     std::vector<Eigen::Vector2d> lookup_points_world_frame_;
+    std::vector<float> processed_elevation_map_values_;
 
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
