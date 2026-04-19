@@ -100,6 +100,9 @@ private:
 
         // TODO: Process map to convert into polciy observation format as in elevation_to_policy
 
+        // Wrap tf lookup in exception, log and handle scenarios robustly. Probably wait a few ms for the tf then fail if it is not available? Since
+        // outdated tf is a no-go
+
         // TODO: for interpolation, first implement a manual bilinear interpolation that does the same as python
         // neighbor since invalid cells are very rare in my use case anyway
 
