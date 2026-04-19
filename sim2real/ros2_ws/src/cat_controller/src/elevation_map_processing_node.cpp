@@ -24,6 +24,7 @@ Disclaimer: This code was proudly written without LLMs :)
 #include "grid_map_ros/grid_map_ros.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "tf2/exceptions.hpp"
+#include "tf2/time.h"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 
@@ -131,8 +132,8 @@ private:
         geometry_msgs::msg::TransformStamped base_to_world_tf;
         try {
             // Arg order is to,from
-            base_to_world_tf = tf_buffer_->lookupTransform(robot_world_frame_name_, robot_base_frame_name_, tf2::TimePointZero,
-                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(tf_lookup_timeout_)));
+            base_to_world_tf = tf_buffer_->lookupTransform(
+                robot_world_frame_name_, robot_base_frame_name_, tf2::TimePointZero, tf2::durationFromSec(tf_lookup_timeout_));
         } catch (const tf2::TransformException & e) {
             shutdown_coordinator_.shutdown(std::format("tf lookup failed, exiting. Exception message: {}", e.what()));
             return;
