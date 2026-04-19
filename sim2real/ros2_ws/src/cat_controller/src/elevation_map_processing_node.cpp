@@ -52,6 +52,20 @@ public:
           shutdown_coordinator_(
               this->get_logger(), this->get_node_base_interface()->get_context(), [this]() { this->map_processing_timer_->cancel(); })
     {
+        tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+        tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
+        // TODO: Check if correct
+        double span_x = (processed_map_grid_width_ - 1) * processed_map_grid_resolution_;
+        double span_y = (processed_map_grid_height_ - 1) * processed_map_grid_resolution_;
+        for (size_t y_idx = 0; y_idx < processed_map_grid_height_; y_idx++) {
+            for (size_t x_idx = 0; x_idx < processed_map_grid_width_; x_idx++) {
+                double x_pos = -span_x / 2.0 + x_idx * processed_map_grid_resolution_ + elevation_sensor_offset_x_;
+                double y_pos = -span_y / 2.0 + y_idx * processed_map_grid_resolution_ + elevation_sensor_offset_y_;
+                lookup_points_robot_frame_.emplace_back(x_pos, y_pos);
+            }
+        }
+
         RCLCPP_DEBUG(this->get_logger(), "Starting elevation map subscriber.");
         this->map_sub_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
         rclcpp::SubscriptionOptions map_sub_options;
@@ -80,17 +94,6 @@ public:
         }
         param_dump += "============================";
         RCLCPP_INFO(this->get_logger(), "\n%s", param_dump.c_str());
-
-        // TODO: Check if correct
-        double span_x = (processed_map_grid_width_ - 1) * processed_map_grid_resolution_;
-        double span_y = (processed_map_grid_height_ - 1) * processed_map_grid_resolution_;
-        for (size_t y_idx = 0; y_idx < processed_map_grid_height_; y_idx++) {
-            for (size_t x_idx = 0; x_idx < processed_map_grid_width_; x_idx++) {
-                double x_pos = -span_x / 2.0 + x_idx * processed_map_grid_resolution_ + elevation_sensor_offset_x_;
-                double y_pos = -span_y / 2.0 + y_idx * processed_map_grid_resolution_ + elevation_sensor_offset_y_;
-                lookup_points_robot_frame_.emplace_back(x_pos, y_pos);
-            }
-        }
     }
 
 private:
