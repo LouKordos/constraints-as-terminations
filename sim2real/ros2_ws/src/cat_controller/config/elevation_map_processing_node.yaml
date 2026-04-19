@@ -6,8 +6,10 @@ elevation_map_processing_node:
     processed_map_topic_name: "/processed_elevation_map" # Where to publish
     processing_frequency_hz: 50.0 # Note that this is independent of how often an elevation map is received, as the transformation to body will occur more frequently using the latest tf.
 
-    processed_map_grid_width: 13
-    processed_map_grid_height: 11
+    # IMPORTANT: Dimensions of the map (i.e. (processed_map_grid_width * processed_grid_resolution, processed_map_grid_height * processed_grid_resolution)) is at most *half* the size of the map dimensions
+    # configured in the elevation_mapping_cupy package publishing the raw map, so that out of bounds indices do not cause issues
+    processed_map_grid_width: 13 # cells
+    processed_map_grid_height: 11 # cells
     processed_map_grid_resolution: 0.08 # Meters
     elevation_sensor_offset_x: 0.2 # Meters, shifts sensor position relative to base, because policy was trained with a gridmap that is offset towards the front of the robot
     elevation_sensor_offset_y: 0.0 # Meters, shifts sensor position relative to base
