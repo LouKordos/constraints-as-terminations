@@ -203,9 +203,12 @@ private:
         // Pass RCL_ROS_TIME to make it compatible with replaying
         processed_msg.source_map_stamp = rclcpp::Time(static_cast<int64_t>(latest_map->getTimestamp()), RCL_ROS_TIME);
         auto map_size = latest_map->getSize();
-        processed_msg.size_x = map_size.x();
-        processed_msg.size_y = map_size.y();
-        processed_msg.resolution = latest_map->getResolution();
+        processed_msg.source_size_x = map_size.x();
+        processed_msg.source_size_y = map_size.y();
+        processed_msg.source_resolution = latest_map->getResolution();
+        processed_msg.processed_size_x = processed_map_grid_width_;
+        processed_msg.processed_size_y = processed_map_grid_height_;
+        processed_msg.processed_resolution = processed_map_grid_resolution_;
         processed_msg.sensor_offset_x = elevation_sensor_offset_x_;
         processed_msg.sensor_offset_y = elevation_sensor_offset_y_;
         processed_msg.fill_value = invalid_cell_fill_value_;

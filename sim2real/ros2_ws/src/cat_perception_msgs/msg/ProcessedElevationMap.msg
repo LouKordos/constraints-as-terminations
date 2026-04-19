@@ -11,9 +11,14 @@ builtin_interfaces/Time source_map_stamp
 # Timestamp of the robot pose / TF lookup used to generate the yaw-aligned local policy observation. Different from source_map_stamp because the two run concurrently
 builtin_interfaces/Time source_pose_stamp
 
-uint32 size_x           # Number of cells in the X direction
-uint32 size_y           # Number of cells in the Y direction
-float32 resolution      # Size of each cell in meters/cell
+uint32 source_size_x           # Number of cells in the X direction of the source (raw) elevation map
+uint32 source_size_y           # Number of cells in the Y direction of the source (raw) elevation map
+float32 source_resolution      # Size of each cell in meters/cell of the source (raw) elevation map
+
+uint32 processed_size_x        # Number of cells in the X direction of the processed elevation map
+uint32 processed_size_y        # Number of cells in the Y direction of the processed elevation map
+float32 processed_resolution   # Size of each cell in meters/cell of the processed elevation map
+
 float32 sensor_offset_x # Because simulation was trained with offset in x dir
 float32 sensor_offset_y
 
