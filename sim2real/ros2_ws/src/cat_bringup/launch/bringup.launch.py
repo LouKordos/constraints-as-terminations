@@ -121,6 +121,7 @@ def _launch_setup(context, *args, **kwargs):
             "/statistics",
             "/elevation_map_points",
             "/elevation_mapping_node/elevation_map_filter",
+            "/processed_elevation_map",
             "--regex",
             "^/[oO]dom.*",
         ],
