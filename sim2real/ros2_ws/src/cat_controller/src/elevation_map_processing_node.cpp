@@ -89,9 +89,9 @@ private:
         {
             return;
         }
-        // Because we swapped the pointer atomically in the sub callback, and we create a temporary pointer to it here, we can now simply do anything
-        // we want with the object, because no other thread is modifying it. When this local pointer goes out of scope, it will decrement the
-        // ref-count, and the object will be deleted from the heap once all threads including the global pointer are done with it.
+        // Use an RCU-like atomic pointer swap. For my own understanding I am writing an explanation here:
+        // We bypass locking by allocating a new object on the heap, converting the message without locking yet, and only then atomically store the
+        // new pointer globally. That way, the high-frequency timer thread never blocks waiting for a deep copy to finish.
         std::shared_ptr<grid_map::GridMap> latest_map = global_grid_map_.load();
         // Always need to check for null pointer, e.g. for scenario when no map has been received yet.
         if (!latest_map) {
