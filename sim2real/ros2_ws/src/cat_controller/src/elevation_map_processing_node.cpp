@@ -33,8 +33,8 @@ public:
               std::chrono::round<std::chrono::milliseconds>(std::chrono::duration<double, std::milli>(1000.0 / processing_frequency_hz_))),
           processed_map_grid_width_(declare_and_get_param<int>("processed_map_grid_width", "Number of cells in width direction", true)),
           processed_map_grid_height_(declare_and_get_param<int>("processed_map_grid_height", "Number of cells in height direction", true)),
-          processed_grid_resolution_(
-              declare_and_get_param<double>("processed_grid_resolution", "Grid resolution (spacing) between cells in meters.", true)),
+          processed_map_grid_resolution_(
+              declare_and_get_param<double>("processed_map_grid_resolution", "Grid resolution (spacing) between cells in meters.", true)),
           elevation_sensor_offset_x_(declare_and_get_param<double>("elevation_sensor_offset_x",
               "In meters. Shifts sensor position relative to base. Policy was trained with offset in positive X direction to focus more data towards "
               "front of robot for walking.",
@@ -157,7 +157,7 @@ private:
     const std::chrono::milliseconds processing_interval_;  // Needed for wall timer
     const int processed_map_grid_width_;
     const int processed_map_grid_height_;
-    const double processed_grid_resolution_;
+    const double processed_map_grid_resolution_;
     const double elevation_sensor_offset_x_;
     const double elevation_sensor_offset_y_;
     const double elevation_sensor_offset_z_;
