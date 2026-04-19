@@ -168,7 +168,8 @@ private:
         // ROS2 standard uses right-handed coordinate frame => positive rotation is CCW, so euler convention matches that
         auto rot_body_to_world_yaw = Eigen::Rotation2Dd(yaw);
 
-        // TODO: Vectorize by using matrix
+        // We do not vectorize the rotation math here using Eigen matrices, as the computational cost of ~150 2D rotations is negligible (<1us)
+        // and the loop's execution time is mostly dominated by the memory access and interpolation inside grid_map::atPosition().
         for (size_t i = 0; i < lookup_points_world_frame_.size(); i++) {
             lookup_points_world_frame_[i] = rot_body_to_world_yaw * lookup_points_robot_frame_[i];
             lookup_points_world_frame_[i].x() += base_to_world_tf.transform.translation.x;
