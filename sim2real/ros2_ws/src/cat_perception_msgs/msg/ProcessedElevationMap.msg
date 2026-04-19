@@ -15,6 +15,7 @@ uint32 size_x           # Number of cells in the X direction
 uint32 size_y           # Number of cells in the Y direction
 float32 resolution      # Size of each cell in meters/cell
 float32 sensor_offset_x # Because simulation was trained with offset in x dir
+float32 sensor_offset_y
 
 # Robot pose in header.frame_id (global frame)
 geometry_msgs/Pose robot_pose
