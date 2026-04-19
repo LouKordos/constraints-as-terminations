@@ -174,21 +174,17 @@ private:
             lookup_points_world_frame_[i].x() += base_to_world_tf.transform.translation.x;
             lookup_points_world_frame_[i].y() += base_to_world_tf.transform.translation.y;
 
-            // Check validity of each cell, set to fill value if invalid to avoid interpolation issues.
-            // It should almost never happen in practice anyway since the elevation mapping inpainting and min_filter plugins
-            // will filter out most and the original map is assumed to be twice as large as the policy region of interest.
-            grid_map::Index current_pos_index;
             grid_map::Position current_pos(lookup_points_world_frame_[i]);
-            if (!latest_map->getIndex(current_pos, current_pos_index)) {
-                processed_elevation_map_values_[i] = fill_value;
-                continue;
-            }
-            if (!latest_map->isValid(current_pos_index, source_map_layer_name_) || !latest_map->isInside(current_pos)) {
+            if (!latest_map->isInside(current_pos)) {
                 processed_elevation_map_values_[i] = fill_value;
                 continue;  // Skip this position
             }
+
             double absolute_height = latest_map->atPosition(source_map_layer_name_, current_pos, grid_map::InterpolationMethods::INTER_LINEAR);
-            // As atPosition can return NaN if neighbors are NaN and isValid only checks the cell center, we need to correct invalid values again
+
+            // Check validity of each cell, set to fill value if invalid to avoid interpolation issues.
+            // It should almost never happen in practice anyway since the elevation mapping inpainting and min_filter plugins
+            // will filter out most and the original map is assumed to be twice as large as the policy region of interest.
             if (!std::isfinite(absolute_height)) {
                 processed_elevation_map_values_[i] = fill_value;
                 continue;  // Skip this position
