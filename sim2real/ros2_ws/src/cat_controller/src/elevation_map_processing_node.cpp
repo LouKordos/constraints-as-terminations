@@ -177,8 +177,6 @@ private:
             lookup_points_world_frame_[i].x() += base_to_world_tf.transform.translation.x;
             lookup_points_world_frame_[i].y() += base_to_world_tf.transform.translation.y;
 
-            // TODO: Might be wrong here, I Think I need to consider the map center as well? or not because I use atPosition directly?
-
             // Check validity of each cell, set to fill value if invalid to avoid interpolation issues.
             // It should almost never happen in practice anyway since the elevation mapping inpainting and min_filter plugins
             // will filter out most and the original map is assumed to be twice as large as the policy region of interest.
