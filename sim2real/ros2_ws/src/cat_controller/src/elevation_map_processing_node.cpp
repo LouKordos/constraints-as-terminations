@@ -79,6 +79,8 @@ public:
             }
         }
 
+        lookup_points_world_frame_ = lookup_points_robot_frame_;
+
         RCLCPP_DEBUG(this->get_logger(), "Starting elevation map subscriber.");
         this->map_sub_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
         rclcpp::SubscriptionOptions map_sub_options;
@@ -144,9 +146,14 @@ private:
         // ROS2 standard uses right-handed coordinate frame => positive rotation is CCW, so euler convention matches that
         auto rot_body_to_world_yaw = Eigen::Rotation2Dd(yaw);
 
-        // TODO: Rotate body frame lookup positions into world frame
-        // TODO: Add map center to coordinates as offset because despite map being robot-centered, the coordinates still need adjustments since we are
-        // not working with indices but with coords Check IsInside for each transformed lookup coordinate
+        // TODO: Vectorize by using matrix
+        for (size_t i = 0; i < lookup_points_world_frame_.size(); i++) {
+            lookup_points_world_frame_[i] = rot_body_to_world_yaw * lookup_points_robot_frame_[i];
+            lookup_points_world_frame_[i].x() += base_to_world_tf.transform.translation.x;
+            lookup_points_world_frame_[i].y() += base_to_world_tf.transform.translation.y;
+        }
+
+        // Check IsInside for each transformed lookup coordinate
         // TODO: Check validity of each cell from source using IsValid, set to hardcoded to avoid interpolation issues. This differs from
         // elevation_to_policy in that python version handles nans after interpolation, but this is fine because submap is almost always valid and a
         // few fill values are not a problem should there be some invalid value Fetch value from grid map at each transformed lookup point => subtract
@@ -223,6 +230,8 @@ private:
     std::atomic<std::shared_ptr<grid_map::GridMap>> global_grid_map_;
     // List of sample positions in body frame for elevation map. These stay constant in body frame but we need to transform them into world frame
     std::vector<Eigen::Vector2d> lookup_points_robot_frame_;
+    // Only to be accessed from timer callback, but elevated to member var to avoid reallocation every iteration
+    std::vector<Eigen::Vector2d> lookup_points_world_frame_;
 
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
