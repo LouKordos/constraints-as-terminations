@@ -183,6 +183,7 @@ private:
         // shutdown_coordinator instead! Proboably use IsInside to avoid try catch block around hot loop of ~150 lookups?
 
         // TODO: Create custom msg, publish, log
+        processing_iteration_counter_++;
 
         // AFTER CONFIRMED WORKING:
         // TODO: PROFILE HOW LONG HOTLOOP OVER INDICES TAKES!!!
@@ -228,6 +229,7 @@ private:
     }
 
     std::chrono::steady_clock::time_point last_processing_callback_time_;
+    uint64_t processing_iteration_counter_;
 
     const std::string source_map_topic_name_;
     const std::string source_map_layer_name_;
