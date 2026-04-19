@@ -6,6 +6,7 @@ Disclaimer: This code was proudly written without LLMs :)
 #include <fmt/core.h>
 #include <fmt/ranges.h>
 
+#include <algorithm>
 #include <ament_index_cpp/get_package_prefix.hpp>
 #include <atomic>
 #include <chrono>
@@ -191,11 +192,16 @@ private:
 
     void source_map_subscriber_callback(const grid_map_msgs::msg::GridMap::ConstSharedPtr msg)
     {
-        // TODO: Exit if layer not found in map
-        // Use something similar to RCU just with atomic shared pointers as it is perfect for this scenario. For my own understanding, an explanation:
-        // Read, i.e. dereference the source pointer Copy, i.e. create a deep copy on the heap of the original message using from_message.
+        // Use something similar to RCU just with atomic shared pointers as it is perfect for this scenario.
+        // For my own understanding, an explanation: Read, i.e. dereference the source pointer Copy, i.e. create a deep copy on the heap of the
+        // original message using from_message.
         auto new_source_map = std::make_shared<grid_map::GridMap>();
         grid_map::GridMapRosConverter::fromMessage(*msg, *new_source_map);
+        // Check if the layer exists here to avoid having to check in loop, this way all exceptions that can be thrown by grid_map are handled.
+        if (!std::ranges::contains(new_source_map->getLayers(), source_map_layer_name_)) {
+            shutdown_coordinator_.shutdown(std::format("Desired layer={} not found in elevation map, exiting.", source_map_layer_name_));
+            return;
+        }
         // Update, i.e. point the current global atomic shared ptr to the newly allocated message on the heap. Since we only read here and then exit,
         // and we only have a single reader, it is guaranteed that after the atomic copy operation, the other reader can do whatever he wants
         global_grid_map_.store(new_source_map);
