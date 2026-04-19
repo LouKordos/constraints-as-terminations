@@ -211,7 +211,7 @@ private:
         processed_msg.processed_resolution = processed_map_grid_resolution_;
         processed_msg.sensor_offset_x = elevation_sensor_offset_x_;
         processed_msg.sensor_offset_y = elevation_sensor_offset_y_;
-        processed_msg.fill_value = invalid_cell_fill_value_;
+        processed_msg.fill_value = use_negative_body_height_as_fill_value_ ? -base_to_world_tf.transform.translation.z : invalid_cell_fill_value_;
         processed_msg.seq = processing_iteration_counter_;
         // TODO: Add is_valid mask to the message
         processed_msg.layer_name = source_map_layer_name_;
