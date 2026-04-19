@@ -183,7 +183,7 @@ private:
             // will filter out most and the original map is assumed to be twice as large as the policy region of interest.
             grid_map::Index current_pos_index;
             grid_map::Position current_pos(lookup_points_world_frame_[i]);
-            latest_map->getIndex(current_pos, current_pos_index);
+            if (!latest_map->getIndex(current_pos, current_pos_index)) { continue; }
             if (!latest_map->isValid(current_pos_index, source_map_layer_name_) || !latest_map->isInside(current_pos)) {
                 processed_elevation_map_values_[i] =
                     use_negative_body_height_as_fill_value_ ? -base_to_world_tf.transform.translation.z : invalid_cell_fill_value_;
