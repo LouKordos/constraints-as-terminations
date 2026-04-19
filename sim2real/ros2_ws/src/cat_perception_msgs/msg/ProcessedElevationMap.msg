@@ -27,7 +27,7 @@ geometry_msgs/Pose robot_pose
 
 # Handling of invalid/occluded cells
 float32 fill_value      # CANNOT BE NaN, as values are assumed to sanitized for being passed directly to policy inference
-uint8[] is_valid         # boolean mask, but not bool type because of std::vector<bool> concerns, so 1 = valid, 0 = invalid
+uint8[] is_valid_mask         # boolean mask, but not bool type because of std::vector<bool> concerns, so 1 = valid, 0 = invalid
 
 # Name of the source layer in the incoming GridMap, e.g. "elevation", "min_filter", "smooth".
 string layer_name
