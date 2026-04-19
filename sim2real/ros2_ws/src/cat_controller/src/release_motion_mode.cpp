@@ -11,10 +11,10 @@ inherits a ROS-sourced environment it can resolve a mixed DDS runtime at startup
 /usr/local/lib. That split runtime caused early allocator / ABI crashes such as `free(): invalid pointer` and made the motion switcher unusable from
 the ROS process directly.
 
-To avoid that, the main ROS node launches this helper through the dynamic loader with an explicit `--library-path`, so this binary always uses the
-known-good DDS libraries from the SDK2 environment. Its only job is to release the high-level motion service via MotionSwitcherClient::ReleaseMode()
-and then exit with a clear success / failure status that the ROS node can act on, after which messages published on /lowcmd by the control node are
-applied by the robot correctly.
+To avoid that, the main ROS node launches this helper through the dynamic loader with an explicit LD_LIBRARY_PATH (overriding the one set by the ROS
+ws source), so this binary always uses the known-good DDS libraries from the SDK2 environment. Its only job is to release the high-level motion
+service via MotionSwitcherClient::ReleaseMode() and then exit with a clear status that the ROS node can act on, after which messages
+published on /lowcmd by the control node are applied by the robot correctly.
 */
 
 #include <chrono>
