@@ -196,16 +196,26 @@ private:
             processed_elevation_map_values_[i] = absolute_height - base_to_world_tf.transform.translation.z;
         }
 
-        // Check IsInside for each transformed lookup coordinate
-        // TODO: Check validity of each cell from source using IsValid, set to hardcoded to avoid interpolation issues. This differs from
-        // elevation_to_policy in that python version handles nans after interpolation, but this is fine because submap is almost always valid and a
-        // few fill values are not a problem should there be some invalid value Fetch value from grid map at each transformed lookup point => subtract
-        // body z from tf lookup
+        cat_perception_msgs::msg::ProcessedElevationMap processed_msg;
+        processed_msg.header.frame_id = robot_world_frame_name_;
+        processed_msg.header.stamp = processing_start_stamp;
+        processed_msg.source_pose_stamp = tf_lookup_start_stamp;
+        // Pass RCL_ROS_TIME to make it compatible with replaying
+        processed_msg.source_map_stamp = rclcpp::Time(static_cast<int64_t>(latest_map->getTimestamp()), RCL_ROS_TIME);
+        auto map_size = latest_map->getSize();
+        processed_msg.size_x = map_size.x();
+        processed_msg.size_y = map_size.y();
+        processed_msg.resolution = latest_map->getResolution();
+        processed_msg.sensor_offset_x = elevation_sensor_offset_x_;
+        processed_msg.sensor_offset_y = elevation_sensor_offset_y_;
+        processed_msg.fill_value = invalid_cell_fill_value_;
+        processed_msg.seq = processing_iteration_counter_;
+        // TODO: Add is_valid mask to the message
+        processed_msg.layer_name = source_map_layer_name_;
+        processed_msg.data = processed_elevation_map_values_;
 
-        // TODO: gridmap heavily relies on exceptions, make sure to fully catch all of them, log and return only std::expected, NODE SHOULD EXIT USING
-        // shutdown_coordinator instead! Proboably use IsInside to avoid try catch block around hot loop of ~150 lookups?
+        processed_map_publisher_->publish(processed_msg);
 
-        // TODO: Create custom msg, publish, log
         processing_iteration_counter_++;
 
         // AFTER CONFIRMED WORKING:
