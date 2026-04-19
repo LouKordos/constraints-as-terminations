@@ -114,7 +114,6 @@ private:
         // Use an RCU-like atomic pointer swap. For my own understanding I am writing an explanation here:
         // We bypass locking by allocating a new object on the heap, converting the message without locking yet, and only then atomically store the
         // new pointer globally. That way, the high-frequency timer thread never blocks waiting for a deep copy to finish.
-        // TODO: Profile how long this takes
         std::shared_ptr<grid_map::GridMap> latest_map = global_grid_map_.load();
         // Always need to check for null pointer, e.g. for scenario when no map has been received yet.
         if (!latest_map) {
@@ -124,8 +123,6 @@ private:
         // No need for age check of elevation map here since the policy will handle that and stop the robot if the received message is too old
 
         // TODO: Fetch tf lookup base_to_world => compute Rotation matrix body to world
-        // TODO: Wrap tf lookup in try-catch, log, handle all scenarios robustly. Probably wait a few ms for the tf then fail if it is not available?
-        // Since outdated tf is a no-go
         // TODO: Rotate body frame lookup positions into world frame, add map center to coordinates because despite map being robot-centered, the
         // coordinates still need adjustments since we are not working with indices but with coords
         // Check IsInside for each transformed lookup coordinate
@@ -133,14 +130,14 @@ private:
         // elevation_to_policy in that python version handles nans after interpolation, but this is fine because submap is almost always valid and a
         // few fill values are not a problem should there be some invalid value Fetch value from grid map at each transformed lookup point => subtract
         // body z from tf lookup
-        // TODO: PROFILE HOW LONG HOTLOOP OVER INDICES TAKES!!!
 
         // TODO: gridmap heavily relies on exceptions, make sure to fully catch all of them, log and return only std::expected, NODE SHOULD EXIT USING
         // shutdown_coordinator instead! Proboably use IsInside to avoid try catch block around hot loop of ~150 lookups?
 
         // TODO: Create custom msg, publish, log
 
-        // Keep this TODO: Test with grid_map builtin interpolation and check the differences because that is cleaner. I don't mind using nearest
+        // TODO: PROFILE HOW LONG HOTLOOP OVER INDICES TAKES!!!
+        // TODO: Profile how long atomic shared ptr update takes
         // TODO: After confirmed working, start simplifying and cleaning up until there are differences when running the rosbag-checker on it
     }
 
