@@ -97,16 +97,20 @@ private:
         }
         // No need for age check of elevation map here since the policy will handle that and stop the robot if the received message is too old
 
-        // TODO: Process map to convert into polciy observation format as in elevation_to_policy
+        // TODO: Fetch tf lookup base_to_world => compute Rotation matrix body to world
+        // TODO: Wrap tf lookup in try-catch, log, handle all scenarios robustly. Probably wait a few ms for the tf then fail if it is not available?
+        // Since outdated tf is a no-go
+        // TODO: Rotate body frame lookup positions into world frame, add map center to coordinates because despite map being robot-centered, the
+        // coordinates still need adjustments since we are not working with indices but with coords
+        // Check IsInside for each transformed lookup coordinate
+        // TODO: Check validity of each cell from source using IsValid, set to hardcoded to avoid interpolation issues. This differs from
+        // elevation_to_policy in that python version handles nans after interpolation, but this is fine because submap is almost always valid and a
+        // few fill values are not a problem should there be some invalid value Fetch value from grid map at each transformed lookup point => subtract
+        // body z from tf lookup
+        // TODO: PROFILE HOW LONG HOTLOOP OVER INDICES TAKES!!!
 
-        // Wrap tf lookup in exception, log and handle scenarios robustly. Probably wait a few ms for the tf then fail if it is not available? Since
-        // outdated tf is a no-go
-
-        // TODO: for interpolation, first implement a manual bilinear interpolation that does the same as python
-        // neighbor since invalid cells are very rare in my use case anyway
-
-        // TODO: gridmap heavily relies on exceptions, make sure to fully catch all of them, log and return only std::expected, NODE SHOULD NOT THROW
-        // EXCEPTIONS BUT HANDLE USING shutdown_coordinator instead! Proboably use IsInside to avoid try catch block around hot loop of ~150 lookups?
+        // TODO: gridmap heavily relies on exceptions, make sure to fully catch all of them, log and return only std::expected, NODE SHOULD EXIT USING
+        // shutdown_coordinator instead! Proboably use IsInside to avoid try catch block around hot loop of ~150 lookups?
 
         // TODO: Create custom msg, publish, log
 
