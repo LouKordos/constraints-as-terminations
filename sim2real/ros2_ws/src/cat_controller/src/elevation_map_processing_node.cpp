@@ -2,6 +2,7 @@
 #include <fmt/ranges.h>
 
 #include <ament_index_cpp/get_package_prefix.hpp>
+#include <atomic>
 #include <chrono>
 #include <string>
 
@@ -88,10 +89,17 @@ private:
         {
             return;
         }
-        // TODO: Load global atomic map
-        // No need for age check of global elevation map here, since the policy will handle that and stop the robot if the received message is too old
+        // Because we swapped the pointer atomically in the sub callback, and we create a temporary pointer to it here, we can now simply do anything
+        // we want with the object, because no other thread is modifying it. When this local pointer goes out of scope, it will decrement the
+        // ref-count, and the object will be deleted from the heap once all threads including the global pointer are done with it.
+        std::shared_ptr<grid_map::GridMap> latest_map = global_grid_map_.load();
+        // Always need to check for null pointer, e.g. for scenario when no map has been received yet.
+        if (!latest_map) {
+            RCLCPP_WARN(this->get_logger(), "Global map is null pointer, skipping processing iteration...");
+            return;
+        }
+        // No need for age check of elevation map here since the policy will handle that and stop the robot if the received message is too old
 
-        // TODO: Probably keep private working copy of current_procesed_map and call reserve in constructor on that to avoid heap allocs?
         // TODO: Process map to convert into polciy observation format as in python
 
         // TODO: for interpolation, first implement a manual bilinear interpolation that does the same as python
@@ -108,8 +116,13 @@ private:
 
     void source_map_subscriber_callback(const grid_map_msgs::msg::GridMap::ConstSharedPtr msg)
     {
-        // TODO: store globally using atomic shared ptr probably, need to check best approach here to avoid expensive copies and heap allocs here.
-        // TODO: Log info
+        // Use something similar to RCU just with atomic shared pointers as it is perfect for this scenario. For my own understanding, an explanation:
+        // Read, i.e. dereference the source pointer Copy, i.e. create a deep copy on the heap of the original message using from_message.
+        auto new_source_map = std::make_shared<grid_map::GridMap>();
+        grid_map::GridMapRosConverter::fromMessage(*msg, *new_source_map);
+        // Update, i.e. point the current global atomic shared ptr to the newly allocated message on the heap. Since we only read here and then exit,
+        // and we only have a single reader, it is guaranteed that after the atomic copy operation, the other reader can do whatever he wants
+        global_grid_map_.store(new_source_map);
     }
 
     template <typename T>
@@ -152,6 +165,10 @@ private:
     rclcpp::TimerBase::SharedPtr map_processing_timer_;
     rclcpp::CallbackGroup::SharedPtr map_sub_cbg_;
     rclcpp::CallbackGroup::SharedPtr processing_timer_cbg_;
+
+    // Usually, I would use my own custom timed_atomic here to avoid hanging in a safety critical thread, but since the cat_control_node will have an
+    // age check on the received message and simply stop the robot if no new messages arrive, it is acceptable to use a simple atomic shared pointer.
+    std::atomic<std::shared_ptr<grid_map::GridMap>> global_grid_map_;
 
     ShutdownCoordinator shutdown_coordinator_;
 };
