@@ -188,6 +188,11 @@ private:
                 continue;  // Skip this position
             }
             double absolute_height = latest_map->atPosition(source_map_layer_name_, current_pos, grid_map::InterpolationMethods::INTER_LINEAR);
+            // As atPosition can return NaN if neighbors are NaN and isValid only checks the cell center, we need to correct invalid values again
+            if (!std::isfinite(absolute_height)) {
+                processed_elevation_map_values_[i] = fill_value;
+                continue;
+            }
             // TODO: Compute is_valid mask for message
             // TODO: Really not sure if I can use the indexing like this, I think this is wrong and needs to be put into the same order as
             // elevation_to_policy
