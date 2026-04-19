@@ -90,6 +90,7 @@ public:
 
         lookup_points_world_frame_ = lookup_points_robot_frame_;
         processed_elevation_map_values_.resize(processed_map_grid_width_ * processed_map_grid_height_, invalid_cell_fill_value_);
+        valid_mask_.resize(processed_map_grid_width_ * processed_map_grid_height_);
 
         RCLCPP_DEBUG(this->get_logger(), "Starting elevation map subscriber.");
         this->map_sub_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
@@ -178,24 +179,23 @@ private:
             lookup_points_world_frame_[i].y() += base_to_world_tf.transform.translation.y;
 
             grid_map::Position current_pos(lookup_points_world_frame_[i]);
-            if (!latest_map->isInside(current_pos)) {
-                processed_elevation_map_values_[i] = fill_value;
-                continue;  // Skip this position
-            }
+            valid_mask_[i] = 0;
+            processed_elevation_map_values_[i] = fill_value;
 
-            double absolute_height = latest_map->atPosition(source_map_layer_name_, current_pos, grid_map::InterpolationMethods::INTER_LINEAR);
+            if (latest_map->isInside(current_pos)) {
+                double absolute_height = latest_map->atPosition(source_map_layer_name_, current_pos, grid_map::InterpolationMethods::INTER_LINEAR);
 
-            // Check validity of each cell, set to fill value if invalid to avoid interpolation issues.
-            // It should almost never happen in practice anyway since the elevation mapping inpainting and min_filter plugins
-            // will filter out most and the original map is assumed to be twice as large as the policy region of interest.
-            if (!std::isfinite(absolute_height)) {
-                processed_elevation_map_values_[i] = fill_value;
-                continue;  // Skip this position
+                // Check validity of each cell, set to fill value if invalid to avoid interpolation issues.
+                // It should almost never happen in practice anyway since the elevation mapping inpainting and min_filter plugins
+                // will filter out most and the original map is assumed to be twice as large as the policy region of interest.
+                if (std::isfinite(absolute_height)) {
+                    processed_elevation_map_values_[i] = absolute_height - base_to_world_tf.transform.translation.z;
+                    valid_mask_[i] = true;
+                }
+                // TODO: Thoroughly check if the is_valid mask is 100% correctly implemented
+                // TODO: Really not sure if I can use the indexing like this, I think this is wrong and needs to be put into the same order as
+                // elevation_to_policy. It is imperative that this is identiacl to elevation_to_policy.py because that one I know works
             }
-            // TODO: Compute is_valid mask for message
-            // TODO: Really not sure if I can use the indexing like this, I think this is wrong and needs to be put into the same order as
-            // elevation_to_policy
-            processed_elevation_map_values_[i] = absolute_height - base_to_world_tf.transform.translation.z;
         }
 
         cat_perception_msgs::msg::ProcessedElevationMap processed_msg;
@@ -215,7 +215,7 @@ private:
         processed_msg.sensor_offset_y = elevation_sensor_offset_y_;
         processed_msg.fill_value = fill_value;
         processed_msg.seq = processing_iteration_counter_;
-        // TODO: Add is_valid mask to the message
+        processed_msg.is_valid_mask = valid_mask_;
         processed_msg.layer_name = source_map_layer_name_;
         processed_msg.data = processed_elevation_map_values_;
 
@@ -299,6 +299,7 @@ private:
     // Only to be accessed from timer callback, but elevated to member var to avoid reallocation every iteration
     std::vector<Eigen::Vector2d> lookup_points_world_frame_;
     std::vector<float> processed_elevation_map_values_;
+    std::vector<uint8_t> valid_mask_;
 
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
