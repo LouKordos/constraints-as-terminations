@@ -275,8 +275,8 @@ private:
     const double processing_frequency_hz_;
     const std::chrono::milliseconds processing_interval_;  // Needed for wall timer
     const double tf_lookup_timeout_;
-    const int processed_map_grid_width_;
-    const int processed_map_grid_height_;
+    const int processed_map_grid_width_;   // In cells, NOT meters
+    const int processed_map_grid_height_;  // In cells, NOT meters
     const double processed_map_grid_resolution_;
     const double elevation_sensor_offset_x_;
     const double elevation_sensor_offset_y_;
