@@ -117,6 +117,7 @@ private:
 
     void source_map_subscriber_callback(const grid_map_msgs::msg::GridMap::ConstSharedPtr msg)
     {
+        // TODO: Exit if layer not found in map
         // Use something similar to RCU just with atomic shared pointers as it is perfect for this scenario. For my own understanding, an explanation:
         // Read, i.e. dereference the source pointer Copy, i.e. create a deep copy on the heap of the original message using from_message.
         auto new_source_map = std::make_shared<grid_map::GridMap>();
