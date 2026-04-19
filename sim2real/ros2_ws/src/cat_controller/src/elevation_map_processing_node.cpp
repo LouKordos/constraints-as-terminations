@@ -139,7 +139,7 @@ private:
             return;
         }
 
-        // TODO: Fetch tf lookup base_to_world => compute Rotation matrix body to world
+        // TODO: Compute Rotation matrix body to world
         // TODO: Rotate body frame lookup positions into world frame, add map center to coordinates because despite map being robot-centered, the
         // coordinates still need adjustments since we are not working with indices but with coords
         // Check IsInside for each transformed lookup coordinate
@@ -153,9 +153,10 @@ private:
 
         // TODO: Create custom msg, publish, log
 
+        // AFTER CONFIRMED WORKING:
         // TODO: PROFILE HOW LONG HOTLOOP OVER INDICES TAKES!!!
         // TODO: Profile how long atomic shared ptr update takes
-        // TODO: After confirmed working, start simplifying and cleaning up until there are differences when running the rosbag-checker on it
+        // TODO: Simplify and cleanup there are differences when running the rosbag-checker on it
     }
 
     void source_map_subscriber_callback(const grid_map_msgs::msg::GridMap::ConstSharedPtr msg)
