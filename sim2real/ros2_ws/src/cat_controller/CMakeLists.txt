@@ -18,6 +18,7 @@ find_package(ament_index_cpp)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(grid_map_msgs REQUIRED)
@@ -62,6 +63,8 @@ target_link_libraries(
   elevation_map_processing_node
   rclcpp::rclcpp
   ament_index_cpp::ament_index_cpp
+  tf2::tf2
+  tf2_ros::tf2_ros
   ${std_msgs_TARGETS}
   ${geometry_msgs_TARGETS}
   ${grid_map_msgs_TARGETS}
