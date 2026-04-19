@@ -24,10 +24,12 @@ find_package(grid_map_msgs REQUIRED)
 find_package(cat_perception_msgs REQUIRED)
 find_package(unitree_go REQUIRED)
 find_package(unitree_api REQUIRED)
-find_package(Torch REQUIRED)
-find_package(fmt REQUIRED)
 find_package(grid_map_core REQUIRED)
 find_package(grid_map_ros REQUIRED)
+
+find_package(Torch REQUIRED)
+find_package(fmt REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 include(FetchContent)
 FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
@@ -67,6 +69,7 @@ target_link_libraries(
   grid_map_core::grid_map_core
   fmt::fmt
   nlohmann_json::nlohmann_json
+  Eigen3::Eigen
 )
 
 # This is discouraged for recent ROS which is why I avoided it up until now, but grid_map_ros maintainers have not updated the way it's packaged yet...
