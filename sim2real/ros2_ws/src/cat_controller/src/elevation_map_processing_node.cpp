@@ -66,8 +66,6 @@ public:
             processing_interval_, std::bind(&ElevationMapProcessingNode::process_and_publish_map, this), processing_timer_cbg_);
         RCLCPP_DEBUG(this->get_logger(), "Successfully started processing timer.");
 
-        // TODO: Initialize and RESERVE working copy processed elevation map vector to avoid heap allocs
-
         // Dump all node parameters to logs
         std::string param_dump = "=== Node Parameters ===\n";
         auto param_list = this->list_parameters(std::vector<std::string>{}, 10);
@@ -100,7 +98,7 @@ private:
         }
         // No need for age check of elevation map here since the policy will handle that and stop the robot if the received message is too old
 
-        // TODO: Process map to convert into polciy observation format as in python
+        // TODO: Process map to convert into polciy observation format as in elevation_to_policy
 
         // TODO: for interpolation, first implement a manual bilinear interpolation that does the same as python
         // neighbor since invalid cells are very rare in my use case anyway
