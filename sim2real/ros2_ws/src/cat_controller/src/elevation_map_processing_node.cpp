@@ -175,6 +175,25 @@ private:
             lookup_points_world_frame_[i] = rot_body_to_world_yaw * lookup_points_robot_frame_[i];
             lookup_points_world_frame_[i].x() += base_to_world_tf.transform.translation.x;
             lookup_points_world_frame_[i].y() += base_to_world_tf.transform.translation.y;
+
+            // TODO: Might be wrong here, I Think I need to consider the map center as well? or not because I use atPosition directly?
+
+            // Check validity of each cell, set to fill value if invalid to avoid interpolation issues.
+            // It should almost never happen in practice anyway since the elevation mapping inpainting and min_filter plugins
+            // will filter out most and the original map is assumed to be twice as large as the policy region of interest.
+            grid_map::Index current_pos_index;
+            grid_map::Position current_pos(lookup_points_world_frame_[i]);
+            latest_map->getIndex(current_pos, current_pos_index);
+            if (!latest_map->isValid(current_pos_index, source_map_layer_name_) || !latest_map->isInside(current_pos)) {
+                processed_elevation_map_values_[i] =
+                    use_negative_body_height_as_fill_value_ ? base_to_world_tf.transform.translation.z : invalid_cell_fill_value_;
+                continue;  // Skip this position
+            }
+            double absolute_height = latest_map->atPosition(source_map_layer_name_, current_pos, grid_map::InterpolationMethods::INTER_LINEAR);
+            // TODO: Compute is_valid mask for message
+            // TODO: Really not sure if I can use the indexing like this, I think this is wrong and needs to be put into the same order as
+            // elevation_to_policy
+            processed_elevation_map_values_[i] = absolute_height - base_to_world_tf.transform.translation.z;
         }
 
         // Check IsInside for each transformed lookup coordinate
