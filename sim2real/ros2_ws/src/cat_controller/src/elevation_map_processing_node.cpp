@@ -25,6 +25,7 @@ Disclaimer: This code was proudly written without LLMs :)
 #include "rclcpp/rclcpp.hpp"
 #include "tf2/exceptions.hpp"
 #include "tf2/time.h"
+#include "tf2/utils.h"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 
@@ -139,10 +140,13 @@ private:
             return;
         }
 
-        // TODO: Compute Rotation matrix body to world
-        // TODO: Rotate body frame lookup positions into world frame, add map center to coordinates because despite map being robot-centered, the
-        // coordinates still need adjustments since we are not working with indices but with coords
-        // Check IsInside for each transformed lookup coordinate
+        double yaw = tf2::getYaw(base_to_world_tf.transform.rotation);
+        // ROS2 standard uses right-handed coordinate frame => positive rotation is CCW, so euler convention matches that
+        auto rot_body_to_world_yaw = Eigen::Rotation2Dd(yaw);
+
+        // TODO: Rotate body frame lookup positions into world frame
+        // TODO: Add map center to coordinates as offset because despite map being robot-centered, the coordinates still need adjustments since we are
+        // not working with indices but with coords Check IsInside for each transformed lookup coordinate
         // TODO: Check validity of each cell from source using IsValid, set to hardcoded to avoid interpolation issues. This differs from
         // elevation_to_policy in that python version handles nans after interpolation, but this is fine because submap is almost always valid and a
         // few fill values are not a problem should there be some invalid value Fetch value from grid map at each transformed lookup point => subtract
