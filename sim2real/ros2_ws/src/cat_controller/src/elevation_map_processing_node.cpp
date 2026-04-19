@@ -153,6 +153,7 @@ private:
             shutdown_coordinator_.shutdown(std::format("tf lookup failed, exiting. Exception message: {}", e.what()));
             return;
         }
+        double fill_value = use_negative_body_height_as_fill_value_ ? -base_to_world_tf.transform.translation.z : invalid_cell_fill_value_;
 
         if (base_to_world_tf.transform.translation.z < min_allowed_body_height_ ||
             base_to_world_tf.transform.translation.z > max_allowed_body_height_)
@@ -185,8 +186,7 @@ private:
             grid_map::Position current_pos(lookup_points_world_frame_[i]);
             if (!latest_map->getIndex(current_pos, current_pos_index)) { continue; }
             if (!latest_map->isValid(current_pos_index, source_map_layer_name_) || !latest_map->isInside(current_pos)) {
-                processed_elevation_map_values_[i] =
-                    use_negative_body_height_as_fill_value_ ? -base_to_world_tf.transform.translation.z : invalid_cell_fill_value_;
+                processed_elevation_map_values_[i] = fill_value;
                 continue;  // Skip this position
             }
             double absolute_height = latest_map->atPosition(source_map_layer_name_, current_pos, grid_map::InterpolationMethods::INTER_LINEAR);
@@ -211,7 +211,7 @@ private:
         processed_msg.processed_resolution = processed_map_grid_resolution_;
         processed_msg.sensor_offset_x = elevation_sensor_offset_x_;
         processed_msg.sensor_offset_y = elevation_sensor_offset_y_;
-        processed_msg.fill_value = use_negative_body_height_as_fill_value_ ? -base_to_world_tf.transform.translation.z : invalid_cell_fill_value_;
+        processed_msg.fill_value = fill_value;
         processed_msg.seq = processing_iteration_counter_;
         // TODO: Add is_valid mask to the message
         processed_msg.layer_name = source_map_layer_name_;
