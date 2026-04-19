@@ -71,8 +71,8 @@ public:
         // TODO: Check if correct
         double span_x = (processed_map_grid_width_ - 1) * processed_map_grid_resolution_;
         double span_y = (processed_map_grid_height_ - 1) * processed_map_grid_resolution_;
-        for (size_t y_idx = 0; y_idx < processed_map_grid_height_; y_idx++) {
-            for (size_t x_idx = 0; x_idx < processed_map_grid_width_; x_idx++) {
+        for (int y_idx = 0; y_idx < processed_map_grid_height_; y_idx++) {
+            for (int x_idx = 0; x_idx < processed_map_grid_width_; x_idx++) {
                 double x_pos = -span_x / 2.0 + x_idx * processed_map_grid_resolution_ + elevation_sensor_offset_x_;
                 double y_pos = -span_y / 2.0 + y_idx * processed_map_grid_resolution_ + elevation_sensor_offset_y_;
                 lookup_points_robot_frame_.emplace_back(x_pos, y_pos);
