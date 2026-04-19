@@ -125,6 +125,7 @@ private:
     void process_and_publish_map()
     {
         auto steady_now = std::chrono::steady_clock::now();
+        auto processing_start_stamp = this->get_clock()->now();
         if (shutdown_coordinator_.handle_exit_if_requested() || time_utils::shutdown_if_deadline_exceeded(last_processing_callback_time_,
                                                                     std::chrono::milliseconds{2 * processing_interval_}, shutdown_coordinator_))
         {
@@ -142,10 +143,11 @@ private:
         // No need for age check of elevation map here since the policy will handle that and stop the robot if the received message is too old
 
         geometry_msgs::msg::TransformStamped base_to_world_tf;
+        auto tf_lookup_start_stamp = this->get_clock()->now();  // Used in processed message so we store it
         try {
             // Arg order is to,from
             base_to_world_tf = tf_buffer_->lookupTransform(
-                robot_world_frame_name_, robot_base_frame_name_, tf2::TimePointZero, tf2::durationFromSec(tf_lookup_timeout_));
+                robot_world_frame_name_, robot_base_frame_name_, tf_lookup_start_stamp, tf2::durationFromSec(tf_lookup_timeout_));
         } catch (const tf2::TransformException & e) {
             shutdown_coordinator_.shutdown(std::format("tf lookup failed, exiting. Exception message: {}", e.what()));
             return;
