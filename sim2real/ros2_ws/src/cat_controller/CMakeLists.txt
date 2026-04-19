@@ -19,6 +19,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(grid_map_msgs REQUIRED)
@@ -65,6 +66,7 @@ target_link_libraries(
   ament_index_cpp::ament_index_cpp
   tf2::tf2
   tf2_ros::tf2_ros
+  tf2_geometry_msgs::tf2_geometry_msgs
   ${std_msgs_TARGETS}
   ${geometry_msgs_TARGETS}
   ${grid_map_msgs_TARGETS}
