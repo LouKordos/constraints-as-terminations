@@ -63,6 +63,9 @@ public:
               declare_and_get_param<double>("elevation_sensor_offset_y", "In meters. Shifts sensor position relative to base", true)),
           invalid_cell_fill_value_(declare_and_get_param<double>(
               "invalid_cell_fill_value", "In meters. Used for Nan/inf in height map, since policy excepts purely numerical data.", true)),
+          use_negative_body_height_as_fill_value_(declare_and_get_param<bool>("use_negative_body_height_as_fill_value",
+              "If true, invalid_cell_fill_value is NOT used, and invalid cells are instead set to -body_height, which is arguably more accurate",
+              true)),
           shutdown_coordinator_(
               this->get_logger(), this->get_node_base_interface()->get_context(), [this]() { this->map_processing_timer_->cancel(); })
     {
@@ -219,6 +222,7 @@ private:
     const double elevation_sensor_offset_x_;
     const double elevation_sensor_offset_y_;
     const double invalid_cell_fill_value_;
+    const bool use_negative_body_height_as_fill_value_;
 
     rclcpp::Subscription<grid_map_msgs::msg::GridMap>::SharedPtr map_subscriber_;
     rclcpp::Publisher<cat_perception_msgs::msg::ProcessedElevationMap>::SharedPtr processed_map_publisher_;

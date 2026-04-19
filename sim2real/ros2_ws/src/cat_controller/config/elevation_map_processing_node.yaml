@@ -13,7 +13,8 @@ elevation_map_processing_node:
     processed_map_grid_resolution: 0.08 # Meters
     elevation_sensor_offset_x: 0.2 # Meters, shifts sensor position relative to base, because policy was trained with a gridmap that is offset towards the front of the robot
     elevation_sensor_offset_y: 0.0 # Meters, shifts sensor position relative to base
-    invalid_cell_fill_value: -0.27 # Meters
+    invalid_cell_fill_value: -0.27 # Meters, ONLY USED IF use_negative_body_height_as_fill_value is false
+    use_negative_body_height_as_fill_value: true # If true, invalid_cell_fill_value is NOT used, and invalid cells are instead set to -body_height, which is arguably more accurate
 
     robot_base_frame_name: "vicon/Go2_Loukas/Go2_Loukas" # Base link of the robot
     robot_world_frame_name: "vicon/world" # Should be the same as the map frame used in elevation_mapping_cupy producing the source maps!!!
