@@ -75,7 +75,6 @@ public:
         tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-        // TODO: Check if correct
         double span_x = (processed_map_grid_width_ - 1) * processed_map_grid_resolution_;
         double span_y = (processed_map_grid_height_ - 1) * processed_map_grid_resolution_;
         for (int y_idx = 0; y_idx < processed_map_grid_height_; y_idx++) {
@@ -162,7 +161,6 @@ private:
                     base_to_world_tf.transform.translation.z, min_allowed_base_height_, max_allowed_base_height_));
             return;
         }
-        // check bounds and exit if z is too large or small, indicates odom or state estimation is inaccruate
 
         double yaw = tf2::getYaw(base_to_world_tf.transform.rotation);
         // ROS2 standard uses right-handed coordinate frame => positive rotation is CCW, so euler convention matches that
@@ -189,7 +187,7 @@ private:
             // As atPosition can return NaN if neighbors are NaN and isValid only checks the cell center, we need to correct invalid values again
             if (!std::isfinite(absolute_height)) {
                 processed_elevation_map_values_[i] = fill_value;
-                continue;
+                continue;  // Skip this position
             }
             // TODO: Compute is_valid mask for message
             // TODO: Really not sure if I can use the indexing like this, I think this is wrong and needs to be put into the same order as
@@ -219,7 +217,6 @@ private:
         processed_msg.data = processed_elevation_map_values_;
 
         processed_map_publisher_->publish(processed_msg);
-
         processing_iteration_counter_++;
 
         // AFTER CONFIRMED WORKING:
