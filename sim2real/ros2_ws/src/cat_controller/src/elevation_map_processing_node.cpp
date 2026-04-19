@@ -141,11 +141,10 @@ private:
         // No need for age check of elevation map here since the policy will handle that and stop the robot if the received message is too old
 
         geometry_msgs::msg::TransformStamped base_to_world_tf;
-        auto tf_lookup_start_stamp = tf2::TimePointZero;  // Used in processed message so we store it
         try {
             // Arg order is to,from
             base_to_world_tf = tf_buffer_->lookupTransform(
-                latest_map->getFrameId(), robot_base_frame_name_, tf_lookup_start_stamp, tf2::durationFromSec(tf_lookup_timeout_));
+                latest_map->getFrameId(), robot_base_frame_name_, tf2::TimePointZero, tf2::durationFromSec(tf_lookup_timeout_));
         } catch (const tf2::TransformException & e) {
             shutdown_coordinator_.shutdown(std::format("tf lookup failed, exiting. Exception message: {}", e.what()));
             return;
@@ -201,7 +200,7 @@ private:
         cat_perception_msgs::msg::ProcessedElevationMap processed_msg;
         processed_msg.header.frame_id = latest_map->getFrameId();
         processed_msg.header.stamp = processing_start_stamp;
-        processed_msg.source_pose_stamp = tf2_ros::toRclcpp(tf_lookup_start_stamp);
+        processed_msg.source_pose_stamp = base_to_world_tf.header.stamp;
         // Pass RCL_ROS_TIME to make it compatible with replaying
         processed_msg.source_map_stamp = rclcpp::Time(static_cast<int64_t>(latest_map->getTimestamp()), RCL_ROS_TIME);
         auto map_size = latest_map->getSize();
