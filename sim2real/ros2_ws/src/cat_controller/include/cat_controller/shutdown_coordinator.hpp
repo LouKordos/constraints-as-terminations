@@ -14,18 +14,17 @@ Disclaimer: This code was proudly written without LLMs :)
 #include "rclcpp/rclcpp.hpp"
 
 /*
-This helper centralizes all node shutdown coordination:
+This helper coordinates node shutdown:
 - Multiple callbacks can run concurrently under a MultiThreadedExecutor and any callback may detect a safety-critical condition and request exit.
 - We do not want raw atomics to be manipulated directly throughout the node, because setting an exit flag alone is not enough: timers must be
 cancelled, helper processes must be stopped, and the ROS context must be shut down.
 - Cleanup must happen exactly once even if multiple callbacks notice the exit condition around the same time.
 
-shutdown(message) is used by the callback that detects a fatal condition. It marks exit requested and performs the actual shutdown sequence exactly
-once. handle_exit_if_requested() is used at the top of callbacks so that callbacks which start slightly later can still observe an already-requested
+shutdown(message) is used by anything that wants to request an exit. It sets exit_requested and performs the actual shutdown sequence only once.
+handle_exit_if_requested() is used at the top of callbacks so that callbacks which start slightly later can still observe an already-requested
 exit and also attempt to shut down the node, without duplicating cleanup.
 
-This keeps the shutdown protocol explicit and hard to misuse: Callbacks should either call handle_exit_if_requested() at entry, or fail(...) when they
-detect a fatal condition, but should never manipulate shutdown state directly.
+This keeps the shutdown protocol hard to misuse because callbacks should either call handle_exit_if_requested() at entry, or shutdown(...).
 */
 class ShutdownCoordinator
 {
