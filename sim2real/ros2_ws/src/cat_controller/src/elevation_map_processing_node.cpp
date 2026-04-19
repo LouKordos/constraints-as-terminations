@@ -9,6 +9,7 @@ Disclaimer: This code was proudly written without LLMs :)
 #include <ament_index_cpp/get_package_prefix.hpp>
 #include <atomic>
 #include <chrono>
+#include <format>
 #include <string>
 #include <vector>
 
@@ -16,10 +17,15 @@ Disclaimer: This code was proudly written without LLMs :)
 #include "cat_controller/shutdown_coordinator.hpp"
 #include "cat_controller/time_utils.hpp"
 #include "cat_perception_msgs/msg/processed_elevation_map.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
+#include "geometry_msgs/msg/twist.hpp"
 #include "grid_map_core/GridMap.hpp"
 #include "grid_map_msgs/msg/grid_map.hpp"
 #include "grid_map_ros/grid_map_ros.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "tf2/exceptions.hpp"
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_listener.h"
 
 class ElevationMapProcessingNode : public rclcpp::Node
 {
@@ -122,6 +128,16 @@ private:
         }
         // No need for age check of elevation map here since the policy will handle that and stop the robot if the received message is too old
 
+        geometry_msgs::msg::TransformStamped base_to_world_tf;
+        try {
+            // Arg order is to,from
+            base_to_world_tf = tf_buffer_->lookupTransform(robot_world_frame_name_, robot_base_frame_name_, tf2::TimePointZero,
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(tf_lookup_timeout_)));
+        } catch (const tf2::TransformException & e) {
+            shutdown_coordinator_.shutdown(std::format("tf lookup failed, exiting. Exception message: {}", e.what()));
+            return;
+        }
+
         // TODO: Fetch tf lookup base_to_world => compute Rotation matrix body to world
         // TODO: Rotate body frame lookup positions into world frame, add map center to coordinates because despite map being robot-centered, the
         // coordinates still need adjustments since we are not working with indices but with coords
@@ -201,6 +217,9 @@ private:
     std::atomic<std::shared_ptr<grid_map::GridMap>> global_grid_map_;
     // List of sample positions in body frame for elevation map. These stay constant in body frame but we need to transform them into world frame
     std::vector<Eigen::Vector2d> lookup_points_robot_frame_;
+
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+    std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
 
     ShutdownCoordinator shutdown_coordinator_;
 };
