@@ -467,7 +467,7 @@ private:
     const int elevation_grid_width = 13;
     const int elevation_grid_height = 11;
     const int elevation_grid_total_size = elevation_grid_width * elevation_grid_height;
-    timed_atomic<std::vector<float>> global_processed_elevation_map_{std::vector<float>(elevation_grid_total_size)};
+    timed_atomic<std::vector<float>> global_processed_elevation_map_{std::vector<float>(elevation_grid_total_size, hardcoded_elevation_)};
 
     InferenceEngine inference_engine_;
     LowLevelModeEnabler low_level_mode_enabler_;
