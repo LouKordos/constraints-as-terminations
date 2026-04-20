@@ -167,7 +167,7 @@ private:
 
     void processing_loop()
     {
-        auto wait_seconds = std::chrono::seconds(15);
+        auto wait_seconds = std::chrono::seconds(20);
         RCLCPP_INFO(logger_, "ElevationMapProcessor: Waiting %ldsec for external Odom/Mapping pipeline to warm up...", wait_seconds.count());
         auto start_wait = std::chrono::steady_clock::now();
         while (std::chrono::steady_clock::now() - start_wait < wait_seconds) {
