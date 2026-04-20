@@ -10,10 +10,10 @@ from launch.actions import (
     LogInfo,
     OpaqueFunction,
 )
-from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import FindExecutable, LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import SetROSLogDir
+from ament_index_python.packages import get_package_share_directory
 from launch_ros.substitutions import FindPackageShare
 
 
