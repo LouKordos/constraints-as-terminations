@@ -1,5 +1,5 @@
 elevation_map_processing_node:
-  ros_parameters:
+  ros__parameters:
     source_map_topic_name: "/elevation_mapping_node/elevation_map_filter" # Where to get raw elevation map from
     source_map_layer_name: "min_filter" # Check what layers are being published by elevation mapping node
 
