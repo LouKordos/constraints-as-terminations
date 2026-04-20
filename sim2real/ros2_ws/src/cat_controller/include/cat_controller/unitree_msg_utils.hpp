@@ -8,6 +8,7 @@ Disclaimer: This code was proudly written without LLMs :)
 #include <tf2/LinearMath/Quaternion.hpp>
 #include <tf2/LinearMath/Vector3.hpp>
 
+#include "cat_controller/motor_crc.h"  // Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
 #include "cat_controller/stamped_robot_state.hpp"
 #include "unitree_go/msg/low_cmd.hpp"
 #include "unitree_go/msg/low_state.hpp"
