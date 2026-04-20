@@ -146,7 +146,7 @@ private:
         std::shared_ptr<grid_map::GridMap> latest_map = global_grid_map_.load();
         // Always need to check for null pointer, e.g. for scenario when no map has been received yet.
         if (!latest_map) {
-            RCLCPP_WARN(this->get_logger(), "Global map is null pointer, skipping processing...");
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000.0, "Global map is null pointer, skipping processing...");
             return;
         }
         // No need for age check of elevation map here since the policy will handle that and stop the robot if the received message is too old
