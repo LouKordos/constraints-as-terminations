@@ -79,6 +79,7 @@ public:
         tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
+        // Flattening order is row-major over Y then X, i.e. linear index = y * size_x + x, with X varying fastest.
         double span_x = (processed_map_grid_width_ - 1) * processed_map_grid_resolution_;
         double span_y = (processed_map_grid_height_ - 1) * processed_map_grid_resolution_;
         for (int y_idx = 0; y_idx < processed_map_grid_height_; y_idx++) {
@@ -177,6 +178,7 @@ private:
 
         // We do not vectorize the rotation math here using Eigen matrices, as the computational cost of ~150 2D rotations is negligible (<1us)
         // and the loop's execution time is mostly dominated by the memory access and interpolation inside grid_map::atPosition().
+        // Flattening order is row-major over Y then X, i.e. linear index = y * size_x + x, with X varying fastest.
         for (size_t i = 0; i < lookup_points_world_frame_.size(); i++) {
             lookup_points_world_frame_[i] = rot_base_to_world_yaw * lookup_points_robot_frame_[i];
             lookup_points_world_frame_[i].x() += base_to_world_tf.transform.translation.x;
@@ -197,8 +199,6 @@ private:
                     valid_mask_[i] = true;
                 }
                 // TODO: Thoroughly check if the is_valid mask is 100% correctly implemented
-                // TODO: Really not sure if I can use the indexing like this, I think this is wrong and needs to be put into the same order as
-                // elevation_to_policy. It is imperative that this is identiacl to elevation_to_policy.py because that one I know works
             }
         }
 
