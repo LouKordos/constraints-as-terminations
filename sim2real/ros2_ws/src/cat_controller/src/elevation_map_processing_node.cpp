@@ -305,8 +305,9 @@ private:
     std::vector<float> processed_elevation_map_values_;
     std::vector<uint8_t> valid_mask_;
 
-    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+    // Members are destroyed in reverse declaration order, and listener depends on buffer
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
     ShutdownCoordinator shutdown_coordinator_;
 };
