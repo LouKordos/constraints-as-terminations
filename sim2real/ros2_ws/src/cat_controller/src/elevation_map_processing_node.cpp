@@ -72,9 +72,10 @@ public:
           shutdown_coordinator_(
               this->get_logger(), this->get_node_base_interface()->get_context(), [this]() { this->map_processing_timer_->cancel(); })
     {
-        if (tf_lookup_timeout_ > 0.75 * (1.0 / processing_frequency_hz_)) {
-            shutdown_coordinator_.shutdown("Tf lookup timeout longer than 75% of processing timer interval, this is dangerous, exiting.");
-        }
+        // We just log and return if that happens, and let the upstream subscriber (cat_control_node in this case) handle the lack of messages how
+        // they want if (tf_lookup_timeout_ > 0.75 * (1.0 / processing_frequency_hz_)) {
+        //     shutdown_coordinator_.shutdown("Tf lookup timeout longer than 75% of processing timer interval, this is dangerous, exiting.");
+        // }
         tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
@@ -152,7 +153,10 @@ private:
             base_to_world_tf = tf_buffer_->lookupTransform(
                 latest_map->getFrameId(), robot_base_frame_name_, tf2::TimePointZero, tf2::durationFromSec(tf_lookup_timeout_));
         } catch (const tf2::TransformException & e) {
-            shutdown_coordinator_.shutdown(std::format("tf lookup failed, exiting. Exception message: {}", e.what()));
+            // shutdown_coordinator_.shutdown(std::format("tf lookup failed, exiting. Exception message: {}", e.what()));
+            // We just log and return if that happens, and let the upstream subscriber (cat_control_node in this case) handle the lack of messages how
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 100,
+                std::format("Tf lookup failed after {}sec, skipping callback. Error: {}", tf_lookup_timeout_, e.what()).c_str());
             return;
         }
         double fill_value = use_negative_base_height_as_fill_value_ ? -base_to_world_tf.transform.translation.z : invalid_cell_fill_value_;
