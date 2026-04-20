@@ -18,9 +18,7 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def _load_robot_config():
-    config_path = PathJoinSubstitution(
-        [FindPackageShare("cat_bringup"), "config", "robot_real_go2.yaml"]
-    ).perform(LaunchContext())
+    config_path = Path(get_package_share_directory("cat_bringup")) / "config" / "robot_real_go2.yaml"
     with open(config_path, "r", encoding="utf-8") as file:
         return yaml.safe_load(file)
 
