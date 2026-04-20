@@ -95,6 +95,20 @@ def _launch_setup(context, *args, **kwargs):
         }.items(),
     )
 
+    elevation_map_processing_launch_file = PathJoinSubstitution(
+        [FindPackageShare("cat_controller"), "launch", "cat_elevation_map_processing.launch.py"]
+    )
+    elevation_map_processing_include = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([elevation_map_processing_launch_file]),
+    )
+
+    elevation_map_comparison_launch_file = PathJoinSubstitution(
+        [FindPackageShare("cat_controller"), "launch", "cat_elevation_map_comparison.launch.py"]
+    )
+    elevation_map_comparison_include = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([elevation_map_comparison_launch_file]),
+    )
+
     rosbag_record = ExecuteProcess(
         cmd=[
             FindExecutable(name="ros2"),
@@ -138,6 +152,8 @@ def _launch_setup(context, *args, **kwargs):
         rosbag_record,
         livox_include,
         odom_include,
+        elevation_map_processing_include,
+        elevation_map_comparison_include,
         controller_include,
     ]
 
