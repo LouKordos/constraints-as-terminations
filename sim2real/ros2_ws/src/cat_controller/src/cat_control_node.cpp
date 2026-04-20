@@ -270,8 +270,6 @@ private:
             }
         }
 
-        // Very important TODO: When elevation map processing is in separate node, move dimensions to params and use std::array to avoid heap
-        // allocations!
         std::vector<float> current_elevation_map;
         if (use_hardcoded_elevation_) {
             current_elevation_map.assign(elevation_grid_total_size, hardcoded_elevation_);
