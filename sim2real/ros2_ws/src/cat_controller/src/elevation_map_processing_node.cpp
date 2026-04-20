@@ -211,10 +211,11 @@ private:
         processed_msg.source_pose_stamp = base_to_world_tf.header.stamp;
         // Pass RCL_ROS_TIME to make it compatible with replaying
         processed_msg.source_map_stamp = rclcpp::Time(static_cast<int64_t>(latest_map->getTimestamp()), RCL_ROS_TIME);
-        auto map_size = latest_map->getSize();
-        processed_msg.source_size_x = map_size.x();
-        processed_msg.source_size_y = map_size.y();
-        processed_msg.source_resolution = latest_map->getResolution();
+        auto map_size = latest_map->getLength();
+        auto map_resolution = latest_map->getResolution();
+        processed_msg.source_resolution = map_resolution;
+        processed_msg.source_size_x = map_size.x() / map_resolution;
+        processed_msg.source_size_y = map_size.y() / map_resolution;
         processed_msg.processed_size_x = processed_map_grid_width_;
         processed_msg.processed_size_y = processed_map_grid_height_;
         processed_msg.processed_resolution = processed_map_grid_resolution_;
