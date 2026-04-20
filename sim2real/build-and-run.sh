@@ -59,7 +59,7 @@ if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
         echo "Starting non-multiarch build."
         docker compose --progress plain -f "${REPO_ROOT}/compose.yml" -f "${REPO_ROOT}/compose.no-multiarch.yml" --project-directory "${REPO_ROOT}" build
         # Should the compose build fail, this is likely because stupid buildkit does not respect network=host option. So just comment out the line above and uncomment the line below:
-        docker build .. -t loukordos/cat-sim2real:latest --network=host
+        # docker build .. -t loukordos/cat-sim2real:latest --network=host
     fi
     rm -rf "${SCRIPT_DIR}/build" || true # Reset build to a clean state, as build cache can cause confusing issues when changing installed deps in the Dockerfile.
     rm -rf "${SCRIPT_DIR}/ros2_ws/{build,install,log}" || true # Same for ROS workspace
