@@ -90,6 +90,9 @@ public:
             }
         }
 
+        // TODO: Add parameter sanitization / safety checks
+        // TODO: Use nanoseconds for processing interval to make it more accurate
+
         lookup_points_world_frame_ = lookup_points_robot_frame_;
         processed_elevation_map_values_.resize(processed_map_grid_width_ * processed_map_grid_height_, invalid_cell_fill_value_);
         valid_mask_.resize(processed_map_grid_width_ * processed_map_grid_height_);
