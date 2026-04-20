@@ -9,10 +9,13 @@ Disregard it entirely when looking at the code base, it is deprecated and outdat
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstdint>
+#include <deque>
 #include <format>
 #include <fstream>
 #include <mutex>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <queue>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
@@ -32,12 +35,21 @@ struct LogEntry
     std::string json_payload;
 };
 
+struct LegacyElevationSample
+{
+    double ts{0.0};           // Python-side processing time from the legacy JSON packet.
+    double map_ts{0.0};       // Source elevation map timestamp from the legacy JSON packet.
+    double cpp_recv_ts{0.0};  // Local receive time inside this C++ processor.
+    float fill_value{-0.27f};
+    std::vector<float> grid;
+};
+
 class ElevationMapProcessor
 {
 public:
     ElevationMapProcessor(std::string log_directory, std::string layer_name, int layer_id, ShutdownCoordinator & shutdown_coordinator,
         rclcpp::Logger logger, const timed_atomic<stamped_robot_state> & robot_state,
-        timed_atomic<std::vector<float>> & global_elevation_map_filtered, float hardcoded_elevation = -0.3f)
+        timed_atomic<std::vector<float>> & global_elevation_map_filtered, float hardcoded_elevation = -0.3f, size_t max_recent_samples = 512)
         : zmq_context_(1),
           zmq_socket_(zmq_context_, zmq::socket_type::sub),
           layer_identifier_(layer_id),
@@ -46,7 +58,8 @@ public:
           logger_(logger),
           robot_state_(robot_state),
           global_elevation_map_filtered_(global_elevation_map_filtered),
-          hardcoded_elevation_(hardcoded_elevation)
+          hardcoded_elevation_(hardcoded_elevation),
+          max_recent_samples_(max_recent_samples)
     {
         std::string remote_endpoint = "tcp://192.168.123.224:6973";  // min_filter plugin + relative
 
@@ -104,6 +117,19 @@ public:
         if (file_stream_filtered_.is_open()) { file_stream_filtered_.close(); }
     }
 
+    std::vector<LegacyElevationSample> get_recent_samples_copy() const
+    {
+        std::lock_guard<std::mutex> lock(recent_samples_mutex_);
+        return std::vector<LegacyElevationSample>(recent_samples_.begin(), recent_samples_.end());
+    }
+
+    std::optional<LegacyElevationSample> get_latest_sample_copy() const
+    {
+        std::lock_guard<std::mutex> lock(recent_samples_mutex_);
+        if (recent_samples_.empty()) { return std::nullopt; }
+        return recent_samples_.back();
+    }
+
 private:
     // Configuration constants
     static constexpr int elevation_grid_width = 13;
@@ -111,7 +137,7 @@ private:
     static constexpr int elevation_grid_total_size = elevation_grid_width * elevation_grid_height;
     static constexpr float elevation_grid_resolution = 0.08f;
     static constexpr float elevation_sensor_offset_x = 0.2f;
-    static constexpr float elevation_fill_value = -0.3;
+    static constexpr float elevation_fill_value = -0.27f;
 
     zmq::context_t zmq_context_;
     zmq::socket_t zmq_socket_;
@@ -124,7 +150,7 @@ private:
     // Robot state is const (read-only), map and elevation are mutable (writeable)
     const timed_atomic<stamped_robot_state> & robot_state_;
     timed_atomic<std::vector<float>> & global_elevation_map_filtered_;
-    float & hardcoded_elevation_;
+    float hardcoded_elevation_;
 
     std::ofstream file_stream_raw_;
     std::ofstream file_stream_filtered_;
@@ -136,6 +162,10 @@ private:
     std::queue<LogEntry> log_queue_;
     std::mutex log_mutex_;
     std::condition_variable logging_cv_;
+
+    mutable std::mutex recent_samples_mutex_;
+    std::deque<LegacyElevationSample> recent_samples_;
+    const size_t max_recent_samples_;
 
     std::thread processing_thread_;
     std::thread logging_thread_;
@@ -216,7 +246,7 @@ private:
                 break;
             }
 
-            float temporary_elevation_offset = 0.0;
+            float temporary_elevation_offset = 0.0f;
             for (float & v : raw_data_buffer_) { v += temporary_elevation_offset; }
 
             auto robot_state_result = robot_state_.try_load_for(std::chrono::microseconds(250));
@@ -231,24 +261,39 @@ private:
                 break;
             }
 
+            const double cpp_recv_ts = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+
+            LegacyElevationSample sample;
+            sample.ts = parsed_json.value("ts", 0.0);
+            sample.map_ts = parsed_json.value("map_ts", 0.0);
+            sample.cpp_recv_ts = cpp_recv_ts;
+            sample.fill_value = current_fill_val;
+            sample.grid = raw_data_buffer_;
+            {
+                std::lock_guard<std::mutex> lock(recent_samples_mutex_);
+                recent_samples_.push_back(std::move(sample));
+                while (recent_samples_.size() > max_recent_samples_) { recent_samples_.pop_front(); }
+            }
+
             json frame_record;
             if (parsed_json.contains("ts")) { frame_record["ts"] = parsed_json["ts"]; }
-            frame_record["cpp_recv_ts"] = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+            if (parsed_json.contains("map_ts")) { frame_record["map_ts"] = parsed_json["map_ts"]; }
+            frame_record["cpp_recv_ts"] = cpp_recv_ts;
             frame_record["layer"] = layer_name_;
 
             int valid_cell_count = 0;
             for (const float & v : raw_data_buffer_) {
-                if (std::abs(v - current_fill_val) > 1e-5) { valid_cell_count++; }
+                if (std::abs(v - current_fill_val) > 1e-5f) { valid_cell_count++; }
             }
             frame_record["valid"] = static_cast<float>(valid_cell_count) / elevation_grid_total_size;
 
-            float pos_x = 0.0, pos_y = 0.0, pos_z = 0.0;
+            float pos_x = 0.0f, pos_y = 0.0f, pos_z = 0.0f;
             if (parsed_json.contains("pose")) {
                 pos_x = parsed_json["pose"].value("x", 0.0f);
                 pos_y = parsed_json["pose"].value("y", 0.0f);
                 pos_z = parsed_json["pose"].value("z", 0.0f);
                 RCLCPP_DEBUG(logger_, "Base z: %f", pos_z);
-                if (pos_z > 0.8 || pos_z < 0.1) {
+                if (pos_z > 0.8f || pos_z < 0.1f) {
                     shutdown_coordinator_.shutdown("Base z out of safe bounds, likely occluded or odometry wrong, exiting to be safe.");
                 }
                 hardcoded_elevation_ = -pos_z;
