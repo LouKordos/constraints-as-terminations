@@ -83,6 +83,36 @@ ament_target_dependencies(elevation_map_processing_node
   grid_map_ros
 )
 
+# Node used for migration from old elevation map processing using ZMQ and a python translation layer to native C++
+# Disregard this as it was only a quick test to ensure the values are the same
+add_executable(elevation_map_comparison_node src/elevation_map_comparison_node.cpp)
+target_include_directories(elevation_map_comparison_node PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
+target_link_libraries(
+  elevation_map_comparison_node
+  rclcpp::rclcpp
+  ament_index_cpp::ament_index_cpp
+  tf2::tf2
+  tf2_ros::tf2_ros
+  tf2_geometry_msgs::tf2_geometry_msgs
+  ${std_msgs_TARGETS}
+  ${geometry_msgs_TARGETS}
+  ${unitree_go_TARGETS}
+  ${unitree_api_TARGETS}
+  ${grid_map_msgs_TARGETS}
+  ${cat_perception_msgs_TARGETS}
+  grid_map_core::grid_map_core
+  fmt::fmt
+  nlohmann_json::nlohmann_json
+  Eigen3::Eigen
+  cppzmq
+)
+
+# This is discouraged for recent ROS which is why I avoided it up until now, but grid_map_ros maintainers have not updated the way it's packaged yet...
+# So I have no choice
+ament_target_dependencies(elevation_map_comparison_node
+  grid_map_ros
+)
+
 add_executable(projected_gravity_equivalence_test_node src/projected_gravity_equivalence_test_node.cpp)
 target_link_libraries(projected_gravity_equivalence_test_node PUBLIC rclcpp::rclcpp tf2::tf2)
 
@@ -96,6 +126,7 @@ target_link_libraries(release_motion_mode PRIVATE unitree_sdk2 Threads::Threads)
 install(TARGETS
   cat_controller
   elevation_map_processing_node
+  elevation_map_comparison_node
   projected_gravity_equivalence_test_node
   release_motion_mode
   DESTINATION lib/${PROJECT_NAME}
