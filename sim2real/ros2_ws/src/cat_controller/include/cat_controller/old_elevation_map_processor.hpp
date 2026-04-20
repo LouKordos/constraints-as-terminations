@@ -111,7 +111,7 @@ private:
     static constexpr int elevation_grid_total_size = elevation_grid_width * elevation_grid_height;
     static constexpr float elevation_grid_resolution = 0.08f;
     static constexpr float elevation_sensor_offset_x = 0.2f;
-    static constexpr float elevation_fill_value = -0.27f;
+    static constexpr float elevation_fill_value = -0.3;
 
     zmq::context_t zmq_context_;
     zmq::socket_t zmq_socket_;
