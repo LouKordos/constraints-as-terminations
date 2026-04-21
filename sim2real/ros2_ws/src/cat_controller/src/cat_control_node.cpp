@@ -36,6 +36,8 @@ public:
           network_interface_(declare_and_get_param<std::string>("network_interface", "Network interface for Go2", true)),
           use_hardcoded_elevation_(declare_and_get_param<bool>("use_hardcoded_elevation", "Override elevation map", true)),
           hardcoded_elevation_(declare_and_get_param<double>("hardcoded_elevation", "Elevation value if hardcoded is true")),
+          elevation_map_warmup_delay_(declare_and_get_param<double>("elevation_map_warmup_delay",
+              "Seconds to wait until exiting because no elevation map message has arrived, hardcoded elevation will be used in the meantime.")),
           checkpoint_path_str_(declare_and_get_param<std::string>("checkpoint_path", "Path to PyTorch model", true)),
           processed_map_topic_name_(
               declare_and_get_param<std::string>("processed_map_topic_name", "Where the processed elevation map messages are published.", true)),
@@ -425,6 +427,7 @@ private:
     const std::string network_interface_;
     const bool use_hardcoded_elevation_;
     double hardcoded_elevation_;
+    const double elevation_map_warmup_delay_;
     const std::string checkpoint_path_str_;
     const std::string processed_map_topic_name_;
 
