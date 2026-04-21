@@ -343,14 +343,6 @@ private:
             return;
         }
 
-        // std::cout << "now - source_map_ts in ms: " << (this->get_clock()->now() - rclcpp::Time(msg->source_map_stamp)).seconds() * 1000.0
-        //           << ", processing node started processing this msg "
-        //           << (this->get_clock()->now() - rclcpp::Time(msg->header.stamp)).seconds() * 1000.0 << "ms ago, processing node took "
-        //           << (rclcpp::Time(msg->publish_stamp) - rclcpp::Time(msg->header.stamp)).seconds() * 1000.0 << "ms for processing this msg"
-        //           << std::endl;
-        // for (int i = 0; i < msg->data.size(); i++) { std::cout << msg->data[i] << ","; }
-        // std::cout << std::endl;
-
         // Use the atomic shared ptr approach again, same as elevation_map_processing_node: Single writer and single reader means that once the writer
         // (this callback) has atomically updated the pointer, it will never touch that messag again. So the policy inference callback (reader) can
         // freely access it without issues. If performance is not sufficient then double buffering needs to be used to avoid allocating a new message
@@ -426,12 +418,6 @@ private:
             auto processing_duration = rclcpp::Time(processed_map->publish_stamp) - rclcpp::Time(processed_map->header.stamp);
             // To find out how much overhead separate processing node incurred
             auto communication_delay = (now - rclcpp::Time(processed_map->source_pose_stamp)) - processing_duration;
-
-            // std::cout << std::fixed << std::setprecision(4) << "Now: " << now.seconds() * 1000.0f << "ms | "
-            //           << "Source Map Age: " << source_map_age.seconds() * 1000.0f << "ms | "
-            //           << "Processed Map Age: " << processed_map_age.seconds() * 1000.0f << "ms | "
-            //           << "Processing Duration: " << processing_duration.seconds() * 1000.0f << "ms | "
-            //           << "Comm Delay: " << communication_delay.seconds() << "ms" << std::endl;
 
             if (!use_hardcoded_elevation_) {
                 if (source_map_age.seconds() > source_map_age_threshold_ || processed_map_age.seconds() > processed_map_age_threshold_) {
