@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <format>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -81,6 +82,91 @@ public:
     {
         static_assert(std::atomic<bool>::is_always_lock_free, "atomic bool is not lock free.");
         init_command_msg(command_msg_);
+
+        auto fail = [this](const std::string & message) -> void {
+            RCLCPP_FATAL(this->get_logger(), "CRITICAL parameter validation failure: %s", message.c_str());
+            throw std::runtime_error(message);
+        };
+
+        auto require = [&fail](bool condition, const std::string & message) {
+            if (!condition) { fail(message); }
+        };
+
+        auto require_finite = [&require](double value, const std::string & name) {
+            require(std::isfinite(value), std::format("Parameter '{}' must be finite, got {}.", name, value));
+        };
+
+        auto require_non_negative_finite = [&require_finite, &require](double value, const std::string & name) {
+            require_finite(value, name);
+            require(value >= 0.0, std::format("Parameter '{}' must be >= 0, got {}.", name, value));
+        };
+
+        auto require_positive_finite = [&require_finite, &require](double value, const std::string & name) {
+            require_finite(value, name);
+            require(value > 0.0, std::format("Parameter '{}' must be > 0, got {}.", name, value));
+        };
+
+        auto require_non_empty = [&require](const std::string & value, const std::string & name) {
+            require(!value.empty(), std::format("Parameter '{}' must not be empty.", name));
+        };
+
+        require_non_empty(network_interface_, "network_interface");
+        require_non_empty(checkpoint_path_str_, "checkpoint_path");
+        require(std::filesystem::exists(checkpoint_path_) && std::filesystem::is_regular_file(checkpoint_path_),
+            std::format("Parameter 'checkpoint_path'='{}' must point to an existing regular file.", checkpoint_path_.string()));
+        require_non_empty(processed_map_topic_name_, "processed_map_topic_name");
+        require_finite(hardcoded_elevation_, "hardcoded_elevation");
+        require(processed_elevation_map_grid_width_ > 0,
+            std::format("Parameter 'processed_elevation_map_grid_width' must be > 0, got {}.", processed_elevation_map_grid_width_));
+        require(processed_elevation_map_grid_height_ > 0,
+            std::format("Parameter 'processed_elevation_map_grid_height' must be > 0, got {}.", processed_elevation_map_grid_height_));
+        const long long computed_total_cells =
+            static_cast<long long>(processed_elevation_map_grid_width_) * static_cast<long long>(processed_elevation_map_grid_height_);
+        require(computed_total_cells > 0, std::format("Computed total grid cells must be > 0, got {} * {} = {}.", processed_elevation_map_grid_width_,
+                                              processed_elevation_map_grid_height_, computed_total_cells));
+        require(static_cast<int>(computed_total_cells) == processed_elevation_map_total_cells,
+            std::format(
+                "Internal grid cell count mismatch: computed {} but member stores {}.", computed_total_cells, processed_elevation_map_total_cells));
+        require(hardcoded_map_buffer_.size() == static_cast<std::size_t>(processed_elevation_map_total_cells),
+            std::format("hardcoded_map_buffer_ size mismatch: buffer has {} entries, expected {}.", hardcoded_map_buffer_.size(),
+                processed_elevation_map_total_cells));
+        require_non_negative_finite(elevation_map_warmup_delay_, "elevation_map_warmup_delay");
+        require_non_negative_finite(source_map_age_threshold_, "source_map_age_threshold");
+        require_non_negative_finite(processed_map_age_threshold_, "processed_map_age_threshold");
+        require(atomic_op_timeout_threshold_.count() > 0,
+            std::format("Parameter 'atomic_op_timeout_us' must be > 0, got {}.", atomic_op_timeout_threshold_.count()));
+        require(atomic_op_timeout_threshold_ < std::chrono::milliseconds{30},
+            std::format("Parameter 'atomic_op_timeout_us'={}us must stay below the 30ms publish_commands deadline, "
+                        "otherwise timed_atomic operations can themselves cause deadline misses.",
+                atomic_op_timeout_threshold_.count()));
+        require(stale_state_age_threshold_.count() > 0,
+            std::format("Parameter 'stale_state_age_ms' must be > 0, got {}.", stale_state_age_threshold_.count()));
+        require_finite(action_scale_, "action_scale");
+        require(action_scale_ >= 0.0, std::format("Parameter 'action_scale' must be >= 0, got {}.", action_scale_));
+        require_finite(actuator_Kp_, "actuator_kp");
+        require(actuator_Kp_ >= 0.0, std::format("Parameter 'actuator_kp' must be >= 0, got {}.", actuator_Kp_));
+        require_finite(actuator_Kd_, "actuator_kd");
+        require(actuator_Kd_ >= 0.0, std::format("Parameter 'actuator_kd' must be >= 0, got {}.", actuator_Kd_));
+        require_positive_finite(joint_vel_abs_limit_, "joint_vel_abs_limit");
+        require_positive_finite(joint_torque_abs_limit_, "joint_torque_abs_limit");
+        require(vel_command_mag_limit_.size() == 3,
+            std::format("Parameter 'vel_command_mag_limit' must contain exactly 3 elements [vx, vy, yaw], got {}.", vel_command_mag_limit_.size()));
+        for (std::size_t i = 0; i < vel_command_mag_limit_.size(); ++i) {
+            require_finite(vel_command_mag_limit_[i], std::format("vel_command_mag_limit[{}]", i));
+            require(vel_command_mag_limit_[i] >= 0.0,
+                std::format("Parameter 'vel_command_mag_limit[{}]' must be >= 0, got {}.", i, vel_command_mag_limit_[i]));
+        }
+        require_positive_finite(interpolation_duration_, "interpolation_duration_sec");
+        require_non_negative_finite(stabilization_duration_, "stabilization_duration_sec");
+        require_positive_finite(initial_state_save_timeout_seconds_, "initial_state_save_timeout_sec");
+        require(!(walk_a_bit_ && sinusoidal_debug_motion_),
+            "Parameters 'walk_a_bit' and 'sinusoidal_debug_motion' cannot both be true at the same time.");
+        if (stale_state_age_threshold_ <= std::chrono::milliseconds{20}) {
+            RCLCPP_WARN(this->get_logger(),
+                "Parameter 'stale_state_age_ms' is %lldms, which is less than the 20ms policy period. "
+                "This can cause false shutdowns due to stale states under normal scheduling jitter.",
+                static_cast<long long>(stale_state_age_threshold_.count()));
+        }
 
         this->state_sub_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
         this->command_timer_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
