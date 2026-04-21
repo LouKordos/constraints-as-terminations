@@ -5,7 +5,7 @@ ENV ROS_DISTRO=$ROS_DISTRO
 RUN printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4
 RUN apt-get update && apt-get install -y --no-install-recommends software-properties-common && add-apt-repository universe && apt-get update
 # Essential stuff
-RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl rsync vim gdu iperf3 ripgrep libtbb-dev dbus git-lfs libeigen3-dev libboost-python-dev libboost-numpy-dev libpcl-dev python3-dev python3-numpy python3-matplotlib libgoogle-glog-dev tmux sudo iputils-ping unzip wget iproute2 iperf3 libzstd-dev zstd locales curl dbus dbus-x11 x11-apps xauth tree net-tools cyclonedds-tools netcat-openbsd libboost-all-dev libyaml-cpp-dev
+RUN apt-get update -y && apt-get install -y g++-14 gcc-14 cmake build-essential gdb git curl rsync vim gdu iperf3 ripgrep libtbb-dev dbus git-lfs libeigen3-dev libboost-python-dev libboost-numpy-dev libpcl-dev python3-dev python3-numpy python3-matplotlib libgoogle-glog-dev tmux sudo iputils-ping unzip wget iproute2 iperf3 libzstd-dev zstd locales curl dbus dbus-x11 x11-apps xauth tree net-tools cyclonedds-tools netcat-openbsd libboost-all-dev libyaml-cpp-dev ninja-build
 
 # Need to build from source due to arm64 on Go2 Jetson
 RUN apt-get update -y && apt-get install -y build-essential cmake git python3 python3-pip python3-venv libopenblas-dev libomp-dev libopenmpi-dev ninja-build libyaml-dev libjpeg-dev libpng-dev
@@ -39,7 +39,7 @@ RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake -G Ninja --compile-no-warnin
       -DCMAKE_C_FLAGS="-Wno-error" \
       -DCMAKE_CXX_FLAGS="-Wno-error" \
       -DCMAKE_CUDA_FLAGS="-Wno-error" \
-      -DCMAKE_INSTALL_PREFIX=/torch/libtorch \
+      -DCMAKE_INSTALL_PREFIX=/usr/local \
       ..
 RUN CFLAGS="-Wno-error" CXXFLAGS="-Wno-error" cmake --build . --target install -j12
 
@@ -47,7 +47,7 @@ RUN git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 RUN ~/.fzf/install --all
 
 # ROS2 stuff
-RUN apt-get update -y && apt-get install -y ros-dev-tools ros-$ROS_DISTRO-desktop ros-$ROS_DISTRO-rmw-cyclonedds-cpp ros-$ROS_DISTRO-rosidl-generator-dds-idl ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan ros-$ROS_DISTRO-eigenpy ros-$ROS_DISTRO-grid-map-rviz-plugin ros-$ROS_DISTRO-grid-map-msgs
+RUN apt-get update -y && apt-get install -y ros-dev-tools ros-$ROS_DISTRO-desktop ros-$ROS_DISTRO-rmw-cyclonedds-cpp ros-$ROS_DISTRO-rosidl-generator-dds-idl ros-$ROS_DISTRO-realsense2-camera ros-$ROS_DISTRO-pointcloud-to-laserscan ros-$ROS_DISTRO-eigenpy ros-$ROS_DISTRO-grid-map-rviz-plugin ros-$ROS_DISTRO-grid-map-msgs ros-$ROS_DISTRO-grid-map ros-$ROS_DISTRO-grid-map-ros
 
 # Set this AFTER libtorch due to compiler bug in gcc14!
 ENV CC=gcc-14
@@ -122,6 +122,18 @@ RUN echo '# Reminder messages for user' >> /root/.bashrc
 RUN echo 'echo "1. Source /app/sim2real/ros2_ws/install/setup.bash if you are working with ROS!"' >> /root/.bashrc
 RUN echo 'echo "2. Export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."' >> /root/.bashrc
 RUN echo 'echo "3. Run tmux inside the docker container for persistent sessions, access it from a recent version of Konsole, that way OSC-52 copying should work through the container."' >> /root/.bashrc
+
+RUN echo "# Don't put duplicate lines or lines starting with space in the history. See bash(1) for more options" >> /root/.bashrc
+RUN echo "HISTCONTROL=ignoreboth" >> /root/.bashrc
+RUN echo "# append to the history file, don't overwrite it" >> /root/.bashrc
+RUN echo "shopt -s histappend" >> /root/.bashrc
+RUN echo "HISTSIZE=10000" >> /root/.bashrc
+RUN echo "HISTFILESIZE=10000" >> /root/.bashrc
+RUN echo "# After each command, reload history" >> /root/.bashrc
+RUN echo 'export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"' >> /root/.bashrc
+RUN echo "# check the window size after each command and, if necessary," >> /root/.bashrc
+RUN echo "# update the values of LINES and COLUMNS." >> /root/.bashrc
+RUN echo "shopt -s checkwinsize" >> /root/.bashrc
 
 COPY . /app
 COPY ./sim2real/.vimrc /root/.vimrc

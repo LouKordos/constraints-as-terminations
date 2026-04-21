@@ -5,7 +5,6 @@ wandb
 *ige_logs*
 *.egg-info
 /.vs
-/.vscode
 /_package
 /shaders
 ._tmptext.txt
@@ -43,7 +42,5 @@ sim2real/ros2_ws/**/build
 sim2real/ros2_ws/**/install
 sim2real/ros2_ws/**/log
 sim2real/ros2_ws/src/third_party
-sim2real/odom_alternative_ws/**/build
-sim2real/odom_alternative_ws/**/install
-sim2real/odom_alternative_ws/**/log
-sim2real/odom_alternative_ws/src/third_party
+sim2real/ros2_ws/src/cat_controller/include/cat_controller/motor_crc.h
+sim2real/ros2_ws/src/cat_controller/src/motor_crc.cpp

@@ -10,9 +10,6 @@ SKIP_MULTIARCH_DOCKER_BUILD=true
 BUILD_DIR="${SCRIPT_DIR}/build"
 LOG_FILE="${SCRIPT_DIR}/build.log"
 CONTAINER_NAME="constraints-as-terminations-cat_sim2real-1"
-BINARY_NAME="run_policy"
-BINARY_ARGV="eth0" # Separated so that it can be passed to gdb as well
-# BINARY_NAME="sdk_stand_example ens4"
 export CLICOLOR=1
 export CLICOLOR_FORCE=1
 
@@ -22,6 +19,8 @@ while [[ "$#" -gt 0 ]]; do
         --clean-build)
             CLEAN_BUILD=true
             shift
+            echo "Script was executed with --clean-build. Press enter to acknowledge that ros2_ws/src/third_party will NOT be deleted in case temporary changes have been made that should not be lost!"
+            read
             ;;
         --no-multiarch-docker-build)
         SKIP_MULTIARCH_DOCKER_BUILD=true
@@ -60,7 +59,7 @@ if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
         echo "Starting non-multiarch build."
         docker compose --progress plain -f "${REPO_ROOT}/compose.yml" -f "${REPO_ROOT}/compose.no-multiarch.yml" --project-directory "${REPO_ROOT}" build
         # Should the compose build fail, this is likely because stupid buildkit does not respect network=host option. So just comment out the line above and uncomment the line below:
-        docker build .. -t loukordos/cat-sim2real:latest --network=host
+        # docker build .. -t loukordos/cat-sim2real:latest --network=host
     fi
     rm -rf "${SCRIPT_DIR}/build" || true # Reset build to a clean state, as build cache can cause confusing issues when changing installed deps in the Dockerfile.
     rm -rf "${SCRIPT_DIR}/ros2_ws/{build,install,log}" || true # Same for ROS workspace
@@ -76,64 +75,32 @@ else
         echo "Performing clean build: deleting markers and build directories..."
         rm -rf ${SCRIPT_DIR}/build ${SCRIPT_DIR}/ros2_ws/{build,install,log} /*.marker || true
     fi
+
+    # if [[ ! -f "/tracy-for-capture-built.marker" ]]; then
+    #     echo "-----------------------------------------Setting up automatic tracy profile capture------------------------------------------------"
+    #     cp -r ${BUILD_DIR}/_deps/tracy-src/ /tracy-for-capture/
+    #     rm -r /tracy-for-capture/capture/build || true
+    #     cmake -B /tracy-for-capture/capture/build -S /tracy-for-capture/capture -DCMAKE_BUILD_TYPE=Release -DNO_FILESELECTOR=ON
+    #     cmake --build /tracy-for-capture/capture/build/ --config Release --parallel
+    #     touch "/tracy-for-capture-built.marker"
+    #     echo "-------------------------------------------------Tracy capture setup complete------------------------------------------------------"
+    # fi
+    # pkill -f tracy-capture || echo "No tracy capture instances running."
+    # mkdir -p /app/logs/tracy-capture/
+    # TRACY_LOG_FILE="/app/logs/tracy-capture/tracy-capture-$(date -u '+%Y-%m-%d-%H-%M-%S').log"
+    # # Start a new tracy-capture instance and redirect output to the log file 
+    # /tracy-for-capture/capture/build/tracy-capture -o /app/logs/tracy-profiles/$(date -u '+%Y-%m-%d-%H-%M-%S').tracy > "$TRACY_LOG_FILE" 2>&1 & 
+    # TRACY_PID=$!
+    # echo "Tracy capture started with PID $TRACY_PID. Logs are being written to $TRACY_LOG_FILE"
+    # chmod -R 777 /app/logs
+
     echo "Building ROS packages..."
-    ./bootstrap_ros2_ws.sh
-    # source ./ros2_ws/install/setup.bash # If this is sourced, cyclonedds will cause a null pointer access in run_policy, likely due to the installed ROS cyclonedds rmw version mismatch to the Go2 SDK.
-    echo "Building main codebase..."
-    time cmake -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -S . -B ${BUILD_DIR}
-    if [[ ! -f "/tracy-for-capture-built.marker" ]]; then
-        echo "-----------------------------------------Setting up automatic tracy profile capture------------------------------------------------"
-        cp -r ${BUILD_DIR}/_deps/tracy-src/ /tracy-for-capture/
-        rm -r /tracy-for-capture/capture/build || true
-        cmake -B /tracy-for-capture/capture/build -S /tracy-for-capture/capture -DCMAKE_BUILD_TYPE=Release -DNO_FILESELECTOR=ON
-        cmake --build /tracy-for-capture/capture/build/ --config Release --parallel
-        touch "/tracy-for-capture-built.marker"
-        echo "-------------------------------------------------Tracy capture setup complete------------------------------------------------------"
-    fi
+    ${SCRIPT_DIR}/bootstrap_ros2_ws.sh
+
+    echo "Note that the following will fail if you have not followed the README.md setup steps! Just follow them and re-run this script in that case."
+    source ${SCRIPT_DIR}/ros2_ws/install/setup.bash
+    ros2 launch cat_bringup bringup.launch.py | grep -v "Failed to parse type hash for topic"
     
-    time cmake --build "$BUILD_DIR" -j $(nproc) -v 2>&1 | tee "$LOG_FILE"
-    echo "-----------------------------------------------------------------------------------------------------------------------------------"
-    # Check for warnings in the build output
-    if grep -q "warning:" "$LOG_FILE"; then
-        echo -e "\n\033[1;33mWarnings detected during compilation, waiting for confirmation.\033[0m"
-        read
-    else
-        echo -e "\n\033[1;32mNo warnings detected during compilation.\033[0m"
-    fi
-
-    pkill -f tracy-capture || echo "No tracy capture instances running."
-    mkdir -p /app/logs/tracy-capture/
-    mkdir -p /app/tracy-profiles/
-    TRACY_LOG_FILE="/app/logs/tracy-capture/tracy-capture-$(date -u '+%Y-%m-%d-%H-%M-%S').log"
-    # Start a new tracy-capture instance and redirect output to the log file 
-    /tracy-for-capture/capture/build/tracy-capture -o /app/logs/tracy-profiles/$(date -u '+%Y-%m-%d-%H-%M-%S').tracy > "$TRACY_LOG_FILE" 2>&1 & 
-    TRACY_PID=$!
-    echo "Tracy capture started with PID $TRACY_PID. Logs are being written to $TRACY_LOG_FILE"
-
-    BAG_TS="$(date -u +'%Y-%m-%d_%H-%M-%S')"
-    BAG_DIR="/app/logs/bags/utc_${BAG_TS}"
-    LOG_DIR="/app/logs/bags/utc_${BAG_TS}"
-    mkdir -p "${BAG_DIR}" "${LOG_DIR}"
-    # Launch recorder in isolated subshell:
-    (
-        export ROS_DOMAIN_ID=0
-        set +x
-        source /opt/ros/$ROS_DISTRO/setup.bash
-        set -x
-        cd "${BAG_DIR}"
-        exec ros2 bag record --output "${BAG_DIR}/bag" /rosout /tf /tf_static /joint_states /lowstate /lowcmd /robot_description /initialpose /imu_lowstate /imu /odometry/filtered /livox/lidar /livox/imu /statistics /elevation_map_points /elevation_mapping_node/elevation_map_filter --regex "^/[oO]dom.*" > "${LOG_DIR}/ros2_bag_${BAG_TS}.log" 2>&1
-    ) &
-    BAG_PID=$!
-    trap 'echo "Stopping ROS2 recorder (PID $BAG_PID, bag dir $BAG_DIR)…"; kill -SIGINT "$BAG_PID"' EXIT
-    echo "→ Recording ROS2 topics to ${BAG_DIR} (PID $BAG_PID)"
-
-    chmod -R 777 /app/logs
-
-    if [[ "${BUILD_TYPE}" = "Debug" ]]; then
-        gdb --args ${BUILD_DIR}/src/$BINARY_NAME $BINARY_ARGV
-    else
-        ${BUILD_DIR}/src/$BINARY_NAME $BINARY_ARGV
-    fi
     echo "Remember to source /app/sim2real/ros2_ws/install/setup.bash if you are working with ROS custom packages! bashrc already sources /opt/ros/$ROS_DISTRO/setup.bash"
     echo "Also remember to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."
 fi

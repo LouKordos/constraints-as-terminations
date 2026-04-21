@@ -1,0 +1,21 @@
+elevation_map_comparison_node:
+  ros__parameters:
+    processed_map_topic_name: "/processed_elevation_map"
+    atomic_op_timeout_us: 500
+
+    comparison_frequency_hz: 10.0
+
+    # Matching is done using source_map_stamp and map_ts, so 100 ms is fine
+    max_match_time_diff_sec: 0.10
+
+    # Give unmatched processed samples some time before dropping them
+    drop_unmatched_after_sec: 2.0
+
+    max_value_abs_diff: 0.005
+
+    # Legacy invalid cells are identified by being near the legacy fill value.
+    fill_value_epsilon: 0.02
+
+    max_buffer_size: 1000
+
+    log_all_matches: false

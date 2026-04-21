@@ -1,0 +1,52 @@
+# The settings here are essentially ROS2 official guidelines
+# with some minor personal preferences like ColumnLimit and indentation
+---
+BasedOnStyle: Google
+ColumnLimit: 150
+
+# Determines if function arguments/parameters can be packed onto one line.
+# Setting these to 'true' prevents each parameter from getting its own line.
+BinPackArguments: true
+BinPackParameters: true
+AllowAllParametersOfDeclarationOnNextLine: false
+
+# By default, Google aligns wrapped arguments perfectly under the open parenthesis. 
+# ROS 2 explicitly forbids this. 'DontAlign' forces wrapped arguments to start on the next 
+# line with a standard indent instead.
+AlignAfterOpenBracket: DontAlign
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+# Keeps short blocks on a single line (e.g., empty constructors)
+AllowShortBlocksOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# If true, clang-format guesses the alignment based on the existing code in the file.
+DerivePointerAlignment: false
+
+# Pointer alignment should be 'char * c' (Middle alignment per ROS 2 overrides)
+PointerAlignment: Middle
+
+# ROS 2 requires open braces (new line) for functions and classes, but 
+# cuddled braces (same line) for control statements like 'if' and 'while'.
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterEnum: true
+  AfterFunction: true
+  AfterStruct: true
+  AfterControlStatement: MultiLine
+
+# Physically inserts { } around single-line if/else/while statements if developer forgets to type them.
+InsertBraces: true
+
+# Because we use a custom IndentWidth of 4, Google style will push 'public:' and 'private:' inwards, that's why it is compensated for here
+AccessModifierOffset: -4
+
+# Sorts includes automatically
+SortIncludes: true
+---

@@ -1,0 +1,25 @@
+repositories:
+  third_party/FAST_LIO_ROS2:
+    type: git
+    url: https://github.com/LouKordos/FAST_LIO_ROS2.git
+    version: f477662409ee0ca60857f4d6dac9444a4294edfe
+  third_party/go2_odometry:
+    type: git
+    url: https://github.com/inria-paris-robotics-lab/go2_odometry.git
+    version: 529665c35c57bfdd021d1d685782676aa9f43f25
+  third_party/livox_ros_driver2:
+    type: git
+    url: https://github.com/Ericsii/livox_ros_driver2
+    version: 378d1c7c9d33ec44d0683aef885b6ed0cce9612c
+  third_party/unitree_description:
+    type: git
+    url: https://github.com/inria-paris-robotics-lab/unitree_description.git
+    version: 5635136ee43ef704e4edb87a58aa5495935d2fba
+  third_party/unitree_ros2:
+    type: git
+    url: https://github.com/unitreerobotics/unitree_ros2
+    version: 3ff13ea08ec619496c2651fd21b172f7958dd5a5
+  third_party/ros2-vicon-bridge:
+    type: git
+    url: https://github.com/dasc-lab/ros2-vicon-bridge
+    version: 893aba0eb8b7d316d90865ac46394616bfb0bb36
