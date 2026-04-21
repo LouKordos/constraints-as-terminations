@@ -478,7 +478,7 @@ private:
     timed_atomic<stamped_robot_state> global_robot_state_{};
     timed_atomic<std::array<float, NUM_JOINTS>> pd_setpoint_sdk_order{};
     timed_atomic<std::array<float, 3>> global_vel_command{{0.0f, 0.0f, 0.0f}};
-    // TODO: Pull from first message? But that makes init problematic, so probably just define in params here as well?
+    // TODO: Pull from first message? But that makes init problematic, so probably just define in params for this node as well?
     const int elevation_grid_width = 13;
     const int elevation_grid_height = 11;
     const int elevation_grid_total_size = elevation_grid_width * elevation_grid_height;
