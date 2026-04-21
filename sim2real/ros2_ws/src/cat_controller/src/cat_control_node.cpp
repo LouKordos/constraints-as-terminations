@@ -37,6 +37,8 @@ public:
           use_hardcoded_elevation_(declare_and_get_param<bool>("use_hardcoded_elevation", "Override elevation map", true)),
           hardcoded_elevation_(declare_and_get_param<double>("hardcoded_elevation", "Elevation value if hardcoded is true")),
           checkpoint_path_str_(declare_and_get_param<std::string>("checkpoint_path", "Path to PyTorch model", true)),
+          processed_map_topic_name_(
+              declare_and_get_param<std::string>("processed_map_topic_name", "Where the processed elevation map messages are published.", true)),
 
           atomic_op_timeout_threshold_(std::chrono::microseconds(declare_and_get_param<int>("atomic_op_timeout_us"))),
           stale_state_age_threshold_(std::chrono::milliseconds(declare_and_get_param<int>("stale_state_age_ms"))),
@@ -424,6 +426,7 @@ private:
     const bool use_hardcoded_elevation_;
     double hardcoded_elevation_;
     const std::string checkpoint_path_str_;
+    const std::string processed_map_topic_name_;
 
     const std::chrono::microseconds atomic_op_timeout_threshold_;
     const std::chrono::milliseconds stale_state_age_threshold_;
