@@ -404,6 +404,7 @@ private:
                 current_target_sdk[fl_calf] += offset;
 
             } else {
+                // TODO: Add stale command check
                 auto setpoint_res = pd_setpoint_sdk_order.try_load_for(atomic_op_timeout_threshold_);
                 if (!setpoint_res.has_value()) {
                     shutdown_coordinator_.shutdown(
@@ -422,7 +423,6 @@ private:
             command_msg_.motor_cmd[i].tau = 0.0;
         }
         get_crc(command_msg_);
-        // Commented out for safety for now
         if (shutdown_coordinator_.exit_requested()) {
             RCLCPP_WARN(this->get_logger(), "NOT publishing torque command because node shutdown was requested.");
             return;
