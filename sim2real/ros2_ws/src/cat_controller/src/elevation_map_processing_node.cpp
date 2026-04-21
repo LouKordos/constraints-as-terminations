@@ -148,12 +148,11 @@ private:
 
         geometry_msgs::msg::TransformStamped base_to_world_tf;
         try {
-            // Arg order is to,from. Timeout is just to avoid hangs when tf is not being published yet, but TimePointZero should return immediately as
-            // long as tf tree is being published
+            // Timeout avoids hangs when tf is not being published yet, but TimePointZero should return immediately as long as tf tree is being
+            // published
             base_to_world_tf = tf_buffer_->lookupTransform(
                 latest_map->getFrameId(), robot_base_frame_name_, tf2::TimePointZero, tf2::durationFromSec(tf_lookup_timeout_));
         } catch (const tf2::TransformException & e) {
-            // shutdown_coordinator_.shutdown(std::format("tf lookup failed, exiting. Exception message: {}", e.what()));
             // We just log and return if that happens, and let the upstream subscriber (cat_control_node in this case) handle the lack of messages how
             RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 100,
                 std::format("Tf lookup failed after {}sec, skipping callback. Error: {}", tf_lookup_timeout_, e.what()).c_str());
@@ -298,8 +297,8 @@ private:
     rclcpp::CallbackGroup::SharedPtr map_sub_cbg_;
     rclcpp::CallbackGroup::SharedPtr processing_timer_cbg_;
 
-    // Usually, I would use my own custom timed_atomic here to avoid hanging in a safety critical thread, but since the cat_control_node will have an
-    // age check on the received message and simply stop the robot if no new messages arrive, it is acceptable to use a simple atomic shared pointer.
+    // Usually, I would use my custom timed_atomic here to avoid blocking indefinitely in a safety critical thread, but since cat_control_node will
+    // have an age check on the received message and simply stop the robot if no new messages arrive, it is acceptable to use a atomic shared pointer.
     std::atomic<std::shared_ptr<grid_map::GridMap>> global_grid_map_;
     // List of sample positions in base frame for elevation map. These stay constant in base frame but we need to transform them into world frame
     std::vector<Eigen::Vector2d> lookup_points_robot_frame_;
