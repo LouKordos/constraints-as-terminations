@@ -75,30 +75,16 @@ else
         echo "Performing clean build: deleting markers and build directories..."
         rm -rf ${SCRIPT_DIR}/build ${SCRIPT_DIR}/ros2_ws/{build,install,log} /*.marker || true
     fi
-    echo "Building ROS packages..."
-    ${SCRIPT_DIR}/bootstrap_ros2_ws.sh
-    echo "Building main codebase..."
-    time cmake -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -S ${SCRIPT_DIR} -B ${BUILD_DIR}
-    if [[ ! -f "/tracy-for-capture-built.marker" ]]; then
-        echo "-----------------------------------------Setting up automatic tracy profile capture------------------------------------------------"
-        cp -r ${BUILD_DIR}/_deps/tracy-src/ /tracy-for-capture/
-        rm -r /tracy-for-capture/capture/build || true
-        cmake -B /tracy-for-capture/capture/build -S /tracy-for-capture/capture -DCMAKE_BUILD_TYPE=Release -DNO_FILESELECTOR=ON
-        cmake --build /tracy-for-capture/capture/build/ --config Release --parallel
-        touch "/tracy-for-capture-built.marker"
-        echo "-------------------------------------------------Tracy capture setup complete------------------------------------------------------"
-    fi
-    
-    time cmake --build "$BUILD_DIR" -j $(nproc) -v 2>&1 | tee "$LOG_FILE"
-    echo "-----------------------------------------------------------------------------------------------------------------------------------"
-    # Check for warnings in the build output
-    if grep -q "warning:" "$LOG_FILE"; then
-        echo -e "\n\033[1;33mWarnings detected during compilation, waiting for confirmation.\033[0m"
-        read
-    else
-        echo -e "\n\033[1;32mNo warnings detected during compilation.\033[0m"
-    fi
 
+    # if [[ ! -f "/tracy-for-capture-built.marker" ]]; then
+    #     echo "-----------------------------------------Setting up automatic tracy profile capture------------------------------------------------"
+    #     cp -r ${BUILD_DIR}/_deps/tracy-src/ /tracy-for-capture/
+    #     rm -r /tracy-for-capture/capture/build || true
+    #     cmake -B /tracy-for-capture/capture/build -S /tracy-for-capture/capture -DCMAKE_BUILD_TYPE=Release -DNO_FILESELECTOR=ON
+    #     cmake --build /tracy-for-capture/capture/build/ --config Release --parallel
+    #     touch "/tracy-for-capture-built.marker"
+    #     echo "-------------------------------------------------Tracy capture setup complete------------------------------------------------------"
+    # fi
     # pkill -f tracy-capture || echo "No tracy capture instances running."
     # mkdir -p /app/logs/tracy-capture/
     # TRACY_LOG_FILE="/app/logs/tracy-capture/tracy-capture-$(date -u '+%Y-%m-%d-%H-%M-%S').log"
@@ -107,6 +93,9 @@ else
     # TRACY_PID=$!
     # echo "Tracy capture started with PID $TRACY_PID. Logs are being written to $TRACY_LOG_FILE"
     # chmod -R 777 /app/logs
+
+    echo "Building ROS packages..."
+    ${SCRIPT_DIR}/bootstrap_ros2_ws.sh
 
     echo "Note that the following will fail if you have not followed the README.md setup steps! Just follow them and re-run this script in that case."
     source ${SCRIPT_DIR}/ros2_ws/install/setup.bash
