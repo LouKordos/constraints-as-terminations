@@ -48,8 +48,9 @@ public:
               true)),
           processing_interval_(  // Needs duration double first to avoid truncation
               std::chrono::round<std::chrono::milliseconds>(std::chrono::duration<double, std::milli>(1000.0 / processing_frequency_hz_))),
-          tf_lookup_timeout_(
-              declare_and_get_param<double>("tf_lookup_timeout", "How long to wait in seconds until shutting down node due to tf timeout", true)),
+          tf_lookup_timeout_(declare_and_get_param<double>("tf_lookup_timeout", "Seconds to wait before aborting tf lookup", true)),
+          max_tf_age_(declare_and_get_param<double>(
+              "max_tf_age", "Max age of tf lookup before discarding iteration. Prevents using outdated pose of robot", true)),
           processed_map_grid_width_(declare_and_get_param<int>("processed_map_grid_width", "Number of cells in width direction", true)),
           processed_map_grid_height_(declare_and_get_param<int>("processed_map_grid_height", "Number of cells in height direction", true)),
           processed_map_grid_resolution_(
@@ -164,6 +165,13 @@ private:
             return;
         }
         double fill_value = use_negative_base_height_as_fill_value_ ? -base_to_world_tf.transform.translation.z : invalid_cell_fill_value_;
+
+        auto tf_age = (this->get_clock()->now() - base_to_world_tf.header.stamp).seconds();
+        if (tf_age > max_tf_age_) {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 100,
+                std::format("tf_max_age={} exceeded, actual age={}. Skipping this iteration", max_tf_age_, tf_age).c_str());
+            return;
+        }
 
         if (base_to_world_tf.transform.translation.z < min_allowed_base_height_ ||
             base_to_world_tf.transform.translation.z > max_allowed_base_height_)
@@ -282,6 +290,7 @@ private:
     const double processing_frequency_hz_;
     const std::chrono::milliseconds processing_interval_;  // Needed for wall timer
     const double tf_lookup_timeout_;
+    const double max_tf_age_;
     const int processed_map_grid_width_;   // In cells, NOT meters
     const int processed_map_grid_height_;  // In cells, NOT meters
     const double processed_map_grid_resolution_;
