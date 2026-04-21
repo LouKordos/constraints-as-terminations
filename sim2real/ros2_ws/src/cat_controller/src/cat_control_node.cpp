@@ -320,7 +320,8 @@ private:
     void publish_commands()
     {
         if (shutdown_coordinator_.handle_exit_if_requested() ||
-            time_utils::shutdown_if_deadline_exceeded(last_command_callback_time_, std::chrono::milliseconds{30}, shutdown_coordinator_))
+            time_utils::shutdown_if_deadline_exceeded(
+                "publish_commands", last_command_callback_time_, std::chrono::milliseconds{30}, shutdown_coordinator_))
         {
             return;
         }
