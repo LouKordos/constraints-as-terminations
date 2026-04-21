@@ -547,7 +547,7 @@ private:
                 current_target_sdk[fl_calf] += offset;
 
             } else {
-                // No need to check for stale commands because standing in place is fine
+                // Intentionally holds the last successfully generated PD setpoint if no newer one is available.
                 auto setpoint_res = pd_setpoint_sdk_order.try_load_for(atomic_op_timeout_threshold_);
                 if (!setpoint_res.has_value()) {
                     shutdown_coordinator_.shutdown(
