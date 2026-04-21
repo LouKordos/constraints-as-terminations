@@ -4,7 +4,10 @@ elevation_map_processing_node:
     source_map_layer_name: "min_filter" # Check what layers are being published by elevation mapping node
 
     processed_map_topic_name: "/processed_elevation_map" # Where to publish
-    processing_frequency_hz: 50.0 # This is independent of how often an elevation map is received, as the transformation to base will occur more frequently using the latest tf. If you set this to zero bad things will happen :)
+    # This is independent of how often an elevation map is received, as the transformation to base will occur more frequently using the latest tf. If you set this to zero bad things will happen :)
+    # Set to a higher frequency than the policy inference because they are not synchronized, so it could happen that the inference timer runs 1ms too early and uses the previous (19ms old) data.
+    # The more this frequency here is increased, the lower this delta can become
+    processing_frequency_hz: 200.0
 
     # IMPORTANT: Dimensions of the map (i.e. (processed_map_grid_width * processed_grid_resolution, processed_map_grid_height * processed_grid_resolution)) is at most *half* the size of the map dimensions
     # configured in the elevation_mapping_cupy package publishing the raw map, so that out of bounds indices do not cause issues
