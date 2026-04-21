@@ -11,6 +11,7 @@ Disclaimer: This code was proudly written without LLMs :)
 #include <memory>
 #include <mutex>
 #include <type_traits>
+#include <variant>
 
 template <typename T>
 struct is_shared_ptr : std::false_type
