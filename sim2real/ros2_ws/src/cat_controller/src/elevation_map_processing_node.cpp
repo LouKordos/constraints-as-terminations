@@ -202,8 +202,8 @@ public:
         }
 
         lookup_points_world_frame_ = lookup_points_robot_frame_;
-        processed_elevation_map_values_.resize(processed_map_grid_width_ * processed_map_grid_height_, invalid_cell_fill_value_);
-        valid_mask_.resize(processed_map_grid_width_ * processed_map_grid_height_);
+        processed_elevation_map_values_.resize(grid_cell_count, invalid_cell_fill_value_);
+        valid_mask_.resize(grid_cell_count);
 
         RCLCPP_INFO(this->get_logger(), "Starting elevation map subscriber.");
         this->map_sub_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
