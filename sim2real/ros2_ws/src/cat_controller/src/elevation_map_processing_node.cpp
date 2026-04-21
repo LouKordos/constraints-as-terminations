@@ -92,7 +92,7 @@ public:
           elevation_sensor_offset_y_(
               declare_and_get_param<double>("elevation_sensor_offset_y", "In meters. Shifts sensor position relative to base", true)),
           invalid_cell_fill_value_(declare_and_get_param<double>(
-              "invalid_cell_fill_value", "In meters. Used for Nan/inf in height map, since policy excepts purely numerical data.", true)),
+              "invalid_cell_fill_value", "In meters. Used for Nan/inf in height map, since policy expects purely numerical data.", true)),
           use_negative_base_height_as_fill_value_(declare_and_get_param<bool>("use_negative_base_height_as_fill_value",
               "If true, invalid_cell_fill_value is NOT used, and invalid cells are instead set to -base_height, which is arguably more accurate",
               true)),
