@@ -10,7 +10,11 @@ Disclaimer: This code was proudly written without LLMs :)
 #include <ament_index_cpp/get_package_prefix.hpp>
 #include <atomic>
 #include <chrono>
+#include <cmath>
+#include <cstdint>
 #include <format>
+#include <limits>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -33,6 +37,33 @@ Disclaimer: This code was proudly written without LLMs :)
 
 class ElevationMapProcessingNode : public rclcpp::Node
 {
+private:
+    // Put above constructor because it uses the function
+    static std::chrono::milliseconds make_validated_processing_interval(double processing_frequency_hz)
+    {
+        if (!std::isfinite(processing_frequency_hz)) {
+            throw std::invalid_argument(
+                std::format("Invalid parameter 'processing_frequency_hz': value must be finite, got {}", processing_frequency_hz));
+        }
+
+        if (processing_frequency_hz <= 0.0) {
+            throw std::invalid_argument(
+                std::format("Invalid parameter 'processing_frequency_hz': value must be > 0, got {}", processing_frequency_hz));
+        }
+
+        const auto interval =
+            std::chrono::round<std::chrono::milliseconds>(std::chrono::duration<double, std::milli>(1000.0 / processing_frequency_hz));
+
+        if (interval.count() <= 0) {
+            throw std::invalid_argument(
+                std::format("Invalid parameter 'processing_frequency_hz': {} Hz produces a rounded wall-timer interval of {} ms. "
+                            "The timer period must be at least 1 ms.",
+                    processing_frequency_hz, interval.count()));
+        }
+
+        return interval;
+    }
+
 public:
     explicit ElevationMapProcessingNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
         : Node("elevation_map_processing_node", options),
@@ -46,8 +77,7 @@ public:
               "How often to process the latest map in Hz. Note that this is independent of how often an elevation map is received, as the "
               "transformation to base will occur more frequently using the latest tf.",
               true)),
-          processing_interval_(  // Needs duration double first to avoid truncation
-              std::chrono::round<std::chrono::milliseconds>(std::chrono::duration<double, std::milli>(1000.0 / processing_frequency_hz_))),
+          processing_interval_(make_validated_processing_interval(processing_frequency_hz_)),
           tf_lookup_timeout_(declare_and_get_param<double>("tf_lookup_timeout", "Seconds to wait before aborting tf lookup", true)),
           max_tf_age_(declare_and_get_param<double>(
               "max_tf_age", "Max age of tf lookup before discarding iteration. Prevents using outdated pose of robot", true)),
