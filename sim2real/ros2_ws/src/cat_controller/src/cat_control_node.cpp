@@ -36,6 +36,8 @@ public:
           network_interface_(declare_and_get_param<std::string>("network_interface", "Network interface for Go2", true)),
           use_hardcoded_elevation_(declare_and_get_param<bool>("use_hardcoded_elevation", "Override elevation map", true)),
           hardcoded_elevation_(declare_and_get_param<double>("hardcoded_elevation", "Elevation value if hardcoded is true")),
+          elevation_grid_width_(declare_and_get_param<double>("elevation_grid_width", "Width of elevation grid observation for policy in cells")),
+          elevation_grid_height_(declare_and_get_param<double>("elevation_grid_height", "Height of elevation grid observation for policy in cells")),
           elevation_map_warmup_delay_(declare_and_get_param<double>("elevation_map_warmup_delay",
               "Seconds to wait until exiting because no elevation map message has arrived, hardcoded elevation will be used in the meantime.")),
           checkpoint_path_str_(declare_and_get_param<std::string>("checkpoint_path", "Path to PyTorch model", true)),
@@ -494,6 +496,10 @@ private:
     const std::string network_interface_;
     const bool use_hardcoded_elevation_;
     double hardcoded_elevation_;
+    const int elevation_grid_width_;
+    const int elevation_grid_height_;
+    const int elevation_grid_total_size{elevation_grid_width_ * elevation_grid_height_};
+    std::vector<float> hardcoded_map_buffer_{std::vector<float>(elevation_grid_total_size, hardcoded_elevation_)};
     const double elevation_map_warmup_delay_;
     const std::string checkpoint_path_str_;
     const std::string processed_map_topic_name_;
@@ -539,12 +545,7 @@ private:
     timed_atomic<stamped_robot_state> global_robot_state_{};
     timed_atomic<std::array<float, NUM_JOINTS>> pd_setpoint_sdk_order{};
     timed_atomic<std::array<float, 3>> global_vel_command{{0.0f, 0.0f, 0.0f}};
-    // TODO: Pull from first message? But that makes init problematic, so probably just define in params for this node as well?
-    const int elevation_grid_width = 13;
-    const int elevation_grid_height = 11;
-    const int elevation_grid_total_size = elevation_grid_width * elevation_grid_height;
     std::atomic<std::shared_ptr<const cat_perception_msgs::msg::ProcessedElevationMap>> global_processed_elevation_map_;
-    std::vector<float> hardcoded_map_buffer_{std::vector<float>(elevation_grid_total_size, hardcoded_elevation_)};
 
     InferenceEngine inference_engine_;
     LowLevelModeEnabler low_level_mode_enabler_;
