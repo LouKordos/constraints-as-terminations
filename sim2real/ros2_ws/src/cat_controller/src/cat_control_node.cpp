@@ -301,7 +301,7 @@ private:
         // published are actually being applied.
         if (low_level_mode_enabled_.load(std::memory_order_acquire) && !initial_low_level_state_.load(std::memory_order_acquire)) {
             initial_state_ = *msg;
-            start_time_ = this->get_clock()->now().seconds();
+            start_time_ = std::chrono::steady_clock::now();
             initial_low_level_state_.store(true, std::memory_order_release);
             RCLCPP_INFO(this->get_logger(), "Low level mode enabled, saving initial state. FR Calf: %f, FL Calf: %f", initial_state_.motor_state[2].q,
                 initial_state_.motor_state[5].q);
@@ -503,7 +503,7 @@ private:
         }
 
         // Compute relative time since low level control mode was enabled and initial state was captured
-        const double t = this->get_clock()->now().seconds() - start_time_;
+        const double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time_).count();
         std::array<float, NUM_JOINTS> current_target_sdk{};
 
         if (t < interpolation_duration_) {
@@ -620,7 +620,7 @@ private:
     std::atomic<bool> initial_low_level_state_{false};
     std::atomic<bool> low_level_mode_enabled_{false};
     std::atomic<bool> interpolation_finished_{false};
-    double start_time_{0.0};
+    std::chrono::steady_clock::time_point start_time_;
 
     unitree_go::msg::LowState initial_state_;
     unitree_go::msg::LowCmd command_msg_;
