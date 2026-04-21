@@ -275,7 +275,7 @@ private:
         }
 
         std::vector<float> current_elevation_map;
-        if (use_hardcoded_elevation_) {
+        if (use_hardcoded_elevation_ || (this->get_clock()->now().seconds() - start_ms_policy_inference_ / 1000.0f) < elevation_map_warmup_delay_) {
             current_elevation_map.assign(elevation_grid_total_size, hardcoded_elevation_);
         } else {
             auto map_res = global_processed_elevation_map_.try_load_for(atomic_op_timeout_threshold_);
