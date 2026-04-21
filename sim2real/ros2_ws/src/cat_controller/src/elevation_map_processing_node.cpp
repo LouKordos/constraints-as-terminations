@@ -150,7 +150,8 @@ private:
 
         geometry_msgs::msg::TransformStamped base_to_world_tf;
         try {
-            // Arg order is to,from
+            // Arg order is to,from. Timeout is just to avoid hangs when tf is not being published yet, but TimePointZero should return immediately as
+            // long as tf tree is being published
             base_to_world_tf = tf_buffer_->lookupTransform(
                 latest_map->getFrameId(), robot_base_frame_name_, tf2::TimePointZero, tf2::durationFromSec(tf_lookup_timeout_));
         } catch (const tf2::TransformException & e) {
