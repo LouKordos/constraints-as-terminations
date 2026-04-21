@@ -19,3 +19,7 @@ repositories:
     type: git
     url: https://github.com/unitreerobotics/unitree_ros2
     version: 3ff13ea08ec619496c2651fd21b172f7958dd5a5
+  third_party/ros2-vicon-bridge:
+    type: git
+    url: https://github.com/dasc-lab/ros2-vicon-bridge
+    version: 893aba0eb8b7d316d90865ac46394616bfb0bb36
