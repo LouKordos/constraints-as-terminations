@@ -201,7 +201,6 @@ private:
                     processed_elevation_map_values_[i] = absolute_height - base_to_world_tf.transform.translation.z;
                     valid_mask_[i] = true;
                 }
-                // TODO: Thoroughly check if the is_valid mask is 100% correctly implemented
             }
         }
 
@@ -231,7 +230,6 @@ private:
         processed_map_publisher_->publish(processed_msg);
         processing_iteration_counter_++;
 
-        // AFTER CONFIRMED WORKING:
         // TODO: profile hotloop using Tracy
         // TODO: Profile atomic shared ptr read and write using tracy
         // TODO: Simplify and cleanup there are differences when running the rosbag-checker on it
