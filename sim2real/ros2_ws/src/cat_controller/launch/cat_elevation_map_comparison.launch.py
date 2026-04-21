@@ -24,7 +24,7 @@ def generate_launch_description():
         executable="elevation_map_comparison_node",
         name="elevation_map_comparison_node",
         output="both",
-        ros_arguments=["--log-level", "debug"],
+        # ros_arguments=["--log-level", "debug"],
         parameters=[config_path]
     )
 

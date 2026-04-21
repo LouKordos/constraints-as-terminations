@@ -94,7 +94,7 @@ def generate_launch_description():
         executable="cat_controller",
         name="cat_controller",
         output="both",
-        ros_arguments=["--log-level", "debug"],
+        # ros_arguments=["--log-level", "debug"],
         parameters=[config_path, {"network_interface": network_interface}]
     )
 

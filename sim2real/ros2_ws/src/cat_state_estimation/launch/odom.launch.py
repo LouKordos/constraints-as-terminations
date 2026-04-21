@@ -85,7 +85,7 @@ def generate_launch_description():
         name='base_to_livox_static_transform',
         arguments=[x_offset, y_offset, z_offset, yaw_offset, pitch_offset, roll_offset, vicon_base_frame, livox_frame],
         output='both',
-        ros_arguments=["--log-level", "debug"],
+        # ros_arguments=["--log-level", "debug"],
         condition=IfCondition(use_vicon)
     )
 
@@ -97,7 +97,7 @@ def generate_launch_description():
         name="base_to_vicon_static_transform",
         arguments=["0","0","0","0","0","0", vicon_base_frame, odometry_base_frame],
         output="both",
-        ros_arguments=["--log-level", "debug"],
+        # ros_arguments=["--log-level", "debug"],
         condition=IfCondition(use_vicon)
     )
 
@@ -107,7 +107,7 @@ def generate_launch_description():
         name='base_to_livox_static_transform',
         arguments=[x_offset, y_offset, z_offset, yaw_offset, pitch_offset, roll_offset, odometry_base_frame, livox_frame],
         output='both',
-        ros_arguments=["--log-level", "debug"],
+        # ros_arguments=["--log-level", "debug"],
         condition=UnlessCondition(use_vicon)
     )
 
@@ -120,7 +120,7 @@ def generate_launch_description():
         name="robot_state_publisher",
         output="both",
         parameters=[{"robot_description": robot_desc}],
-        ros_arguments=["--log-level", "debug"],
+        # ros_arguments=["--log-level", "debug"],
         arguments=[GO2_DESCRIPTION_URDF_PATH],
         condition=IfCondition(use_vicon)
     )
@@ -130,7 +130,7 @@ def generate_launch_description():
         package="go2_odometry",
         executable="state_converter_node",
         name="state_converter_node",
-        ros_arguments=["--log-level", "debug"],
+        # ros_arguments=["--log-level", "debug"],
         parameters=[],
         output="both",
         condition=IfCondition(use_vicon)
