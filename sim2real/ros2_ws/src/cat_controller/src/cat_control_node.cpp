@@ -16,7 +16,7 @@
 #include "cat_controller/inference_engine.hpp"
 #include "cat_controller/low_level_mode_enabler.hpp"
 #include "cat_controller/motor_crc.h"  // Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
-#include "cat_controller/old_elevation_map_processor.hpp"
+#include "cat_controller/old_elevation_map_processor.hpp"  // TODO: Remove
 #include "cat_controller/shutdown_coordinator.hpp"
 #include "cat_controller/stamped_robot_state.hpp"
 #include "cat_controller/time_utils.hpp"
@@ -466,7 +466,7 @@ private:
     timed_atomic<stamped_robot_state> global_robot_state_{};
     timed_atomic<std::array<float, NUM_JOINTS>> pd_setpoint_sdk_order{};
     timed_atomic<std::array<float, 3>> global_vel_command{{0.0f, 0.0f, 0.0f}};
-    // TODO: USE PARAMS!
+    // TODO: Pull from first message? But that makes init problematic, so probably just define in params here as well?
     const int elevation_grid_width = 13;
     const int elevation_grid_height = 11;
     const int elevation_grid_total_size = elevation_grid_width * elevation_grid_height;
