@@ -137,7 +137,7 @@ def _launch_setup(context, *args, **kwargs):
             "--regex",
             "^/[oO]dom.*",
         ],
-        output="screen",
+        output="both",
         sigterm_timeout="5",
         sigkill_timeout="5",
     )

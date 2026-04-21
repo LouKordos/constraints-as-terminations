@@ -86,14 +86,15 @@ def generate_launch_description():
             # pose_topic,
             # livox_points_topic,
         ],
-        output="screen",
+        output="both",
     )
 
     cat_control_node = Node(
         package="cat_controller",
         executable="cat_controller",
         name="cat_controller",
-        output="screen",
+        output="both",
+        ros_arguments=["--log-level", "debug"],
         parameters=[config_path, {"network_interface": network_interface}]
     )
 

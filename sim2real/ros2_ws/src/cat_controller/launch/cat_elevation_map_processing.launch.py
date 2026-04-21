@@ -23,7 +23,8 @@ def generate_launch_description():
         package="cat_controller",
         executable="elevation_map_processing_node",
         name="elevation_map_processing_node",
-        output="screen",
+        output="both",
+        ros_arguments=["--log-level", "debug"],
         parameters=[config_path]
     )
 
