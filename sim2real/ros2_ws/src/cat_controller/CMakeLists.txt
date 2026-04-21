@@ -54,8 +54,6 @@ target_link_libraries(cat_controller PUBLIC
   ${unitree_api_TARGETS}
   ${cat_perception_msgs_TARGETS}
   fmt::fmt
-  nlohmann_json::nlohmann_json
-  cppzmq # TODO: Remove unused dependencies after migration to new processor
 )
 
 add_executable(elevation_map_processing_node src/elevation_map_processing_node.cpp)
