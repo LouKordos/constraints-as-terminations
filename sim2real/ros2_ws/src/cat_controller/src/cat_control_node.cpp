@@ -337,7 +337,7 @@ private:
         {
             shutdown_coordinator_.shutdown(
                 std::format("processed_elevation_map_grid_width={} not equal to received width={} OR processed_elevation_map_grid_height={} not "
-                            "equal to received height={} OR total data points={} not equal to received total data points={} OR ",
+                            "equal to received height={} OR total data points={} not equal to received total data points={}",
                     processed_elevation_map_grid_width_, msg->processed_size_x, processed_elevation_map_grid_height_, msg->processed_size_y,
                     processed_elevation_map_total_cells, msg->data.size()));
             return;
