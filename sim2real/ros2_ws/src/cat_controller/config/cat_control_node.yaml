@@ -6,8 +6,8 @@ cat_controller:
     use_hardcoded_elevation: true
     hardcoded_elevation: -0.3
     elevation_map_warmup_delay: 30.0 # Seconds to wait until exiting because no elevation map message has arrived, hardcoded elevation will be used in the meantime.
-    elevation_grid_width: 13 # In cells
-    elevation_grid_height: 11 # In cells
+    processed_elevation_map_grid_width: 13 # In cells
+    processed_elevation_map_grid_height: 11 # In cells
     
     atomic_op_timeout_us: 500
     stale_state_age_ms: 50
