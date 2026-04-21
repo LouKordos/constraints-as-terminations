@@ -40,7 +40,7 @@ struct LegacyElevationSample
     double ts{0.0};           // Python-side processing time from the legacy JSON packet.
     double map_ts{0.0};       // Source elevation map timestamp from the legacy JSON packet.
     double cpp_recv_ts{0.0};  // Local receive time inside this C++ processor.
-    float fill_value{-0.27f};
+    float fill_value{-0.3f};
     std::vector<float> grid;
 };
 
@@ -137,7 +137,7 @@ private:
     static constexpr int elevation_grid_total_size = elevation_grid_width * elevation_grid_height;
     static constexpr float elevation_grid_resolution = 0.08f;
     static constexpr float elevation_sensor_offset_x = 0.2f;
-    static constexpr float elevation_fill_value = -0.27f;
+    static constexpr float elevation_fill_value = -0.3f;
 
     zmq::context_t zmq_context_;
     zmq::socket_t zmq_socket_;
