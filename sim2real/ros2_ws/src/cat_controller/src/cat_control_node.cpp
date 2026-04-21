@@ -147,24 +147,26 @@ private:
     {
         const std::array<std::string, 2> rpy_names = {"roll", "pitch"};
         for (size_t i = 0; i < 2; ++i) {
-            if (is_out_of_bounds(state.body_rpy_xyz[i], BASE_ORIENTATION_LIMIT_RAD[i])) {
-                return std::format("Base {} angle out of bounds, value={}, bounds=[{},{}]", rpy_names[i], state.body_rpy_xyz[i],
+            if (!std::isfinite(state.body_rpy_xyz[i]) || is_out_of_bounds(state.body_rpy_xyz[i], BASE_ORIENTATION_LIMIT_RAD[i])) {
+                return std::format("Base {} angle out of bounds or not finite, value={}, bounds=[{},{}]", rpy_names[i], state.body_rpy_xyz[i],
                     BASE_ORIENTATION_LIMIT_RAD[i].first, BASE_ORIENTATION_LIMIT_RAD[i].second);
             }
         }
 
         for (int i = 0; i < NUM_JOINTS; i++) {
-            if (is_out_of_bounds(state.joint_pos[i], JOINT_POSITION_LIMITS[i])) {
-                return std::format("Joint position for index {} out of bounds, pos={}, bounds=[{},{}]", i, state.joint_pos[i],
+            if (!std::isfinite(state.joint_pos[i]) || is_out_of_bounds(state.joint_pos[i], JOINT_POSITION_LIMITS[i])) {
+                return std::format("Joint position for index {} out of bounds or not finite, pos={}, bounds=[{},{}]", i, state.joint_pos[i],
                     JOINT_POSITION_LIMITS[i].first, JOINT_POSITION_LIMITS[i].second);
             }
 
-            if (std::abs(state.joint_torque[i]) > joint_torque_abs_limit_) {
-                return std::format("Joint torque for index {} out of bounds, torque={}, limit={}", i, state.joint_torque[i], joint_torque_abs_limit_);
+            if (!std::isfinite(state.joint_torque[i]) || std::abs(state.joint_torque[i]) > joint_torque_abs_limit_) {
+                return std::format(
+                    "Joint torque for index {} out of bounds or not finite, torque={}, limit={}", i, state.joint_torque[i], joint_torque_abs_limit_);
             }
 
-            if (std::abs(state.joint_vel[i]) > joint_vel_abs_limit_) {
-                return std::format("Joint velocity for index {} out of bounds, velocity={}, limit={}", i, state.joint_vel[i], joint_vel_abs_limit_);
+            if (!std::isfinite(state.joint_vel[i]) || std::abs(state.joint_vel[i]) > joint_vel_abs_limit_) {
+                return std::format(
+                    "Joint velocity for index {} out of bounds or not finite, velocity={}, limit={}", i, state.joint_vel[i], joint_vel_abs_limit_);
             }
         }
 
