@@ -246,6 +246,17 @@ private:
             return;
         }
 
+        if (processed_elevation_map_grid_width_ != msg->processed_size_x || processed_elevation_map_grid_height_ != msg->processed_size_y ||
+            processed_elevation_map_total_cells != msg->data.size())
+        {
+            shutdown_coordinator_.shutdown(
+                std::format("processed_elevation_map_grid_width={} not equal to received width={} OR processed_elevation_map_grid_height={} not "
+                            "equal to received height={} OR total data points={} not equal to received total data points={} OR ",
+                    processed_elevation_map_grid_width_, msg->processed_size_x, processed_elevation_map_grid_height_, msg->processed_size_y,
+                    processed_elevation_map_total_cells, msg->data.size()));
+            return;
+        }
+
         // std::cout << "now - source_map_ts in ms: " << (this->get_clock()->now() - rclcpp::Time(msg->source_map_stamp)).seconds() * 1000.0
         //           << ", processing node started processing this msg "
         //           << (this->get_clock()->now() - rclcpp::Time(msg->header.stamp)).seconds() * 1000.0 << "ms ago, processing node took "
@@ -498,8 +509,8 @@ private:
     double hardcoded_elevation_;
     const int processed_elevation_map_grid_width_;
     const int processed_elevation_map_grid_height_;
-    const int elevation_grid_total_size{processed_elevation_map_grid_width_ * processed_elevation_map_grid_height_};
-    std::vector<float> hardcoded_map_buffer_{std::vector<float>(elevation_grid_total_size, hardcoded_elevation_)};
+    const int processed_elevation_map_total_cells{processed_elevation_map_grid_width_ * processed_elevation_map_grid_height_};
+    std::vector<float> hardcoded_map_buffer_{std::vector<float>(processed_elevation_map_total_cells, hardcoded_elevation_)};
     const double elevation_map_warmup_delay_;
     const std::string checkpoint_path_str_;
     const std::string processed_map_topic_name_;
