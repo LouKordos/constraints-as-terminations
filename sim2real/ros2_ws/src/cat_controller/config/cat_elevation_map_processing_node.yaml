@@ -20,7 +20,7 @@ elevation_map_processing_node:
     use_negative_base_height_as_fill_value: true # If true, invalid_cell_fill_value is NOT used, and invalid cells are instead set to -base_height, which is arguably more accurate
 
     robot_base_frame_name: "vicon/Go2_Loukas/Go2_Loukas" # Base link of the robot
-    max_tf_age: 0.01 # Max age of tf lookup before discarding iteration. Prevents using outdated pose of robot
+    max_tf_age: 0.02 # Max age of tf lookup before discarding iteration. Prevents using outdated pose of robot
     tf_lookup_timeout: 0.01 # Seconds to wait before aborting tf lookup
 
     min_allowed_base_height: 0.0 # In meters. Used to safely shut down robot when state estimation / odom reports unreasonable values.
