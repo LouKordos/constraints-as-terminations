@@ -103,6 +103,90 @@ public:
           shutdown_coordinator_(
               this->get_logger(), this->get_node_base_interface()->get_context(), [this]() { this->map_processing_timer_->cancel(); })
     {
+        auto fail_invalid_param = [this](const std::string & message) -> void {
+            RCLCPP_FATAL(this->get_logger(), "CRITICAL: Invalid parameter configuration: %s", message.c_str());
+            throw std::invalid_argument(message);
+        };
+
+        auto require = [&](bool condition, const std::string & message) -> void {
+            if (!condition) { fail_invalid_param(message); }
+        };
+
+        auto require_non_empty = [&](const std::string & value, const char * name) -> void {
+            require(!value.empty(), std::format("Parameter '{}' must not be empty.", name));
+        };
+
+        auto require_finite = [&](double value, const char * name) -> void {
+            require(std::isfinite(value), std::format("Parameter '{}' must be finite, got {}.", name, value));
+        };
+
+        require_non_empty(source_map_topic_name_, "source_map_topic_name");
+        require_non_empty(source_map_layer_name_, "source_map_layer_name");
+        require_non_empty(processed_map_topic_name_, "processed_map_topic_name");
+        require_non_empty(robot_base_frame_name_, "robot_base_frame_name");
+
+        require(source_map_topic_name_ != processed_map_topic_name_,
+            std::format("Parameters 'source_map_topic_name' ('{}') and 'processed_map_topic_name' ('{}') must differ. "
+                        "Using the same topic name for different message types is invalid / highly error-prone.",
+                source_map_topic_name_, processed_map_topic_name_));
+
+        require_finite(processing_frequency_hz_, "processing_frequency_hz");
+        require(processing_frequency_hz_ > 0.0, std::format("Parameter 'processing_frequency_hz' must be > 0, got {}.", processing_frequency_hz_));
+
+        require_finite(tf_lookup_timeout_, "tf_lookup_timeout");
+        require(tf_lookup_timeout_ >= 0.0, std::format("Parameter 'tf_lookup_timeout' must be >= 0, got {}.", tf_lookup_timeout_));
+
+        require_finite(max_tf_age_, "max_tf_age");
+        require(max_tf_age_ >= 0.0, std::format("Parameter 'max_tf_age' must be >= 0, got {}.", max_tf_age_));
+
+        require(processed_map_grid_width_ > 0, std::format("Parameter 'processed_map_grid_width' must be > 0, got {}.", processed_map_grid_width_));
+
+        require(
+            processed_map_grid_height_ > 0, std::format("Parameter 'processed_map_grid_height' must be > 0, got {}.", processed_map_grid_height_));
+
+        const std::int64_t grid_cell_count =
+            static_cast<std::int64_t>(processed_map_grid_width_) * static_cast<std::int64_t>(processed_map_grid_height_);
+
+        require(grid_cell_count > 0, std::format("Grid cell count must be > 0, but width={} and height={} produce {}.", processed_map_grid_width_,
+                                         processed_map_grid_height_, grid_cell_count));
+
+        require_finite(processed_map_grid_resolution_, "processed_map_grid_resolution");
+        require(processed_map_grid_resolution_ > 0.0,
+            std::format("Parameter 'processed_map_grid_resolution' must be > 0, got {}.", processed_map_grid_resolution_));
+
+        require_finite(elevation_sensor_offset_x_, "elevation_sensor_offset_x");
+        require_finite(elevation_sensor_offset_y_, "elevation_sensor_offset_y");
+
+        require_finite(invalid_cell_fill_value_, "invalid_cell_fill_value");
+        require(invalid_cell_fill_value_ >= static_cast<double>(std::numeric_limits<float>::lowest()) &&
+                    invalid_cell_fill_value_ <= static_cast<double>(std::numeric_limits<float>::max()),
+            std::format("Parameter 'invalid_cell_fill_value'={} cannot be represented as a float without overflow.", invalid_cell_fill_value_));
+
+        require_finite(min_allowed_base_height_, "min_allowed_base_height");
+        require_finite(max_allowed_base_height_, "max_allowed_base_height");
+        require(min_allowed_base_height_ < max_allowed_base_height_,
+            std::format("Expected 'min_allowed_base_height' < 'max_allowed_base_height', but got {} >= {}.", min_allowed_base_height_,
+                max_allowed_base_height_));
+
+        // Optional but useful warnings for configurations that are legal but suspicious.
+        if (tf_lookup_timeout_ > max_tf_age_) {
+            RCLCPP_WARN(this->get_logger(),
+                "Parameter 'tf_lookup_timeout' (%f s) is larger than 'max_tf_age' (%f s). "
+                "This is allowed, but it often means you may wait longer for TF than your freshness budget allows.",
+                tf_lookup_timeout_, max_tf_age_);
+        }
+
+        if (processed_map_grid_width_ == 1 || processed_map_grid_height_ == 1) {
+            RCLCPP_WARN(this->get_logger(),
+                "Processed grid is degenerate in one dimension (width=%d, height=%d). "
+                "This is allowed, but it produces a 1D strip rather than a 2D patch.",
+                processed_map_grid_width_, processed_map_grid_height_);
+        }
+
+        // Avoid repeated reallocations once we know the dimensions are valid.
+        lookup_points_robot_frame_.reserve(static_cast<size_t>(grid_cell_count));
+        lookup_points_world_frame_.reserve(static_cast<size_t>(grid_cell_count));
+
         tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
