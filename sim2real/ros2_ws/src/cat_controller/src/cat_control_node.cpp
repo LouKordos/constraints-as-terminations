@@ -82,19 +82,19 @@ public:
         this->command_timer_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
         this->inference_timer_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
-        RCLCPP_DEBUG(this->get_logger(), "Starting robot state subscriber.");
+        RCLCPP_INFO(this->get_logger(), "Starting robot state subscriber.");
         rclcpp::SubscriptionOptions state_sub_options;
         state_sub_options.callback_group = state_sub_cbg_;
         robot_state_sub_ = this->create_subscription<unitree_go::msg::LowState>(
             "/lowstate", rclcpp::SensorDataQoS(), std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1), state_sub_options);
-        RCLCPP_DEBUG(this->get_logger(), "Started robot state subscriber.");
+        RCLCPP_INFO(this->get_logger(), "Started robot state subscriber.");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting robot command publisher.");
         command_publisher_ = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", rclcpp::SensorDataQoS());
-        RCLCPP_DEBUG(this->get_logger(), "Started robot command publisher.");
+        RCLCPP_INFO(this->get_logger(), "Started robot command publisher.");
 
         std::string error_message;
-        RCLCPP_DEBUG(this->get_logger(), "Starting low level control mode enabler process.");
+        RCLCPP_INFO(this->get_logger(), "Starting low level control mode enabler process.");
         if (!low_level_mode_enabler_.start(error_message)) {
             // Throw here because we have not initialized anything that warrants proper shutdown. After the constructor, we use the shutdown
             // coordinator to avoid exceptions
@@ -102,11 +102,11 @@ public:
         }
         RCLCPP_INFO(this->get_logger(), "Started motion switcher helper using interface '%s'.", network_interface_.c_str());
 
-        RCLCPP_DEBUG(this->get_logger(), "Starting robot command publish timer.");
+        RCLCPP_INFO(this->get_logger(), "Starting robot command publish timer.");
         command_timer_ = this->create_wall_timer(2ms, std::bind(&CaTControlNode::publish_commands, this), command_timer_cbg_);
-        RCLCPP_DEBUG(this->get_logger(), "Started robot command publish timer.");
+        RCLCPP_INFO(this->get_logger(), "Started robot command publish timer.");
 
-        RCLCPP_DEBUG(this->get_logger(), "Starting policy inference / control loop timer.");
+        RCLCPP_INFO(this->get_logger(), "Starting policy inference / control loop timer.");
         policy_inference_timer_ = this->create_wall_timer(20ms, std::bind(&CaTControlNode::policy_inference_callback, this), inference_timer_cbg_);
         RCLCPP_DEBUG(this->get_logger(), "Started policy inference / control loop timer.");
 
@@ -116,6 +116,7 @@ public:
         RCLCPP_DEBUG(this->get_logger(), "Starting ElevationMapProcessor logging to %s", log_directory.c_str());
         elevation_processor_ = std::make_unique<ElevationMapProcessor>(
             log_directory, "min_filter", 1, shutdown_coordinator_, this->get_logger(), global_robot_state_, global_processed_elevation_map_);
+        RCLCPP_INFO(this->get_logger(), "Started policy inference / control loop timer.");
 
         // Dump all node parameters to logs
         std::string param_dump = "=== Node Parameters ===\n";
