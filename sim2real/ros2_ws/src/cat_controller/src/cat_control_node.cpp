@@ -16,12 +16,12 @@
 #include "cat_controller/inference_engine.hpp"
 #include "cat_controller/low_level_mode_enabler.hpp"
 #include "cat_controller/motor_crc.h"  // Copied from go2 repo because its needed for sending valid motor commands and they do not install these header files automatically
-#include "cat_controller/old_elevation_map_processor.hpp"  // TODO: Remove
 #include "cat_controller/shutdown_coordinator.hpp"
 #include "cat_controller/stamped_robot_state.hpp"
 #include "cat_controller/time_utils.hpp"
 #include "cat_controller/timed_atomic.hpp"
 #include "cat_controller/unitree_msg_utils.hpp"
+#include "cat_perception_msgs/msg/processed_elevation_map.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "unitree_go/msg/low_cmd.hpp"
 #include "unitree_go/msg/low_state.hpp"
@@ -89,7 +89,13 @@ public:
             "/lowstate", rclcpp::SensorDataQoS(), std::bind(&CaTControlNode::robot_state_callback, this, std::placeholders::_1), state_sub_options);
         RCLCPP_INFO(this->get_logger(), "Started robot state subscriber.");
 
-        RCLCPP_DEBUG(this->get_logger(), "Starting robot command publisher.");
+        RCLCPP_INFO(this->get_logger(), "Starting processed elevation map subscriber.");
+        // Same callback group because callbacks are not heavy
+        processed_map_sub_ = this->create_subscription<cat_perception_msgs::msg::ProcessedElevationMap>(processed_map_topic_name_,
+            rclcpp::SensorDataQoS(), std::bind(&CaTControlNode::processed_map_callback, this, std::placeholders::_1), state_sub_options);
+        RCLCPP_INFO(this->get_logger(), "Started processed elevation map subscriber.");
+
+        RCLCPP_INFO(this->get_logger(), "Starting robot command publisher.");
         command_publisher_ = this->create_publisher<unitree_go::msg::LowCmd>("/lowcmd", rclcpp::SensorDataQoS());
         RCLCPP_INFO(this->get_logger(), "Started robot command publisher.");
 
@@ -108,14 +114,6 @@ public:
 
         RCLCPP_INFO(this->get_logger(), "Starting policy inference / control loop timer.");
         policy_inference_timer_ = this->create_wall_timer(20ms, std::bind(&CaTControlNode::policy_inference_callback, this), inference_timer_cbg_);
-        RCLCPP_DEBUG(this->get_logger(), "Started policy inference / control loop timer.");
-
-        // TODO: Remove once you have clean elevation mapping code
-        const char * ros_log_dir = std::getenv("ROS_LOG_DIR");
-        std::string log_directory = ros_log_dir ? std::string(ros_log_dir) + "/" : "/tmp/";
-        RCLCPP_DEBUG(this->get_logger(), "Starting ElevationMapProcessor logging to %s", log_directory.c_str());
-        elevation_processor_ = std::make_unique<ElevationMapProcessor>(
-            log_directory, "min_filter", 1, shutdown_coordinator_, this->get_logger(), global_robot_state_, global_processed_elevation_map_);
         RCLCPP_INFO(this->get_logger(), "Started policy inference / control loop timer.");
 
         // Dump all node parameters to logs
@@ -230,7 +228,35 @@ private:
             return;
         }
         // Only store if valid
-        global_robot_state_.try_store_for(stamped_state, atomic_op_timeout_threshold_);
+        if (!global_robot_state_.try_store_for(stamped_state, atomic_op_timeout_threshold_)) {
+            shutdown_coordinator_.shutdown(std::format("Failed to update robot state within {}us, exiting.", atomic_op_timeout_threshold_.count()));
+        }
+    }
+
+    void processed_map_callback(const cat_perception_msgs::msg::ProcessedElevationMap::ConstSharedPtr msg)
+    {
+        if (shutdown_coordinator_.handle_exit_if_requested() ||
+            time_utils::shutdown_if_deadline_exceeded(
+                "processed_map_callback", last_processed_map_callback_time_, std::chrono::milliseconds{50}, shutdown_coordinator_))
+        {
+            return;
+        }
+
+        // TODO: Check if dims and msg->data length matches expected to avoid segfault
+
+        // std::cout << "now - source_map_ts in ms: " << (this->get_clock()->now() - rclcpp::Time(msg->source_map_stamp)).seconds() * 1000.0
+        //           << ", processing node started processing this msg "
+        //           << (this->get_clock()->now() - rclcpp::Time(msg->header.stamp)).seconds() * 1000.0 << "ms ago, processing node took "
+        //           << (rclcpp::Time(msg->publish_stamp) - rclcpp::Time(msg->header.stamp)).seconds() * 1000.0 << "ms for processing this msg"
+        //           << std::endl;
+        // for (int i = 0; i < msg->data.size(); i++) { std::cout << msg->data[i] << ","; }
+        // std::cout << std::endl;
+
+        // Use the atomic shared ptr approach again, same as elevation_map_processing_node: Single writer and single reader means that once the writer
+        // (this callback) has atomically updated the pointer, it will never touch that messag again. So the policy inference callback (reader) can
+        // freely access it without issues. If performance is not sufficient then double buffering needs to be used to avoid allocating a new message
+        // everytime but the frequency is not that high and policy inference callback checks for stale map so safety is also not impacted negatively
+        global_processed_elevation_map_.store(msg);
     }
 
     void policy_inference_callback()
@@ -283,22 +309,48 @@ private:
             }
         }
 
-        std::vector<float> current_elevation_map;
-        if (use_hardcoded_elevation_ || (this->get_clock()->now().seconds() - start_ms_policy_inference_ / 1000.0f) < elevation_map_warmup_delay_) {
-            current_elevation_map.assign(elevation_grid_total_size, hardcoded_elevation_);
-        } else {
-            auto map_res = global_processed_elevation_map_.try_load_for(atomic_op_timeout_threshold_);
-            if (map_res.has_value()) {
-                current_elevation_map = map_res.value();
-                // TODO: Stale check for source_map_stamp and publish_stamp using params as thresholds
-            } else {
-                shutdown_coordinator_.shutdown(
-                    std::format("Failed to fetch elevation map within {}us, exiting.", atomic_op_timeout_threshold_.count()));
-                return;
-            }
+        bool is_in_warmup = (rel_time_ms / 1000.0) < elevation_map_warmup_delay_;
+        auto processed_map = global_processed_elevation_map_.load();
+        // If we have no map, aren't in warmup, and aren't forcing the hardcoded map -> Abort
+        if (!processed_map && !is_in_warmup && !use_hardcoded_elevation_) {
+            shutdown_coordinator_.shutdown("Global processed elevation map has not been updated yet but warmup period is over, exiting.");
+            return;
         }
 
-        const auto & generated_action = inference_engine_.generate_action(robot_state, vel_command, current_elevation_map);
+        // Using a pointer to correct elevation map data avoids unnecessary copy
+        const std::vector<float> * map_data_ptr = nullptr;
+        // Only check for processed_map so the calculations and printing always run (used for latency troubleshooting)
+        if (processed_map) {
+            auto now = this->get_clock()->now();
+            auto source_map_age = now - rclcpp::Time(processed_map->source_map_stamp);
+            auto processed_map_age = now - rclcpp::Time(processed_map->publish_stamp);
+            auto processing_duration = rclcpp::Time(processed_map->publish_stamp) - rclcpp::Time(processed_map->header.stamp);
+            // To find out how much overhead separate processing node incurred
+            auto communication_delay = (now - rclcpp::Time(processed_map->source_pose_stamp)) - processing_duration;
+
+            // std::cout << std::fixed << std::setprecision(4) << "Now: " << now.seconds() * 1000.0f << "ms | "
+            //           << "Source Map Age: " << source_map_age.seconds() * 1000.0f << "ms | "
+            //           << "Processed Map Age: " << processed_map_age.seconds() * 1000.0f << "ms | "
+            //           << "Processing Duration: " << processing_duration.seconds() * 1000.0f << "ms | "
+            //           << "Comm Delay: " << communication_delay.seconds() << "ms" << std::endl;
+
+            if (!use_hardcoded_elevation_) {
+                if (source_map_age.seconds() > source_map_age_threshold_ || processed_map_age.seconds() > processed_map_age_threshold_) {
+                    shutdown_coordinator_.shutdown(std::format(
+                        "source_map_age_threshold={}sec or processed_map_age_threshold={}sec exceeded, exiting. Actual source_map_age={}sec, actual "
+                        "processed_map_age={}sec.",
+                        source_map_age_threshold_, processed_map_age_threshold_, source_map_age.seconds(), processed_map_age.seconds()));
+                    return;
+                }
+                map_data_ptr = &(processed_map->data);
+            } else {
+                map_data_ptr = &hardcoded_map_buffer_;
+            }
+        } else {
+            // We have either not received a map (but are in warmup), or we are using hardcoded elevation values anyway as per node params
+            map_data_ptr = &hardcoded_map_buffer_;
+        }
+        const auto & generated_action = inference_engine_.generate_action(robot_state, vel_command, *map_data_ptr);
 
         // Do not check if target exceeds joint limits because policy might learn to command out of range values temporarily during walking.
         std::array<float, NUM_JOINTS> pd_target_sdk_order{};  // Go2 SDK native order, NOT Isaac Lab!!!
@@ -470,6 +522,7 @@ private:
     long long state_callback_iteration_counter_{0};
     int64_t start_ms_policy_inference_{0};
 
+    std::chrono::steady_clock::time_point last_processed_map_callback_time_{};
     std::chrono::steady_clock::time_point last_state_callback_time_{};
     std::chrono::steady_clock::time_point last_inference_callback_time_{};
     std::chrono::steady_clock::time_point last_command_callback_time_{};
@@ -490,7 +543,8 @@ private:
     const int elevation_grid_width = 13;
     const int elevation_grid_height = 11;
     const int elevation_grid_total_size = elevation_grid_width * elevation_grid_height;
-    timed_atomic<std::vector<float>> global_processed_elevation_map_{std::vector<float>(elevation_grid_total_size, hardcoded_elevation_)};
+    std::atomic<std::shared_ptr<const cat_perception_msgs::msg::ProcessedElevationMap>> global_processed_elevation_map_;
+    std::vector<float> hardcoded_map_buffer_{std::vector<float>(elevation_grid_total_size, hardcoded_elevation_)};
 
     InferenceEngine inference_engine_;
     LowLevelModeEnabler low_level_mode_enabler_;
@@ -499,16 +553,12 @@ private:
     rclcpp::TimerBase::SharedPtr command_timer_;
     rclcpp::TimerBase::SharedPtr policy_inference_timer_;
     rclcpp::Subscription<unitree_go::msg::LowState>::SharedPtr robot_state_sub_;
+    rclcpp::Subscription<cat_perception_msgs::msg::ProcessedElevationMap>::SharedPtr processed_map_sub_;
     rclcpp::Publisher<unitree_go::msg::LowCmd>::SharedPtr command_publisher_;
 
     rclcpp::CallbackGroup::SharedPtr state_sub_cbg_;
     rclcpp::CallbackGroup::SharedPtr command_timer_cbg_;
     rclcpp::CallbackGroup::SharedPtr inference_timer_cbg_;
-    // TODO: Add subscriber for PROCESSED elevation map (separate node will handle making it robot-centric so that this node just needs to pass
-    // array of floats to InferenceEngine)
-
-    // TODO: Remove once you have clean elevation mapping processing node
-    std::unique_ptr<ElevationMapProcessor> elevation_processor_;
 };
 
 int main(int argc, char * argv[])
