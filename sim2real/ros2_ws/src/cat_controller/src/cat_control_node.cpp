@@ -244,8 +244,6 @@ private:
             return;
         }
 
-        // TODO: Check if dims and msg->data length matches expected to avoid segfault
-
         // std::cout << "now - source_map_ts in ms: " << (this->get_clock()->now() - rclcpp::Time(msg->source_map_stamp)).seconds() * 1000.0
         //           << ", processing node started processing this msg "
         //           << (this->get_clock()->now() - rclcpp::Time(msg->header.stamp)).seconds() * 1000.0 << "ms ago, processing node took "
