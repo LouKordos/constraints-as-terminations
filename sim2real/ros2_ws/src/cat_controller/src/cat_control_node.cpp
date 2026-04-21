@@ -301,7 +301,11 @@ private:
         // Do not check if target exceeds joint limits because policy might learn to command out of range values temporarily during walking.
         std::array<float, NUM_JOINTS> pd_target_sdk_order{};  // Go2 SDK native order, NOT Isaac Lab!!!
         for (int i = 0; i < NUM_JOINTS; i++) {
-            int j = sdk_to_isaac_idx[i];                                                                            // Remap to go2 order
+            int j = sdk_to_isaac_idx[i];  // Remap to go2 order
+            if (!std::isfinite(generated_action[i])) {
+                shutdown_coordinator_.shutdown(std::format("Action at isaac joint index={}, sdk joint index={} is not finite, exiting.", j, i));
+                return;
+            }
             pd_target_sdk_order[i] = DEFAULT_JOINT_POSITIONS_ISAAC_ORDER[j] + generated_action[j] * action_scale_;  // Scale same as Isaac Lab
         }
         if (!pd_setpoint_sdk_order.try_store_for(pd_target_sdk_order, atomic_op_timeout_threshold_)) {
