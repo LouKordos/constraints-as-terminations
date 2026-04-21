@@ -281,6 +281,7 @@ private:
             auto map_res = global_processed_elevation_map_.try_load_for(atomic_op_timeout_threshold_);
             if (map_res.has_value()) {
                 current_elevation_map = map_res.value();
+                // TODO: Stale check for source_map_stamp and publish_stamp using params as thresholds
             } else {
                 shutdown_coordinator_.shutdown(
                     std::format("Failed to fetch elevation map within {}us, exiting.", atomic_op_timeout_threshold_.count()));
