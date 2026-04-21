@@ -200,8 +200,8 @@ private:
     void robot_state_callback(const unitree_go::msg::LowState::SharedPtr msg)
     {
         auto steady_now = std::chrono::steady_clock::now();
-        if (shutdown_coordinator_.handle_exit_if_requested() ||
-            time_utils::shutdown_if_deadline_exceeded(last_state_callback_time_, std::chrono::milliseconds{50}, shutdown_coordinator_))
+        if (shutdown_coordinator_.handle_exit_if_requested() || time_utils::shutdown_if_deadline_exceeded("robot_state_callback",
+                                                                    last_state_callback_time_, std::chrono::milliseconds{50}, shutdown_coordinator_))
         {
             return;
         }
@@ -237,7 +237,9 @@ private:
         if (inference_iteration_counter_ <= 10) {
             // Force the next iteration to treat the timing as a fresh start to the delta check that would otherwise measure the warmup delay
             last_inference_callback_time_ = std::chrono::steady_clock::time_point{};
-        } else if (time_utils::shutdown_if_deadline_exceeded(last_inference_callback_time_, std::chrono::milliseconds{30}, shutdown_coordinator_)) {
+        } else if (time_utils::shutdown_if_deadline_exceeded(
+                       "policy_inference_callback", last_inference_callback_time_, std::chrono::milliseconds{35}, shutdown_coordinator_))
+        {
             return;
         }
 

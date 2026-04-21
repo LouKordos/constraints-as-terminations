@@ -130,8 +130,9 @@ private:
     {
         auto steady_now = std::chrono::steady_clock::now();
         auto processing_start_stamp = this->get_clock()->now();
-        if (shutdown_coordinator_.handle_exit_if_requested() || time_utils::shutdown_if_deadline_exceeded(last_processing_callback_time_,
-                                                                    std::chrono::milliseconds{3 * processing_interval_}, shutdown_coordinator_))
+        if (shutdown_coordinator_.handle_exit_if_requested() ||
+            time_utils::shutdown_if_deadline_exceeded("process_and_publish_map", last_processing_callback_time_,
+                std::chrono::milliseconds{10 * processing_interval_}, shutdown_coordinator_))
         {
             return;
         }
