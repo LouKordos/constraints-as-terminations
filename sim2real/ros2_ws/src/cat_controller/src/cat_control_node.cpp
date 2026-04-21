@@ -44,6 +44,10 @@ public:
 
           atomic_op_timeout_threshold_(std::chrono::microseconds(declare_and_get_param<int>("atomic_op_timeout_us"))),
           stale_state_age_threshold_(std::chrono::milliseconds(declare_and_get_param<int>("stale_state_age_ms"))),
+          source_map_age_threshold_(declare_and_get_param<double>(
+              "source_map_age_threshold", "Tolerated age of original elevation map before processing in seconds", true)),
+          processed_map_age_threshold_(declare_and_get_param<double>(
+              "processed_map_age_threshold", "Tolerated age of processed elevation map after processing in seconds", true)),
 
           walk_a_bit_(declare_and_get_param<bool>("walk_a_bit", "Enable debug walk sequence")),
           sinusoidal_debug_motion_(declare_and_get_param<bool>("sinusoidal_debug_motion", "Enable sinusoidal testing motion")),
@@ -434,6 +438,8 @@ private:
 
     const std::chrono::microseconds atomic_op_timeout_threshold_;
     const std::chrono::milliseconds stale_state_age_threshold_;
+    const double source_map_age_threshold_;
+    const double processed_map_age_threshold_;
 
     const bool walk_a_bit_;
     const bool sinusoidal_debug_motion_;

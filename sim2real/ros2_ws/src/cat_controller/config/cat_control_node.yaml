@@ -10,6 +10,8 @@ cat_controller:
     atomic_op_timeout_us: 500
     stale_state_age_ms: 50
     initial_state_save_timeout_sec: 2.0
+    source_map_age_threshold: 0.15 # Tolerated age of original elevation map before processing in seconds
+    processed_map_age_threshold: 0.01 # Tolerated age of processed elevation map after processing in seconds
     
     walk_a_bit: false
     sinusoidal_debug_motion: false
