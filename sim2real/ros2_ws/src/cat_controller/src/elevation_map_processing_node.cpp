@@ -138,7 +138,7 @@ private:
         // Use an RCU-like atomic pointer swap. For my own understanding I am writing an explanation here:
         // We bypass locking by allocating a new object on the heap, converting the message without locking yet, and only then atomically store the
         // new pointer globally. That way, the high-frequency timer thread never blocks waiting for a deep copy to finish.
-        // I am aware tat atomic shared ptrs are not lock-free, but as the control node will notie latency spikes that might occur due to the heap
+        // I am aware that atomic shared ptrs are not lock-free, but as the control node will notie latency spikes that might occur due to the heap
         // allocs or waiting for a lock here, this is acceptable. If it becomes a real bottleneck, I will switch to double buffering.
         std::shared_ptr<grid_map::GridMap> latest_map = global_grid_map_.load();
         // Always need to check for null pointer, e.g. for scenario when no map has been received yet.
