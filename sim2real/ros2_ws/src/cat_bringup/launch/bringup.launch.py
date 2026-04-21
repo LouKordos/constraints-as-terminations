@@ -153,7 +153,7 @@ def _launch_setup(context, *args, **kwargs):
         livox_include,
         odom_include,
         elevation_map_processing_include,
-        elevation_map_comparison_include,
+        # elevation_map_comparison_include,
         controller_include,
     ]
 
