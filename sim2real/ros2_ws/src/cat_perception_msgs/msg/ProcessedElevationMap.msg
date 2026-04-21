@@ -10,6 +10,8 @@ uint64 seq
 builtin_interfaces/Time source_map_stamp
 # Timestamp of the robot pose / TF lookup used to generate the yaw-aligned local policy observation. Different from source_map_stamp because the two run concurrently
 builtin_interfaces/Time source_pose_stamp
+# Timestamp right before publishing the message, to measure how long the processing took
+builtin_interfaces/Time publish_stamp
 
 uint32 source_size_x           # Number of cells in the X direction of the source (raw) elevation map
 uint32 source_size_y           # Number of cells in the Y direction of the source (raw) elevation map

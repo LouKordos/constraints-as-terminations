@@ -226,6 +226,7 @@ private:
         processed_msg.is_valid_mask = valid_mask_;
         processed_msg.layer_name = source_map_layer_name_;
         processed_msg.data = processed_elevation_map_values_;
+        processed_msg.publish_stamp = this->get_clock()->now();
 
         processed_map_publisher_->publish(processed_msg);
         processing_iteration_counter_++;
