@@ -37,9 +37,9 @@ public:
           use_hardcoded_elevation_(declare_and_get_param<bool>("use_hardcoded_elevation", "Override elevation map", true)),
           hardcoded_elevation_(declare_and_get_param<double>("hardcoded_elevation", "Elevation value if hardcoded is true")),
           processed_elevation_map_grid_width_(
-              declare_and_get_param<double>("processed_elevation_map_grid_width", "Width of elevation grid observation for policy in cells")),
+              declare_and_get_param<int>("processed_elevation_map_grid_width", "Width of elevation grid observation for policy in cells")),
           processed_elevation_map_grid_height_(
-              declare_and_get_param<double>("processed_elevation_map_grid_height", "Height of elevation grid observation for policy in cells")),
+              declare_and_get_param<int>("processed_elevation_map_grid_height", "Height of elevation grid observation for policy in cells")),
           elevation_map_warmup_delay_(declare_and_get_param<double>("elevation_map_warmup_delay",
               "Seconds to wait until exiting because no elevation map message has arrived, hardcoded elevation will be used in the meantime.")),
           checkpoint_path_str_(declare_and_get_param<std::string>("checkpoint_path", "Path to PyTorch model", true)),
