@@ -1008,7 +1008,7 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
             mode="reset",
         )
 
-        ENABLE_EXTRA_MASS = True
+        ENABLE_EXTRA_MASS = False
         if ENABLE_EXTRA_MASS:
             self.events.add_extra_mass = EventTerm(
                 func=mdp.randomize_rigid_body_mass,
