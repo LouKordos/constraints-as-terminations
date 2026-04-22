@@ -91,8 +91,8 @@ def _get_or_create_noisy_height_markers(env):
     return env._noisy_height_markers
 
 def height_map_grid(env, asset_cfg: SceneEntityCfg): 
-    ray_hit_positions_world_frame = env.scene[asset_cfg.name].data.ray_hits_w # [E, R, 3]
-    base_pose_world_frame = env.scene["robot"].data.root_pos_w # [E, 3]
+    ray_hit_positions_world_frame = env.scene[asset_cfg.name].data.ray_hits_w.clone() # [E, R, 3]
+    base_pose_world_frame = env.scene["robot"].data.root_pos_w.clone() # [E, 3]
 
     POSE_NOISE_MEAN = 0.0 # TODO: Resample per episode
     POSE_NOISE_STD = 0.001 # TODO: Check if redundant since height map noise is the same or not?
