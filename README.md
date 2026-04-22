@@ -43,9 +43,19 @@ class ConstraintsCfg:
 Training and Isaac lab-related tasks were tested without docker, by using `create-isaac-lab-env-uv.py`. Check the slurm config and the `justfile` for available commands, as well as the `scripts` directory.
 
 ## Sim2Real
-For deploying on the real robot, the `sim2real` directory is relevant. It uses docker for ROS and you should build and run using `build-and-run.sh`. Check the options inside the script.
+For deploying on the real robot, the `sim2real` directory is relevant. It uses docker for ROS to make it reproducible and easy to run cross-platform. 
 
-Initial setup steps:
+### Architectural notes and design philosophy: 
+
+I generally prefer thin ROS node wrappers around independently testable logic so that input-output behavior of each module can be tested easily. In practice, that means pushing validation, state-transition, and transformation logic into components that can be exercised with deterministic unit tests, and using ROS-level integration/E2E tests to verify timing, messaging, and end-to-end behavior.
+
+The controller is designed for soft real-time operation rather than hard real-time guarantees. The design intentionally favors bounded waiting, message freshness checks, and safe shutdown over unnecessary lock-free complexity because the robot API shuts down the hardware on missed commands anyway. The 500 Hz command loop and 50 Hz policy loop are isolated, and stale state/map thresholds are enforced so that scheduling delays degrade into safe stop behavior rather than reusing old data, which would potentially be dangerous. 
+
+The elevation map processing node updates at a much higher frequency than the policy (configurable in its parameter yaml) so that outdated observations due to the asynchronous setup are reduced. This way, even if the policy inference callback runs "1ms too early" (i.e. before the latest processed elevation map arrives), the induced delay is still only a fraction of a policy time step. The map processing is also completely decoupled from the update frequency of the raw global map, because it being in world frame and much larger than the body-centric local observation grid for the policy allows the assumption of slow changes relative to robot movement. Using the latest tf lookup at a high frequency thus produces accurate processed map observations for the policy.
+
+### Initial setup
+
+You should use `build-and-run.sh` for setup, check the options inside the script. Initial setup steps:
 1. Run `xhost +local:docker` on the host (outside docker) so that GUI applications such as RViz2 work through docker.
 2. Set up your network interface and ensure you can ping the robot: [https://support.unitree.com/home/en/developer/Quick_start](https://support.unitree.com/home/en/developer/Quick_start). You can run the sim2real code on either a connected workstation or the Go2 itself, but the latter is recommended for latency reasons.
 
