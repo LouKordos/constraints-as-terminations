@@ -35,6 +35,12 @@ Disclaimer: This code was proudly written without LLMs :)
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 
+// The elevation map processing node updates at a much higher frequency than the policy (configurable in its parameter yaml) so that outdated
+// observations due to the asynchronous setup are reduced. This way, even if the policy inference callback runs "1ms too early" (i.e. before the
+// latest processed elevation map arrives), the induced delay is still only a fraction of a policy time step. The map processing is also completely
+// decoupled from the update frequency of the raw global map, because it being in world frame and much larger than the body-centric local observation
+// grid for the policy allows the assumption of slow changes relative to robot movement. Using the latest tf lookup at a high frequency thus produces
+// accurate processed map observations for the policy.
 class ElevationMapProcessingNode : public rclcpp::Node
 {
 private:
