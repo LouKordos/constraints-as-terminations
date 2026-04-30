@@ -905,8 +905,8 @@ class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.solver_type = 0
         self.sim.dt = 0.005
         self.sim.render_interval = self.decimation
-        self.sim.max_position_iteration_count = 4
-        self.sim.max_velocity_iteration_count = 1
+        self.sim.max_position_iteration_count = 24
+        self.sim.max_velocity_iteration_count = 6
         self.sim.bounce_threshold_velocity = 0.2
         self.sim.gpu_max_rigid_contact_count = 33554432
         self.sim.physx.gpu_max_rigid_patch_count = 568462
