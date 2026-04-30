@@ -651,6 +651,11 @@ class ConstraintsCfg:
         max_p=0.25, # Overwritten by curriculum!
         params={"limit": 80.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
+    base_orientation = ConstraintTerm(
+        func=constraints.base_orientation, 
+        max_p=0.25, 
+        params={"limit": 0.1}
+    )
 
     # Safety Hard constraints. Note that these are equivalent to episode reset / termination, so they should ideally be formulated as reset events
     contact = ConstraintTerm(
@@ -669,16 +674,16 @@ class ConstraintsCfg:
         params={"limit": 1.5, "names": ["FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint"]},
     )
     upsidedown = ConstraintTerm(
-        func=constraints.upsidedown, max_p=1.0, params={"limit": 0.0}
+        func=constraints.upsidedown, 
+        max_p=1.0, 
+        params={"limit": 0.0}
     )
     hip_position = ConstraintTerm(
         func=constraints.relative_joint_position_upper_and_lower_bound_when_moving_forward,
         max_p=0.25, # Overwritten by curriculum!
         params={"limit": 0.3, "names": [".*_hip_joint"], "velocity_deadzone": 0.1},
     )
-    base_orientation = ConstraintTerm(
-        func=constraints.base_orientation, max_p=0.25, params={"limit": 0.1}
-    )
+    
     # Never forget to also add a curriculum term for each added constraint
     # min_relative_base_height = ConstraintTerm(func=constraints.min_base_height_relative_to_ground, max_p=0.25, params={"limit": 0.2})
     '''
