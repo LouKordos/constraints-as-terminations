@@ -652,8 +652,7 @@ class ConstraintsCfg:
         params={"limit": 80.0, "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"]},
     )
 
-    # Safety Hard constraints
-    # Knee and base
+    # Safety Hard constraints. Note that these are equivalent to episode reset / termination, so they should ideally be formulated as reset events
     contact = ConstraintTerm(
         func=constraints.contact,
         max_p=1.0,
@@ -672,8 +671,6 @@ class ConstraintsCfg:
     upsidedown = ConstraintTerm(
         func=constraints.upsidedown, max_p=1.0, params={"limit": 0.0}
     )
-
-    # Style constraints
     hip_position = ConstraintTerm(
         func=constraints.relative_joint_position_upper_and_lower_bound_when_moving_forward,
         max_p=0.25, # Overwritten by curriculum!
@@ -696,6 +693,8 @@ class ConstraintsCfg:
         params={"limit": 0.8, "names": [".*_foot"], "velocity_deadzone": 0.1},
     )
     '''
+
+    # Irrelevant for gait, just added for troubleshooting on real robot when standing
     no_move = ConstraintTerm(
         func=constraints.no_move,
         max_p=0.1, # Overwritten by curriculum!
