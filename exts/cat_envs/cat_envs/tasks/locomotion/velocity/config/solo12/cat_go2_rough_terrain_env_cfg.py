@@ -505,6 +505,34 @@ class EventCfg:
         },
     )
 
+    # Randomize base link CoM by independently shifting x/y/z by up to 3cm
+    randomize_com = EventTerm(
+        func=mdp.randomize_rigid_body_com,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=["base"]),
+            "com_range": {
+                "x": (-0.03, 0.03),
+                "y": (-0.03, 0.03),
+                "z": (-0.03, 0.03),
+            },
+        },
+    )
+
+    # Randomize base link mass by adding a uniform random delta
+    randomize_mass = EventTerm(
+        func=mdp.randomize_rigid_body_mass,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=["base"]),
+            "mass_distribution_params": (-1.5, 1.5),
+            "operation": "add",
+            "distribution": "uniform",
+            "recompute_inertia": True,
+        },
+    )
+
+
     reset_base = EventTerm(
         func=mdp.reset_root_state_from_terrain,
         mode="reset",
