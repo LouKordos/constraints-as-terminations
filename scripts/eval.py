@@ -253,6 +253,8 @@ def main():
     # Launch Isaac Lab environment
     args.device = "cuda" # Using CPU Increases iterations/sec in some cases and reduces VRAM usage which allows parallel runs. Replace with "cuda" if you want pure GPU, because on more recent GPUs this might be faster depending on your hardware
     args.disable_fabric = True if args.device == "cpu" else False
+    if "--/rtx/verifyDriverVersion/enabled=false" not in sys.argv: # Needed because of overflow bug when checking nvidia driver version with minor version > 255
+        sys.argv.append("--/rtx/verifyDriverVersion/enabled=false")
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
     from isaaclab.utils.dict import print_dict
