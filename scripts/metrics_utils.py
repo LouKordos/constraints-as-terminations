@@ -217,16 +217,7 @@ def compute_summary_metrics(
     foot_positions_contact_frame = data_arrays["foot_positions_contact_frame"][mask]
     distance_increment = data_arrays["distance_increment"][mask]
     reward = data_arrays["reward"][mask]
-
-    power_array = joint_torques * joint_velocities
-
-    # Only automatic resets contaminate the post-step state on the current timestep.
-    # Manual scenario resets happen before the step and do NOT affect the previous/current power samples.
-    for local_index in local_automatic_reset_steps:
-        if local_index > 0:
-            power_array[local_index, :] = power_array[local_index - 1, :]
-        else:
-            power_array[local_index, :] = 0.0
+    power_array = data_arrays["power_array"][mask].copy()
 
     energy_per_joint = np.cumsum(np.abs(power_array), axis=0) * step_dt
     combined_energy = np.cumsum(np.abs(power_array).sum(axis=1)) * step_dt

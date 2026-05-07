@@ -657,8 +657,16 @@ def main():
     foot_positions_world_frame_array = np.array(foot_positions_world_frame_buffer)
     foot_positions_body_frame_array = np.array(foot_positions_body_frame_buffer)
     foot_positions_contact_frame_array = np.array(foot_positions_contact_frame_buffer)
-    power_array = joint_torques_array * joint_velocities_array
+    raw_power_array = joint_torques_array * joint_velocities_array
     total_robot_mass = float(env.unwrapped.scene["robot"].data.default_mass.sum().item())
+
+    repaired_power_array = raw_power_array.copy()
+    for reset_step in automatic_reset_steps:
+        if 0 <= reset_step < repaired_power_array.shape[0]:
+            if reset_step > 0:
+                repaired_power_array[reset_step, :] = repaired_power_array[reset_step - 1, :]
+            else:
+                repaired_power_array[reset_step, :] = 0.0
 
     # Hybrid walked-distance estimator:
     # - normal timesteps: use horizontal world-frame position difference
@@ -713,7 +721,8 @@ def main():
         foot_positions_world_frame_array=foot_positions_world_frame_array,
         foot_positions_body_frame_array=foot_positions_body_frame_array,
         foot_positions_contact_frame_array=foot_positions_contact_frame_array,
-        power_array=power_array,
+        raw_power_array=raw_power_array,
+        power_array=repaired_power_array,
         distance_increment_array=distance_increment_array,
         foot_labels=np.array(foot_labels),
         joint_names=np.array(joint_names),
@@ -741,7 +750,7 @@ def main():
         "foot_positions_world_frame": foot_positions_world_frame_array,
         "foot_positions_body": foot_positions_body_frame_array,
         "foot_positions_contact_frame": foot_positions_contact_frame_array,
-        "power_array": power_array,
+        "power_array": repaired_power_array,
         "distance_increment": distance_increment_array,
         "reward": reward_array,
     }
