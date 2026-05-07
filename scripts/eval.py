@@ -331,9 +331,16 @@ def main():
     env_cfg.viewer.resolution = (frame_width, frame_height)
     device = torch.device(args.device)
 
-    eval_base_dir = os.path.join(args.run_dir, f"eval_checkpoint_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}_seed_{env_cfg.seed}")
-    env_name = os.path.basename(os.path.dirname(args.run_dir.rstrip("/")))
-    print(f"eval_base_dir={eval_base_dir}, env_name={env_name}")
+    run_path = Path(args.run_dir).resolve()
+    run_name = run_path.name
+    env_name = run_path.parent.name
+    task_name = args.task
+
+    eval_base_dir = os.path.join(
+        str(run_path),
+        f"eval_checkpoint_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}_seed_{env_cfg.seed}"
+    )
+    print(f"eval_base_dir={eval_base_dir}, env_name={env_name}, run_name={run_name}, task_name={task_name}")
 
     # Create output directories
     plots_directory = os.path.join(eval_base_dir, "plots")
@@ -694,6 +701,8 @@ def main():
     np.savez(
         np_data_file,
         env_name=env_name,
+        run_name=run_name,
+        task_name=task_name,
         sim_times=sim_times,
         reset_times=np.array(reset_times),
         manual_reset_times=np.array(manual_reset_times),
@@ -786,6 +795,11 @@ def main():
     summary_metrics["random_simulation_steps_metrics"] = random_metrics
     summary_metrics["fixed_command_scenarios_metrics"] = scenario_metrics
     summary_metrics.update({
+        "env_name": env_name,
+        "run_name": run_name,
+        "task_name": task_name,
+        "run_dir": str(run_path),
+        "eval_base_dir": eval_base_dir,
         "random_sim_steps": args.random_sim_step_length,
         "total_sim_steps": total_sim_steps,
         "seed": env_cfg.seed,
