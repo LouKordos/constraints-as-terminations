@@ -719,7 +719,7 @@ class ConstraintsCfg:
     air_time_lower_bound = ConstraintTerm(
         func=constraints.air_time_lower_bound,
         max_p=0.25, # Overwritten by curriculum!
-        params={"limit": 0.1, "names": [".*_foot"], "velocity_deadzone": 0.1},
+        params={"limit": 0.25, "names": [".*_foot"], "velocity_deadzone": 0.1},
     )
     air_time_upper_bound = ConstraintTerm(
         func=constraints.air_time_upper_bound,
