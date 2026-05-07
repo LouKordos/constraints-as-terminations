@@ -8,7 +8,6 @@ __all__ = [
     "total_variation_distance",
     "optimal_bin_edges",
     "compute_stance_segments",
-    "compute_energy_arrays",
     "summarize_metric",
     "compute_swing_durations",
     "compute_swing_heights",
@@ -90,24 +89,6 @@ def compute_stance_segments(in_contact: np.ndarray) -> list[tuple[int, int]]:
 def compute_swing_segments(in_contact: np.ndarray) -> list[tuple[int, int]]:
     # Air-time segments are contact segments of the inverted array
     return compute_stance_segments(in_contact=~in_contact)
-
-
-def compute_energy_arrays(power_array: np.ndarray, base_lin_vel: np.ndarray, reset_steps: List[int], step_dt: float, robot_mass: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Returns (energy_per_joint, combined_energy, cot_time_series) for the *full* run.
-    """
-    instantaneous_speed = np.linalg.norm(base_lin_vel[:, :2], axis=1)
-
-    # repair teleports / resets
-    for r in reset_steps:
-        instantaneous_speed[max(0, r - 1):r + 1] = instantaneous_speed[max(0, r - 1)]
-        power_array[max(0, r - 1):r + 1, :] = power_array[max(0, r - 1), :]
-
-    energy_per_joint = np.cumsum(np.abs(power_array), axis=0) * step_dt
-    combined_energy = np.cumsum(np.abs(power_array).sum(axis=1)) * step_dt
-    with np.errstate(divide="ignore", invalid="ignore"):
-        cost_of_transport_time_series = np.abs(power_array).sum(axis=1) / (robot_mass * 9.81 * instantaneous_speed + 1e-12)
-    return energy_per_joint, combined_energy, cost_of_transport_time_series
 
 
 def summarize_metric(values: list[float]) -> dict[str, float]:
@@ -238,30 +219,23 @@ def compute_summary_metrics(
     reward = data_arrays["reward"][mask]
 
     power_array = joint_torques * joint_velocities
-    instantaneous_speed = np.linalg.norm(base_linear_velocity[:, :2], axis=1)
 
     # Only automatic resets contaminate the post-step state on the current timestep.
     # Manual scenario resets happen before the step and do NOT affect the previous/current power samples.
     for local_index in local_automatic_reset_steps:
         if local_index > 0:
-            instantaneous_speed[local_index] = instantaneous_speed[local_index - 1]
             power_array[local_index, :] = power_array[local_index - 1, :]
         else:
-            instantaneous_speed[local_index] = 0.0
             power_array[local_index, :] = 0.0
 
     energy_per_joint = np.cumsum(np.abs(power_array), axis=0) * step_dt
     combined_energy = np.cumsum(np.abs(power_array).sum(axis=1)) * step_dt
 
-    with np.errstate(divide="ignore", invalid="ignore"):
-        cost_of_transport_time_series = np.abs(power_array).sum(axis=1) / (total_robot_mass * 9.81 * instantaneous_speed + 1e-12)
-    mean_cost_of_transport = float(np.nanmean(cost_of_transport_time_series))
-
     distance_walked_horizontal = float(distance_increment.sum())
     if distance_walked_horizontal > 1e-12:
-        cost_of_transport_energy_distance_based = float(combined_energy[-1] / (total_robot_mass * 9.81 * distance_walked_horizontal))
+        cost_of_transport = float(combined_energy[-1] / (total_robot_mass * 9.81 * distance_walked_horizontal))
     else:
-        cost_of_transport_energy_distance_based = None
+        cost_of_transport = None
 
     # ---------- tracking / heading errors ---------------------------------
     linear_vel_x_rms = np.sqrt(np.mean((commanded_velocity[:, 0] - base_linear_velocity_body[:, 0])**2))
@@ -369,8 +343,13 @@ def compute_summary_metrics(
 
     return {
         "cumulative_unscaled_raw_reward": float(reward.sum()),
-        "cumulative_reward_divided_by_cost_of_transport": float(reward.sum() / mean_cost_of_transport),
-        "cumulative_reward_divided_by_cost_of_transport_and_sim_time": float(reward.sum() / (mean_cost_of_transport * len(reward) * step_dt)),
+        "cumulative_reward_divided_by_cost_of_transport": (
+            float(reward.sum() / cost_of_transport) if cost_of_transport is not None else None
+        ),
+        "cumulative_reward_divided_by_cost_of_transport_and_sim_time": (
+            float(reward.sum() / (cost_of_transport * len(reward) * step_dt))
+            if cost_of_transport is not None else None
+        ),
         "base_linear_velocity_x_rms_error": float(linear_vel_x_rms),
         "base_linear_velocity_y_rms_error": float(linear_vel_y_rms),
         "base_angular_velocity_z_rms_error": float(yaw_rms),
@@ -384,9 +363,8 @@ def compute_summary_metrics(
         "energy_consumption_per_joint": {jn: float(energy_per_joint[-1, j]) for j, jn in enumerate(joint_names)},
         "total_energy_consumption": float(combined_energy[-1]),
         "distance_walked_horizontal": distance_walked_horizontal,
-        "cost_of_transport_energy_distance_based": cost_of_transport_energy_distance_based,
+        "cost_of_transport": cost_of_transport,
         "cumulative_power": summarize_metric(np.abs(power_array).sum(axis=1).tolist()),
-        "mean_cost_of_transport": mean_cost_of_transport,
         "constraint_violations_percent": violations,
         "gait_symmetry_tvd_by_joint": gait_symmetry_summary_per_dof,
         "aggregate_joint_symmetry_tvd": average_symmetry_tvd,

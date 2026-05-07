@@ -158,9 +158,9 @@ def find_and_parse_json_data(
             pattern = re.compile(r'cot_sweep_walk_x_flat_terrain_(\d+\.?\d*)')
             for key, metrics in scenarios.items():
                 match = pattern.match(key)
-                if match and isinstance(metrics, dict) and 'mean_cost_of_transport' in metrics:
+                if match and isinstance(metrics, dict) and 'cost_of_transport' in metrics:
                     velocity = float(match.group(1))
-                    cot = metrics['mean_cost_of_transport']
+                    cot = metrics['cost_of_transport']
                     cot_records.append({'velocity': velocity, 'cot': cot})
             if cot_records:
                 plot_dfs.append(pd.DataFrame(cot_records))

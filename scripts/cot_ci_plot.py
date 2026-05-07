@@ -45,7 +45,7 @@ def parse_single_run_data(json_path: Path) -> Optional[pd.DataFrame]:
                     velocity = float(velocity_str)
                     if not isinstance(metrics, dict):
                         continue
-                    cot = metrics.get('mean_cost_of_transport')
+                    cot = metrics.get('cost_of_transport')
                     if cot is None:
                         continue
                     records.append({'velocity': velocity, 'cot': cot})

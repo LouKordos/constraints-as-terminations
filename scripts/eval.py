@@ -677,8 +677,8 @@ def main():
         if 0 <= reset_step < total_sim_steps:
             distance_increment_array[reset_step] = pre_step_distance_increment_array[reset_step]
 
-    # Safety guard for any unmarked teleport / corrupted sample. 1 m per env-step at 20 ms would imply 50 m/s, so we fall back to a constant
-    MAX_REASONABLE_HORIZONTAL_DISTANCE_PER_STEP_METERS = 0.1
+    # Safety guard for any unmarked teleport / corrupted sample. 0.6m for 20ms is ~3m/s, so we fall back to a constant
+    MAX_REASONABLE_HORIZONTAL_DISTANCE_PER_STEP_METERS = 0.06
     invalid_distance_mask = ~np.isfinite(distance_increment_array) | (distance_increment_array > MAX_REASONABLE_HORIZONTAL_DISTANCE_PER_STEP_METERS)
     distance_increment_array[invalid_distance_mask] = pre_step_distance_increment_array[invalid_distance_mask]
 
