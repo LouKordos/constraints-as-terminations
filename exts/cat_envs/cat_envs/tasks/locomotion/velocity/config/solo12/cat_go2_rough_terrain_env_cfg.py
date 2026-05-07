@@ -112,6 +112,7 @@ def height_map_grid(env, asset_cfg: SceneEntityCfg):
     height = local[..., 2] # [E, R]
 
     # height = torch.full_like(height, -base_pose_world_frame[0,2])
+    # height = torch.zeros_like(height)
 
     # Per point outliers
     OUTLIER_PROB = 0.01
