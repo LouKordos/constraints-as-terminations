@@ -16,6 +16,7 @@ __all__ = [
     "compute_summary_metrics"
 ]
 
+
 def compute_histogram(arr: np.ndarray, bin_edges: np.ndarray) -> np.ndarray:
     """
     Given a 1D numpy array `arr` and a shared 1D array of bin_edges of length B+1,
@@ -29,7 +30,8 @@ def compute_histogram(arr: np.ndarray, bin_edges: np.ndarray) -> np.ndarray:
         # If the array was empty or all zeros, return uniform or zeros.
         # Here we return zeros, so that TVD with another zero‐histogram is 0.
         return np.zeros_like(counts, dtype=np.float64)
-    
+
+
 def compute_trimmed_histogram_data(data: np.ndarray, bins='auto', lower_percentile=1, upper_percentile=99):
     lower, upper = np.percentile(data, [lower_percentile, upper_percentile])
     data_trimmed = data[(data >= lower) & (data <= upper)]
@@ -42,6 +44,7 @@ def total_variation_distance(p: np.ndarray, q: np.ndarray) -> float:
     compute TVD = 0.5 * sum |p_i - q_i|.
     """
     return 0.5 * np.sum(np.abs(p - q))
+
 
 def optimal_bin_edges(samples: np.ndarray, rule: str = "fd", min_bins: int = 20, max_bins: int = 250) -> np.ndarray:
     """
@@ -66,6 +69,7 @@ def optimal_bin_edges(samples: np.ndarray, rule: str = "fd", min_bins: int = 20,
     num_bins = int(np.clip(np.ceil(data_range / h), min_bins, max_bins))
     return np.linspace(data_min, data_max, num_bins + 1)
 
+
 def compute_stance_segments(in_contact: np.ndarray) -> list[tuple[int, int]]:
     """
     Return a list of (start_idx, end_idx) indices for every **contact/stance**
@@ -82,9 +86,11 @@ def compute_stance_segments(in_contact: np.ndarray) -> list[tuple[int, int]]:
         segments.append((start, len(in_contact)))
     return segments
 
+
 def compute_swing_segments(in_contact: np.ndarray) -> list[tuple[int, int]]:
     # Air-time segments are contact segments of the inverted array
     return compute_stance_segments(in_contact=~in_contact)
+
 
 def compute_energy_arrays(power_array: np.ndarray, base_lin_vel: np.ndarray, reset_steps: List[int], step_dt: float, robot_mass: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -95,13 +101,14 @@ def compute_energy_arrays(power_array: np.ndarray, base_lin_vel: np.ndarray, res
     # repair teleports / resets
     for r in reset_steps:
         instantaneous_speed[max(0, r - 1):r + 1] = instantaneous_speed[max(0, r - 1)]
-        power_array[max(0, r - 1):r + 1, :]    = power_array[max(0, r - 1), :]
+        power_array[max(0, r - 1):r + 1, :] = power_array[max(0, r - 1), :]
 
     energy_per_joint = np.cumsum(np.abs(power_array), axis=0) * step_dt
-    combined_energy  = np.cumsum(np.abs(power_array).sum(axis=1)) * step_dt
+    combined_energy = np.cumsum(np.abs(power_array).sum(axis=1)) * step_dt
     with np.errstate(divide="ignore", invalid="ignore"):
         cost_of_transport_time_series = np.abs(power_array).sum(axis=1) / (robot_mass * 9.81 * instantaneous_speed + 1e-12)
     return energy_per_joint, combined_energy, cost_of_transport_time_series
+
 
 def summarize_metric(values: list[float]) -> dict[str, float]:
     """Return mean/min/max/… for a list, filling zeros if empty."""
@@ -109,15 +116,16 @@ def summarize_metric(values: list[float]) -> dict[str, float]:
         return {k: 0.0 for k in ("mean", "min", "max", "median", "90th_percentile", "99th_percentile", "stddev")}
     arr = np.asarray(values, dtype=float)
     return {
-        "mean":             float(arr.mean()),
-        "mean_of_abs":      float(np.sum(np.abs(arr))) / float(len(values)),
-        "min":              float(arr.min()),
-        "max":              float(arr.max()),
-        "median":           float(np.median(arr)),
-        "90th_percentile":  float(np.percentile(arr, 90)),
-        "99th_percentile":  float(np.percentile(arr, 99)),
-        "stddev":           float(arr.std()),
+        "mean": float(arr.mean()),
+        "mean_of_abs": float(np.sum(np.abs(arr))) / float(len(values)),
+        "min": float(arr.min()),
+        "max": float(arr.max()),
+        "median": float(np.median(arr)),
+        "90th_percentile": float(np.percentile(arr, 90)),
+        "99th_percentile": float(np.percentile(arr, 99)),
+        "stddev": float(arr.std()),
     }
+
 
 def compute_swing_durations(contact_state: np.ndarray, sim_env_step_dt: float, foot_labels: list[str]) -> dict[str, list[float]]:
     """
@@ -132,6 +140,7 @@ def compute_swing_durations(contact_state: np.ndarray, sim_env_step_dt: float, f
         durations[label] = [(end_idx - start_idx) * sim_env_step_dt for start_idx, end_idx in air_segments]
     return durations
 
+
 def compute_stance_durations(contact_state: np.ndarray, sim_env_step_dt: float, foot_labels: list[str]) -> dict[str, list[float]]:
     """
     Returns raw stance durations (seconds) for every foot.
@@ -142,8 +151,9 @@ def compute_stance_durations(contact_state: np.ndarray, sim_env_step_dt: float, 
         in_contact = contact_state[:, foot_id].astype(bool)
         contact_segments = compute_stance_segments(in_contact)
         # Convert segment lengths to seconds
-        durations[label] = [(max(1, end_idx-1) - start_idx) * sim_env_step_dt for start_idx, end_idx in contact_segments]
+        durations[label] = [(max(1, end_idx - 1) - start_idx) * sim_env_step_dt for start_idx, end_idx in contact_segments]
     return durations
+
 
 def compute_swing_heights(contact_state: np.ndarray, foot_heights_contact: np.ndarray, reset_steps: list[int], foot_labels: list[str]) -> dict[str, list[float]]:
     """
@@ -162,6 +172,7 @@ def compute_swing_heights(contact_state: np.ndarray, foot_heights_contact: np.nd
                 if not np.isnan(h):
                     step_heights[label].append(float(h))
     return step_heights
+
 
 def compute_swing_lengths(contact_state: np.ndarray, foot_positions_world: np.ndarray, reset_steps: list[int], foot_labels: list[str]) -> dict[str, list[float]]:
     """
@@ -182,13 +193,20 @@ def compute_swing_lengths(contact_state: np.ndarray, foot_positions_world: np.nd
                 step_lengths[label].append(float(d))
     return step_lengths
 
-def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_arrays: Dict[str, np.ndarray], constants: Dict[str, Any],) -> Dict[str, Any]:
+
+def compute_summary_metrics(
+    mask: np.ndarray,
+    manual_reset_steps: List[int],
+    automatic_reset_steps: List[int],
+    data_arrays: Dict[str, np.ndarray],
+    constants: Dict[str, Any],
+) -> Dict[str, Any]:
     """
-    Compute summary metrics where mask is true
+    Compute summary metrics where mask is true.
     """
-    step_dt           = constants["step_dt"]
-    joint_names       = constants["joint_names"]
-    foot_labels       = constants["foot_labels"]
+    step_dt = constants["step_dt"]
+    joint_names = constants["joint_names"]
+    foot_labels = constants["foot_labels"]
     constraint_bounds = constants["constraint_bounds"]
     total_robot_mass  = constants["total_robot_mass"]
 
@@ -208,8 +226,8 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
     base_angular_velocity = data_arrays["base_angular_velocity"][mask]
     base_linear_velocity_body = data_arrays["base_linear_velocity_body"][mask]
     base_angular_velocity_body = data_arrays["base_angular_velocity_body"][mask]
-    commanded_velocity  = data_arrays["commanded_velocity"][mask]
-    contact_state  = data_arrays["contact_state"][mask]
+    commanded_velocity = data_arrays["commanded_velocity"][mask]
+    contact_state = data_arrays["contact_state"][mask]
     foot_positions_world_frame = data_arrays["foot_positions_world_frame"][mask]
     foot_velocities_world_frame = data_arrays["foot_velocities_world_frame"][mask]
     foot_positions_contact_frame = data_arrays["foot_positions_contact_frame"][mask]
@@ -226,27 +244,27 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
             power_array[max(0, local_index - 1):local_index + 1, :] = power_array[max(0, local_index - 1), :]
 
     energy_per_joint = np.cumsum(np.abs(power_array), axis=0) * step_dt
-    combined_energy  = np.cumsum(np.abs(power_array).sum(axis=1)) * step_dt
+    combined_energy = np.cumsum(np.abs(power_array).sum(axis=1)) * step_dt
 
     with np.errstate(divide="ignore", invalid="ignore"):
-        cost_of_transport_time_series  = np.abs(power_array).sum(axis=1) / (total_robot_mass * 9.81 * instantaneous_speed + 1e-12)
+        cost_of_transport_time_series = np.abs(power_array).sum(axis=1) / (total_robot_mass * 9.81 * instantaneous_speed + 1e-12)
     mean_cost_of_transport = float(np.nanmean(cost_of_transport_time_series))
 
     # ---------- tracking / heading errors ---------------------------------
     linear_vel_x_rms = np.sqrt(np.mean((commanded_velocity[:, 0] - base_linear_velocity_body[:, 0])**2))
     linear_vel_y_rms = np.sqrt(np.mean((commanded_velocity[:, 1] - base_linear_velocity_body[:, 1])**2))
-    yaw_rms    = np.sqrt(np.mean((commanded_velocity[:, 2] - base_angular_velocity_body[:, 2])**2))
+    yaw_rms = np.sqrt(np.mean((commanded_velocity[:, 2] - base_angular_velocity_body[:, 2])**2))
 
     # ---------- constraint violations ------------------------------------
     violations = {}
     constraint_metric_map = {
-        "joint_velocity"     : joint_velocities,
-        "joint_torque"       : joint_torques,
-        "joint_acceleration" : joint_accelerations,
-        "action_rate"        : action_rates,
-        "foot_contact_force" : contact_force.reshape(contact_force.shape[0], -1).mean(axis=1),
-        "joint_position"     : joint_positions,
-        "air_time"           : (1 - contact_state).astype(float),
+        "joint_velocity": joint_velocities,
+        "joint_torque": joint_torques,
+        "joint_acceleration": joint_accelerations,
+        "action_rate": action_rates,
+        "foot_contact_force": contact_force.reshape(contact_force.shape[0], -1).mean(axis=1),
+        "joint_position": joint_positions,
+        "air_time": (1 - contact_state).astype(float),
     }
     for term, (lb, ub) in constraint_bounds.items():
         m = constraint_metric_map.get(term)
@@ -265,13 +283,13 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
 
     # ---------- per-joint descriptive stats -------------
     summary_metric_map = {
-        "position"    : joint_positions,
-        "velocity"    : joint_velocities,
+        "position": joint_positions,
+        "velocity": joint_velocities,
         "acceleration": joint_accelerations,
-        "torque"      : joint_torques,
-        "action_rate" : action_rates,
-        "energy"      : energy_per_joint,
-        "power"       : power_array,
+        "torque": joint_torques,
+        "action_rate": action_rates,
+        "energy": energy_per_joint,
+        "power": power_array,
     }
     per_joint_summary = {}
     for joint_mapping, joint_name in enumerate(joint_names):
@@ -303,7 +321,7 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
     gait_symmetry_summary_per_dof = {d: {} for d in dofs}
 
     for dof in dofs:
-        concatenated_joint_positions = np.concatenate([joint_positions[:, joint_mapping[f"{sr}_{dof}"]] for sr in ("FL","FR","RL","RR")])
+        concatenated_joint_positions = np.concatenate([joint_positions[:, joint_mapping[f"{sr}_{dof}"]] for sr in ("FL", "FR", "RL", "RR")])
         optimal_num_bin_edges = optimal_bin_edges(concatenated_joint_positions, rule="fd")
 
         def pmf(sr):  # probability mass function
@@ -360,6 +378,7 @@ def compute_summary_metrics(mask: np.ndarray, reset_steps: List[int], data_array
         "axis_symmetry_tvd"                                   : axis_symmetry_tvd,
     }
 
+
 def compute_foot_velocity_summaries(contact_state: np.ndarray, foot_velocities: np.ndarray, foot_labels: list[str]) -> dict:
     """
     Computes summary statistics for foot velocities in the world frame, separated by stance and swing phase.
@@ -367,10 +386,10 @@ def compute_foot_velocity_summaries(contact_state: np.ndarray, foot_velocities: 
     summaries = {}
     for foot_id, label in enumerate(foot_labels):
         in_contact = contact_state[:, foot_id].astype(bool)
-        
+
         stance_velocities = foot_velocities[in_contact, foot_id, :]
         swing_velocities = foot_velocities[~in_contact, foot_id, :]
-        
+
         summaries[label] = {
             "stance": {
                 "x": summarize_metric(stance_velocities[:, 0].tolist()),
