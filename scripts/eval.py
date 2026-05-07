@@ -32,6 +32,7 @@ os.environ["OMNICLIENT_HUB_MODE"] = "disabled"
 
 eval_script_path = os.path.dirname(os.path.abspath(__file__))
 
+
 def infer_checkpoint_input_dimensions(state_dict: dict[str, torch.Tensor]) -> int:
     """
     Return in-features of the first linear layer saved in `state_dict`.
@@ -41,6 +42,7 @@ def infer_checkpoint_input_dimensions(state_dict: dict[str, torch.Tensor]) -> in
         if k.endswith(".0.weight") and v.ndim == 2:
             return v.shape[1]
     raise RuntimeError("Could not infer input dimension from checkpoint")
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Play an RL agent with detailed logging.")
@@ -69,6 +71,7 @@ def parse_arguments():
     arguments.enable_cameras = True # Video
     return arguments
 
+
 def get_latest_checkpoint(run_directory: str) -> str:
     pattern = os.path.join(run_directory, "model_*.pt")
     files = glob.glob(pattern)
@@ -82,6 +85,7 @@ def get_latest_checkpoint(run_directory: str) -> str:
 
     latest = max(files, key=extract_index)
     return latest
+
 
 def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
     """
@@ -159,6 +163,7 @@ def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[fl
 
     return bounds
 
+
 def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory: str, sim_data_file_path: str, foot_vel_height_threshold: float, num_parallel: int, stagger_delay: int):
     """
     Launch generate_plots.py for all jobs in plot_jobs.
@@ -205,7 +210,7 @@ def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory
                 log_file.close()
                 return_codes[subdir] = rc
                 running_procs.pop(i)
-        
+
         if running_procs:
             time.sleep(1)  # Poll every second if there are still running processes
 
@@ -213,6 +218,7 @@ def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory
 
     if any(rc != 0 for rc in return_codes.values()):
         print("[WARN] At least one generate_plots.py run returned a non-zero exit code.")
+
 
 def ensure_tex_env():
     script_path = os.path.join(os.path.dirname(__file__), "check_and_install_tinytex_for_plots.sh")
@@ -222,6 +228,7 @@ def ensure_tex_env():
     except subprocess.CalledProcessError as e:
         print(f"ERROR: TeX environment setup failed (exit code {e.returncode})", file=sys.stderr)
         sys.exit(e.returncode)
+
 
 def main():
     args = parse_arguments()
@@ -244,7 +251,7 @@ def main():
     if observation_dim == 236:
         args.task = "CaT-Go2-Rough-Terrain-Joint-State-History-Play-v0"
     elif observation_dim == 558:
-        args.task = "CaT-Go2-Rough-Terrain-Full-State-History-Play-v0" 
+        args.task = "CaT-Go2-Rough-Terrain-Full-State-History-Play-v0"
     print(f"Observation dimension={observation_dim}, selected task={args.task}")
 
     if not "play" in args.task.lower():
@@ -263,14 +270,14 @@ def main():
     from cat_envs.tasks.utils.cleanrl.ppo import ActorWithRMS
     from cat_envs.tasks.locomotion.velocity.config.solo12.cat_go2_rough_terrain_env_cfg import height_map_grid
     from isaaclab.managers import EventTermCfg
-    from isaaclab.utils.math import euler_xyz_from_quat, quat_apply_inverse 
+    from isaaclab.utils.math import euler_xyz_from_quat, quat_apply_inverse
     from isaaclab.envs.mdp.observations import root_quat_w
     from isaaclab.managers import SceneEntityCfg
     from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
     print(f"ISAACLAB_NUCLEUS_DIR={ISAACLAB_NUCLEUS_DIR}")
 
     env_cfg = parse_env_cfg(args.task, device=args.device, num_envs=args.num_envs, use_fabric=not args.disable_fabric)
-    
+
     # Inject Latency
     if hasattr(env_cfg.observations, "policy"):
         p = env_cfg.observations.policy
@@ -285,7 +292,8 @@ def main():
                     return
 
                 if "latency" in sig.parameters:
-                    if term.params is None: term.params = {}
+                    if term.params is None:
+                        term.params = {}
                     term.params["latency"] = val
                     print(f"[INFO] Set latency for {term_name} to {val}")
                 else:
@@ -297,7 +305,6 @@ def main():
         set_latency("projected_gravity", args.delay_imu)
         set_latency("actions", args.delay_action_history)
         set_latency("height_map", args.delay_height_map)
-    
 
     # Seeding
     import random
@@ -362,7 +369,7 @@ def main():
         ])
     else:
         print("Skipping Cost of Transport sweep scenarios")
-    
+
     # See main training loop for detailed explanation, but in summary, hard constraints terminate the environment or at least return terminated = 1
     # which results in zero reward and can't be recovered by rescaling. Thus, we update the constraint limits based on the loaded values from
     # the training environment. Only contact force and thigh position limit are updated because other values are handled more robustly by the rescaling in the loop.
