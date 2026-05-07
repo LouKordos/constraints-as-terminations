@@ -431,9 +431,11 @@ def main():
     foot_velocities_body_frame_buffer = []
     foot_positions_body_frame_buffer = []
     foot_positions_contact_frame_buffer = [] # Height above terrain, also called sole frame
+    distance_increment_buffer = []
 
     reward_buffer = []
-    reset_steps = []
+    manual_reset_steps = []
+    automatic_reset_steps = []
     inference_durations = []
 
     observations, info = env.reset()
@@ -470,10 +472,21 @@ def main():
             spawn_point_pos, spawn_point_quat = scenario[2]
             print(f"Resetting env and setting fixed command + spawn point for scenario={scenario}...")
             obs, _ = env.reset()
-            reset_steps.append(t)
+            manual_reset_steps.append(t)
             teleport_robot(spawn_point_pos, spawn_point_quat)
             set_fixed_velocity_command(fixed_command)
             policy_observation = obs["policy"]
+
+        # Distance must be estimated from the pre-step state because Isaac Lab resets terminated envs
+        # inside env.step(). That means post-step state buffers are contaminated on reset steps.
+        scene_robot_data_pre_step = env.unwrapped.scene["robot"].data
+        pre_step_root_linear_velocity_w = getattr(
+            scene_robot_data_pre_step,
+            "root_link_lin_vel_w",
+            scene_robot_data_pre_step.root_lin_vel_w,
+        )[0]
+        pre_step_horizontal_speed = torch.linalg.norm(pre_step_root_linear_velocity_w[:2]).item()
+        distance_increment_buffer.append(float(pre_step_horizontal_speed * step_dt))
 
         with torch.no_grad():
             inference_start = time.perf_counter_ns()
@@ -508,7 +521,7 @@ def main():
 
         # Because of CaT, terminated is actually a nonzero probability instead of a boolean, so we have to check for resets this way
         if env.unwrapped.episode_length_buf[0].item() == 0 and t > 0:
-            reset_steps.append(t)
+            automatic_reset_steps.append(t)
             # continue # Skip reset iteration because it's just wrong
 
         if t % frame_storage_interval == 0:
@@ -609,11 +622,18 @@ def main():
         policy_observation = next_observation['policy']
 
     print("Sim loop done, converting and saving recorded sim data...")
+
+    manual_reset_steps = sorted(set(int(step) for step in manual_reset_steps))
+    automatic_reset_steps = sorted(set(int(step) for step in automatic_reset_steps))
+    all_reset_steps = sorted(set(manual_reset_steps + automatic_reset_steps))
+
     # Convert buffers to numpy arrays
     time_indices = np.arange(total_sim_steps)
     sim_times = time_indices * step_dt
-    reset_times = [i * step_dt for i in reset_steps]
-    print("Reset times: ", reset_times)
+    reset_times = [i * step_dt for i in all_reset_steps]
+    manual_reset_times = [i * step_dt for i in manual_reset_steps]
+    automatic_reset_times = [i * step_dt for i in automatic_reset_steps]
+    print("All reset times: ", reset_times)
     reward_array = np.array(reward_buffer)
     inference_durations_us_array = np.array(inference_durations)
     joint_positions_array = np.vstack(joint_positions_buffer)
@@ -640,12 +660,36 @@ def main():
     power_array = joint_torques_array * joint_velocities_array
     total_robot_mass = float(env.unwrapped.scene["robot"].data.default_mass.sum().item())
 
+    # Hybrid walked-distance estimator:
+    # - normal timesteps: use horizontal world-frame position difference
+    # - reset/teleport contaminated timesteps: use pre-step horizontal speed * dt
+    # This avoids counting respawn teleports while still using actual positions whenever they are valid.
+    pre_step_distance_increment_array = np.asarray(distance_increment_buffer, dtype=np.float64)
+    distance_increment_array = np.zeros(total_sim_steps, dtype=np.float64)
+
+    if total_sim_steps > 0:
+        distance_increment_array[0] = pre_step_distance_increment_array[0]
+
+    if total_sim_steps > 1:
+        distance_increment_array[1:] = np.linalg.norm(np.diff(base_position_array[:, :2], axis=0), axis=1)
+
+    for reset_step in all_reset_steps:
+        if 0 <= reset_step < total_sim_steps:
+            distance_increment_array[reset_step] = pre_step_distance_increment_array[reset_step]
+
+    # Safety guard for any unmarked teleport / corrupted sample. 1 m per env-step at 20 ms would imply 50 m/s, so we fall back to a constant
+    MAX_REASONABLE_HORIZONTAL_DISTANCE_PER_STEP_METERS = 0.1
+    invalid_distance_mask = ~np.isfinite(distance_increment_array) | (distance_increment_array > MAX_REASONABLE_HORIZONTAL_DISTANCE_PER_STEP_METERS)
+    distance_increment_array[invalid_distance_mask] = pre_step_distance_increment_array[invalid_distance_mask]
+
     np_data_file = os.path.join(plots_directory, "sim_data.npz")
     np.savez(
         np_data_file,
         env_name=env_name,
         sim_times=sim_times,
         reset_times=np.array(reset_times),
+        manual_reset_times=np.array(manual_reset_times),
+        automatic_reset_times=np.array(automatic_reset_times),
         reward_array=reward_array,
         inference_durations_us_array=inference_durations_us_array,
         inference_device=args.device,
@@ -670,6 +714,7 @@ def main():
         foot_positions_body_frame_array=foot_positions_body_frame_array,
         foot_positions_contact_frame_array=foot_positions_contact_frame_array,
         power_array=power_array,
+        distance_increment_array=distance_increment_array,
         foot_labels=np.array(foot_labels),
         joint_names=np.array(joint_names),
         total_robot_mass=total_robot_mass,
@@ -697,6 +742,7 @@ def main():
         "foot_positions_body": foot_positions_body_frame_array,
         "foot_positions_contact_frame": foot_positions_contact_frame_array,
         "power_array": power_array,
+        "distance_increment": distance_increment_array,
         "reward": reward_array,
     }
 
@@ -719,10 +765,10 @@ def main():
         end = start + fixed_command_sim_steps     # exclusive
         scenario_masks[scenario_tag] = (all_indices >= start) & (all_indices < end)
 
-    overall_metrics  = compute_summary_metrics(np.ones(T, bool), reset_steps, arrays_dict, constants_dict)
-    random_metrics   = compute_summary_metrics(random_timestep_mask, reset_steps, arrays_dict, constants_dict)
+    overall_metrics = compute_summary_metrics(np.ones(T, bool), manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict)
+    random_metrics = compute_summary_metrics(random_timestep_mask, manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict)
     scenario_metrics = {
-        tag: compute_summary_metrics(msk, reset_steps, arrays_dict, constants_dict)
+        tag: compute_summary_metrics(msk, manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict)
         for tag, msk in scenario_masks.items()
     }
 
@@ -736,6 +782,8 @@ def main():
         "seed": env_cfg.seed,
         "used_checkpoint_path": checkpoint_path,
         "fixed_command_scenarios": fixed_command_scenarios,
+        "manual_reset_steps": manual_reset_steps,
+        "automatic_reset_steps": automatic_reset_steps,
     })
 
     summary_path = os.path.join(eval_base_dir, "metrics_summary.json")

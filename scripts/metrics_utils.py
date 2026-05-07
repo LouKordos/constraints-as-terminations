@@ -208,20 +208,23 @@ def compute_summary_metrics(
     joint_names = constants["joint_names"]
     foot_labels = constants["foot_labels"]
     constraint_bounds = constants["constraint_bounds"]
-    total_robot_mass  = constants["total_robot_mass"]
+    total_robot_mass = constants["total_robot_mass"]
 
-    mask_indices = np.where(mask)[0] # Get nonzero indices of mask, i.e. time steps that should be included in summary. Same as mask.nonzero()
-    global_to_local_mapping = {g: l for l, g in enumerate(mask_indices)} # Map global time step to local one, i.e. if we start summary at global index = 1000, local index should be 0 within this scope
-    local_to_global_mapping = {l: g for l, g in enumerate(mask_indices)}
+    mask_indices = np.where(mask)[0] # Get nonzero indices of mask, i.e. time steps that should be included in summary.
+    global_to_local_mapping = {int(g): l for l, g in enumerate(mask_indices)} # Map global time step to local one.
 
-    joint_positions  = data_arrays["joint_positions"][mask]
-    joint_velocities  = data_arrays["joint_velocities"][mask]
-    joint_torques  = data_arrays["joint_torques"][mask]
-    joint_accelerations  = data_arrays["joint_accelerations"][mask]
-    action_rates  = data_arrays["action_rate"][mask]
-    contact_force  = data_arrays["contact_forces"][mask]
-    base_position  = data_arrays["base_position"][mask]
-    base_orientation  = data_arrays["base_orientation"][mask]
+    all_reset_steps = sorted(set(int(step) for step in manual_reset_steps + automatic_reset_steps))
+    local_all_reset_steps = [global_to_local_mapping[step] for step in all_reset_steps if step in global_to_local_mapping]
+    local_automatic_reset_steps = [global_to_local_mapping[int(step)] for step in automatic_reset_steps if int(step) in global_to_local_mapping]
+
+    joint_positions = data_arrays["joint_positions"][mask]
+    joint_velocities = data_arrays["joint_velocities"][mask]
+    joint_torques = data_arrays["joint_torques"][mask]
+    joint_accelerations = data_arrays["joint_accelerations"][mask]
+    action_rates = data_arrays["action_rate"][mask]
+    contact_force = data_arrays["contact_forces"][mask]
+    base_position = data_arrays["base_position"][mask]
+    base_orientation = data_arrays["base_orientation"][mask]
     base_linear_velocity = data_arrays["base_linear_velocity"][mask]
     base_angular_velocity = data_arrays["base_angular_velocity"][mask]
     base_linear_velocity_body = data_arrays["base_linear_velocity_body"][mask]
@@ -231,17 +234,21 @@ def compute_summary_metrics(
     foot_positions_world_frame = data_arrays["foot_positions_world_frame"][mask]
     foot_velocities_world_frame = data_arrays["foot_velocities_world_frame"][mask]
     foot_positions_contact_frame = data_arrays["foot_positions_contact_frame"][mask]
+    distance_increment = data_arrays["distance_increment"][mask]
     reward = data_arrays["reward"][mask]
 
-    # TODO: Replace with compute_energy_arrays
     power_array = joint_torques * joint_velocities
     instantaneous_speed = np.linalg.norm(base_linear_velocity[:, :2], axis=1)
-    # Fix transitions between resets, instantaneous speed and power might be invalid during those time steps
-    for r in reset_steps:
-        if r in global_to_local_mapping:
-            local_index = global_to_local_mapping[r]
-            instantaneous_speed[max(0, local_index - 1):local_index + 1] = instantaneous_speed[max(0, local_index - 1)]
-            power_array[max(0, local_index - 1):local_index + 1, :] = power_array[max(0, local_index - 1), :]
+
+    # Only automatic resets contaminate the post-step state on the current timestep.
+    # Manual scenario resets happen before the step and do NOT affect the previous/current power samples.
+    for local_index in local_automatic_reset_steps:
+        if local_index > 0:
+            instantaneous_speed[local_index] = instantaneous_speed[local_index - 1]
+            power_array[local_index, :] = power_array[local_index - 1, :]
+        else:
+            instantaneous_speed[local_index] = 0.0
+            power_array[local_index, :] = 0.0
 
     energy_per_joint = np.cumsum(np.abs(power_array), axis=0) * step_dt
     combined_energy = np.cumsum(np.abs(power_array).sum(axis=1)) * step_dt
@@ -249,6 +256,12 @@ def compute_summary_metrics(
     with np.errstate(divide="ignore", invalid="ignore"):
         cost_of_transport_time_series = np.abs(power_array).sum(axis=1) / (total_robot_mass * 9.81 * instantaneous_speed + 1e-12)
     mean_cost_of_transport = float(np.nanmean(cost_of_transport_time_series))
+
+    distance_walked_horizontal = float(distance_increment.sum())
+    if distance_walked_horizontal > 1e-12:
+        cost_of_transport_energy_distance_based = float(combined_energy[-1] / (total_robot_mass * 9.81 * distance_walked_horizontal))
+    else:
+        cost_of_transport_energy_distance_based = None
 
     # ---------- tracking / heading errors ---------------------------------
     linear_vel_x_rms = np.sqrt(np.mean((commanded_velocity[:, 0] - base_linear_velocity_body[:, 0])**2))
@@ -305,8 +318,8 @@ def compute_summary_metrics(
 
     swing_durations = compute_swing_durations(contact_state, step_dt, foot_labels)
     stance_durations = compute_stance_durations(contact_state, step_dt, foot_labels)
-    step_height_data = compute_swing_heights(contact_state, foot_positions_contact_frame[:, :, 2], reset_steps, foot_labels)
-    step_length_data = compute_swing_lengths(contact_state, foot_positions_world_frame, reset_steps, foot_labels)
+    step_height_data = compute_swing_heights(contact_state, foot_positions_contact_frame[:, :, 2], local_all_reset_steps, foot_labels)
+    step_length_data = compute_swing_lengths(contact_state, foot_positions_world_frame, local_all_reset_steps, foot_labels)
 
     swing_duration_summary = {lbl: summarize_metric(data) for lbl, data in swing_durations.items()}
     stance_duration_summary = {lbl: summarize_metric(data) for lbl, data in stance_durations.items()}
@@ -355,27 +368,29 @@ def compute_summary_metrics(
     }
 
     return {
-        "cumulative_unscaled_raw_reward"                      : float(reward.sum()),
-        "cumulative_reward_divided_by_cost_of_transport"      : float(reward.sum() / mean_cost_of_transport),
+        "cumulative_unscaled_raw_reward": float(reward.sum()),
+        "cumulative_reward_divided_by_cost_of_transport": float(reward.sum() / mean_cost_of_transport),
         "cumulative_reward_divided_by_cost_of_transport_and_sim_time": float(reward.sum() / (mean_cost_of_transport * len(reward) * step_dt)),
-        "base_linear_velocity_x_rms_error"                    : float(linear_vel_x_rms),
-        "base_linear_velocity_y_rms_error"                    : float(linear_vel_y_rms),
-        "base_angular_velocity_z_rms_error"                   : float(yaw_rms),
-        "per_joint_summary"                                   : per_joint_summary,
-        "swing_duration_summary"                              : swing_duration_summary,
-        "stance_duration_summary"                             : stance_duration_summary,
-        "contact_force_summary"                               : contact_force_summary,
-        "step_length_summary"                                 : step_length_summary,
-        "step_height_summary"                                 : step_height_summary,
-        "foot_velocity_world_frame_summary"                   : foot_velocity_world_frame_summary,
-        "energy_consumption_per_joint"                        : {jn: float(energy_per_joint[-1, j]) for j, jn in enumerate(joint_names)},
-        "total_energy_consumption"                            : float(combined_energy[-1]),
-        "cumulative_power"                                    : summarize_metric(np.abs(power_array).sum(axis=1).tolist()),
-        "mean_cost_of_transport"                              : mean_cost_of_transport,
-        "constraint_violations_percent"                       : violations,
-        "gait_symmetry_tvd_by_joint"                          : gait_symmetry_summary_per_dof,
-        "aggregate_joint_symmetry_tvd"                        : average_symmetry_tvd,
-        "axis_symmetry_tvd"                                   : axis_symmetry_tvd,
+        "base_linear_velocity_x_rms_error": float(linear_vel_x_rms),
+        "base_linear_velocity_y_rms_error": float(linear_vel_y_rms),
+        "base_angular_velocity_z_rms_error": float(yaw_rms),
+        "per_joint_summary": per_joint_summary,
+        "swing_duration_summary": swing_duration_summary,
+        "stance_duration_summary": stance_duration_summary,
+        "contact_force_summary": contact_force_summary,
+        "step_length_summary": step_length_summary,
+        "step_height_summary": step_height_summary,
+        "foot_velocity_world_frame_summary": foot_velocity_world_frame_summary,
+        "energy_consumption_per_joint": {jn: float(energy_per_joint[-1, j]) for j, jn in enumerate(joint_names)},
+        "total_energy_consumption": float(combined_energy[-1]),
+        "distance_walked_horizontal": distance_walked_horizontal,
+        "cost_of_transport_energy_distance_based": cost_of_transport_energy_distance_based,
+        "cumulative_power": summarize_metric(np.abs(power_array).sum(axis=1).tolist()),
+        "mean_cost_of_transport": mean_cost_of_transport,
+        "constraint_violations_percent": violations,
+        "gait_symmetry_tvd_by_joint": gait_symmetry_summary_per_dof,
+        "aggregate_joint_symmetry_tvd": average_symmetry_tvd,
+        "axis_symmetry_tvd": axis_symmetry_tvd,
     }
 
 
