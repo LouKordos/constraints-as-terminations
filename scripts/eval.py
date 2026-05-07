@@ -394,21 +394,21 @@ def main():
     robot = env.unwrapped.scene["robot"]
     vel_term = env.unwrapped.command_manager.get_term("base_velocity")
 
-    def set_fixed_velocity_command(vec:torch.Tensor):
+    def set_fixed_velocity_command(vec: torch.Tensor):
         # VERY dirty hack but this is just an eval script so it's ok. Basically don't allow the sampler to overwrite fixed commands
         vel_term.cfg.resampling_time_range = (1000000, 1000000)
         vel_term.cfg.heading_command = False
-        vel_term._update_command = lambda *_, **__: None 
+        vel_term._update_command = lambda *_, **__: None
         vel_term.vel_command_b = vec.repeat(env.unwrapped.num_envs, 1)
 
     def teleport_robot(pos_xyz, quat_xyzw):
         pose = torch.cat([pos_xyz, quat_xyzw]).unsqueeze(0)
-        robot.write_root_pose_to_sim(pose, env_ids=torch.tensor([0],device=device))
+        robot.write_root_pose_to_sim(pose, env_ids=torch.tensor([0], device=device))
         env.unwrapped.scene.write_data_to_sim()
 
     joint_names = env.unwrapped.scene["robot"].data.joint_names
     foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] if "go2" in args.task.lower() else ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
-    foot_labels = ['front left','front right','rear left','rear right']
+    foot_labels = ['front left', 'front right', 'rear left', 'rear right']
 
     # Initialize buffers for recording
     joint_positions_buffer = []
@@ -443,17 +443,17 @@ def main():
     video_output_path = os.path.join(eval_base_dir, f"{os.path.basename(eval_base_dir)}_run_{os.path.basename(args.run_dir)}.mp4")
     frame_storage_interval = 1
     ffmpeg_cmd = [
-        "ffmpeg", "-y", "-hwaccel", "cuda", 
-        "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{frame_width}x{frame_height}", "-framerate", str(frame_rate), 
-        "-i", "pipe:0", 
-        "-c:v", "hevc_nvenc", "-pix_fmt", "yuv420p", "-preset", "slow", 
-        "-movflags", "+use_metadata_tags", "-metadata", f"env_name={env_name}", 
+        "ffmpeg", "-y", "-hwaccel", "cuda",
+        "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{frame_width}x{frame_height}", "-framerate", str(frame_rate),
+        "-i", "pipe:0",
+        "-c:v", "hevc_nvenc", "-pix_fmt", "yuv420p", "-preset", "slow",
+        "-movflags", "+use_metadata_tags", "-metadata", f"env_name={env_name}",
         video_output_path
     ]
     ffmpeg_process_log_path = os.path.join(eval_base_dir, "ffmpeg_encode.log")
     with open(ffmpeg_process_log_path, "w") as ffmpeg_process_logfile:
         print(f"Starting ffmpeg process={' '.join(ffmpeg_cmd)}")
-        ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdout=ffmpeg_process_logfile, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, bufsize=4*1024*1024)
+        ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdout=ffmpeg_process_logfile, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, bufsize=4 * 1024 * 1024)
 
     CPP_INFERENCE = False # Allows testing C++ inference in devcontainer (test_pytorch_policy.cpp) in simulation
     if CPP_INFERENCE:
@@ -464,8 +464,8 @@ def main():
 
     for t in tqdm(range(total_sim_steps)):
         # These should only ever run at the end of eval / after random sampling because set_fixed_velocity_command breaks random command sampling!
-        if t >= args.random_sim_step_length and (t-args.random_sim_step_length) % fixed_command_sim_steps == 0:
-            scenario = fixed_command_scenarios[int(t-args.random_sim_step_length) // fixed_command_sim_steps]
+        if t >= args.random_sim_step_length and (t - args.random_sim_step_length) % fixed_command_sim_steps == 0:
+            scenario = fixed_command_scenarios[int(t - args.random_sim_step_length) // fixed_command_sim_steps]
             fixed_command = scenario[1]
             spawn_point_pos, spawn_point_quat = scenario[2]
             print(f"Resetting env and setting fixed command + spawn point for scenario={scenario}...")
@@ -480,7 +480,7 @@ def main():
             # action, _, _, _, _ = policy_agent.get_action_and_value(policy_agent.obs_rms(policy_observation, update=False), use_deterministic_policy=True)
             if CPP_INFERENCE:
                 socket.send(policy_observation.cpu().numpy().tobytes())
-                action_np = np.frombuffer(socket.recv(), dtype=np.float32).reshape(1,12).copy()
+                action_np = np.frombuffer(socket.recv(), dtype=np.float32).reshape(1, 12).copy()
                 action = torch.from_numpy(action_np)
             else:
                 action = actor_with_rms(policy_observation)
@@ -505,7 +505,7 @@ def main():
             # print(f"reward_before_scaling={reward}")
             reward /= (1.0 - terminated)
             # print(f"reward_after_scaling={reward}\tterminated={terminated}")
-        
+
         # Because of CaT, terminated is actually a nonzero probability instead of a boolean, so we have to check for resets this way
         if env.unwrapped.episode_length_buf[0].item() == 0 and t > 0:
             reset_steps.append(t)
@@ -525,10 +525,10 @@ def main():
         joint_velocities_buffer.append(joint_velocities)
 
         contact_sensors = env.unwrapped.scene['contact_forces']
-        feet_ids,_ = contact_sensors.find_bodies(foot_links, preserve_order=True)
+        feet_ids, _ = contact_sensors.find_bodies(foot_links, preserve_order=True)
         net_forces = contact_sensors.data.net_forces_w_history
         forces_history = net_forces[0].cpu()[:, feet_ids, :]
-        force_magnitudes = torch.norm(forces_history,dim=-1)
+        force_magnitudes = torch.norm(forces_history, dim=-1)
         max_per_foot = force_magnitudes.max(dim=0)[0].numpy()
         contact_forces_buffer.append(max_per_foot)
 
@@ -554,7 +554,8 @@ def main():
         quat_wxyz = root_quat_w(env.unwrapped, make_quat_unique=True, asset_cfg=SceneEntityCfg("robot"))
         roll_t, pitch_t, yaw_t = euler_xyz_from_quat(quat_wxyz)
         # Isaaclab returns 0 to 2pi euler angles, so small negative angles wrap around to ~2pi. Rescale accordingly
-        def convert_to_signed_angle(a): return (a + np.pi) % (2*np.pi) - np.pi
+        def convert_to_signed_angle(a):
+            return (a + np.pi) % (2 * np.pi) - np.pi
 
         # IMPORTANT: THESE ANGLES ARE NOT UNWRAPPED YET, HAPPENS AFTER THE FULL ROLLOUT
         roll = convert_to_signed_angle(roll_t.cpu().numpy().item())
@@ -581,17 +582,17 @@ def main():
 
         height_map_sequence = height_map_grid(env.unwrapped, SceneEntityCfg(name="ray_caster")).cpu().numpy()
         height_map_buffer.append(height_map_sequence[0])
-        
+
         # This will not account for terrain height, i.e. if the robot is standing on a 1m obstacle, the world foot height will be 1m.
         foot_positions_world = np.stack([scene_robot_data.body_link_pos_w[0, scene_robot_data.body_names.index(link)].cpu().numpy() for link in foot_links])
         foot_positions_world_frame_buffer.append(foot_positions_world)
-        
+
         foot_velocities_world_t = torch.stack([scene_robot_data.body_link_vel_w[0, scene_robot_data.body_names.index(link), :3] for link in foot_links])
         quat_expanded = quat_wxyz.expand(4, -1)
         foot_velocities_body_t = quat_apply_inverse(quat_expanded, foot_velocities_world_t)
         foot_velocities_world_frame_buffer.append(foot_velocities_world_t.cpu().numpy())
         foot_velocities_body_frame_buffer.append(foot_velocities_body_t.cpu().numpy())
-        
+
         foot_positions_body = env.unwrapped.scene["foot_frame_transformer"].data.target_pos_source[0].cpu().numpy()
         # print(f"foot_positions_body={foot_positions_body}")
         foot_positions_body_frame_buffer.append(foot_positions_body)
@@ -676,46 +677,46 @@ def main():
     )
 
     arrays_dict = {
-        "joint_positions"      : joint_positions_array,
-        "joint_velocities"     : joint_velocities_array,
-        "joint_torques"        : joint_torques_array,
-        "joint_accelerations"  : joint_accelerations_array,
-        "action_rate"          : action_rate_array,
-        "contact_forces"       : contact_forces_array,
-        "base_position"        : base_position_array,
-        "base_orientation"     : base_orientation_array,
-        "base_linear_velocity" : base_linear_velocity_array,
+        "joint_positions": joint_positions_array,
+        "joint_velocities": joint_velocities_array,
+        "joint_torques": joint_torques_array,
+        "joint_accelerations": joint_accelerations_array,
+        "action_rate": action_rate_array,
+        "contact_forces": contact_forces_array,
+        "base_position": base_position_array,
+        "base_orientation": base_orientation_array,
+        "base_linear_velocity": base_linear_velocity_array,
         "base_angular_velocity": base_angular_velocity_array,
         "base_linear_velocity_body": base_linear_velocity_body_array,
         "base_angular_velocity_body": base_angular_velocity_body_array,
-        "commanded_velocity"   : commanded_velocity_array,
-        "contact_state"        : contact_state_array,
+        "commanded_velocity": commanded_velocity_array,
+        "contact_state": contact_state_array,
         "foot_velocities_world_frame": foot_velocities_world_frame_array,
         "foot_velocities_body_frame": foot_velocities_body_frame_array,
-        "foot_positions_world_frame" : foot_positions_world_frame_array,
-        "foot_positions_body"  : foot_positions_body_frame_array,
+        "foot_positions_world_frame": foot_positions_world_frame_array,
+        "foot_positions_body": foot_positions_body_frame_array,
         "foot_positions_contact_frame": foot_positions_contact_frame_array,
-        "power_array"          : power_array,
-        "reward"               : reward_array,
+        "power_array": power_array,
+        "reward": reward_array,
     }
 
     constants_dict = {
-        "step_dt"          : step_dt,
-        "joint_names"      : joint_names,
-        "foot_labels"      : foot_labels,
+        "step_dt": step_dt,
+        "joint_names": joint_names,
+        "foot_labels": foot_labels,
         "constraint_bounds": constraint_bounds,
-        "total_robot_mass" : total_robot_mass
+        "total_robot_mass": total_robot_mass,
     }
 
     # --- masks ---
-    T            = total_sim_steps
-    all_indices  = np.arange(T)
-    random_timestep_mask  = all_indices < args.random_sim_step_length
+    T = total_sim_steps
+    all_indices = np.arange(T)
+    random_timestep_mask = all_indices < args.random_sim_step_length
 
     scenario_masks = {}
     for k, (scenario_tag, *_ ) in enumerate(fixed_command_scenarios):
         start = args.random_sim_step_length + k * fixed_command_sim_steps
-        end   = start + fixed_command_sim_steps     # exclusive
+        end = start + fixed_command_sim_steps     # exclusive
         scenario_masks[scenario_tag] = (all_indices >= start) & (all_indices < end)
 
     overall_metrics  = compute_summary_metrics(np.ones(T, bool), reset_steps, arrays_dict, constants_dict)
@@ -730,11 +731,11 @@ def main():
     summary_metrics["random_simulation_steps_metrics"] = random_metrics
     summary_metrics["fixed_command_scenarios_metrics"] = scenario_metrics
     summary_metrics.update({
-        "random_sim_steps"        : args.random_sim_step_length,
-        "total_sim_steps"         : total_sim_steps,
-        "seed"                    : env_cfg.seed,
-        "used_checkpoint_path"    : checkpoint_path,
-        "fixed_command_scenarios" : fixed_command_scenarios,
+        "random_sim_steps": args.random_sim_step_length,
+        "total_sim_steps": total_sim_steps,
+        "seed": env_cfg.seed,
+        "used_checkpoint_path": checkpoint_path,
+        "fixed_command_scenarios": fixed_command_scenarios,
     })
 
     summary_path = os.path.join(eval_base_dir, "metrics_summary.json")
@@ -770,5 +771,6 @@ def main():
     env.close()
     simulation_app.close()
 
+
 if __name__ == "__main__":
-	main()
+    main()
