@@ -15,6 +15,21 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.uv]
+# Restrict uv to only resolve dependencies for Linux, preventing the 
+# cross-platform lockfile from trying to pull in incompatible Windows packages.
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'"
+]
+
+# Workaround for an upstream metadata bug in isaacsim-core (v5.1.0).
+# The package incorrectly demands pywin32 globally without platform markers.
+# This override forces uv to treat pywin32 as Windows-only, allowing the 
+# Linux environment to resolve and install successfully.
+override-dependencies = [
+    "pywin32; sys_platform == 'win32'"
+]
+
 # Allows uv to automatically find these packages without needing the long --index-url flags every time you run a command.
 [[tool.uv.index]]
 name = "pytorch"
@@ -108,4 +123,3 @@ reportMissingModuleSource = "none"
 reportGeneralTypeIssues = "none"       
 reportOptionalMemberAccess = "warning" 
 reportPrivateUsage = "warning"
-
