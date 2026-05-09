@@ -345,7 +345,6 @@ def discover_metrics_summary_files(
         with open(json_path, "r", encoding="utf-8") as handle:
             metrics_summary = json.load(handle)
 
-        # env_name and run_name inside metrics_summary.json are the authoritative keys.
         env_name = metrics_summary.get("env_name")
         run_name = metrics_summary.get("run_name")
 
@@ -582,6 +581,12 @@ def align_timeseries_data(run_histories: list[pd.DataFrame], metric_name: str) -
     stats = stats.dropna(subset=["mean"])
     stats = stats.reset_index().rename(columns={"index": "iteration"})
     return stats
+
+
+def filter_timeseries_for_plotting(stats: pd.DataFrame, skip_initial_iterations: int) -> pd.DataFrame:
+    if stats.empty:
+        return stats
+    return stats[stats["iteration"] >= skip_initial_iterations].copy()
 
 
 def aggregate_cot_data(run_entries: list[tuple[str, pd.DataFrame]]) -> pd.DataFrame:
@@ -952,6 +957,12 @@ def parse_args() -> argparse.Namespace:
         help="Number of final training iterations used to compute final WandB summary metrics.",
     )
     parser.add_argument(
+        "--plot_skip_initial_iterations",
+        type=int,
+        default=150,
+        help="Skip iterations below this threshold for WandB progression plots and exported time-series CSVs.",
+    )
+    parser.add_argument(
         "--cot_velocity_range",
         type=float,
         nargs=2,
@@ -990,6 +1001,8 @@ def main() -> None:
         raise FileNotFoundError(f"metrics_summary_root_dir does not exist: {args.metrics_summary_root_dir}")
     if args.summary_tail_points <= 0:
         raise ValueError("--summary_tail_points must be positive")
+    if args.plot_skip_initial_iterations < 0:
+        raise ValueError("--plot_skip_initial_iterations must be non-negative")
 
     output_dir = create_output_directory(args.output_name, args.labels)
     setup_logging(args.log_level, output_dir)
@@ -1131,6 +1144,7 @@ def main() -> None:
                 if run_name in data.wandb_runs
             ]
             stats = align_timeseries_data(histories, metric_name)
+            stats = filter_timeseries_for_plotting(stats, args.plot_skip_initial_iterations)
 
             plot_series.append(
                 {
