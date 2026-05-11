@@ -12,10 +12,13 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 import scienceplots  # noqa: F401
 import wandb
+
+from metrics_utils import compute_swing_heights, summarize_metric
 
 
 DEFAULT_WANDB_METRICS = [
@@ -53,6 +56,9 @@ DEFAULT_SUMMARY_LABEL_MAP = {
     "rms_error_xy_mean": "Mean Base Velocity RMS Error (X,Y)",
 }
 
+DEFAULT_STEP_HEIGHT_FLAT_SCENARIO_TAG = "walk_x_flat_terrain_1.0mps"
+DEFAULT_STEP_HEIGHT_UNEVEN_SCENARIO_TAG = "medium_walk_x_uneven_terrain"
+
 ALL_TIME_PLACEHOLDER = "ALL"
 
 
@@ -73,6 +79,7 @@ class JsonRunData:
     json_path: Path
     cot_df: pd.DataFrame | None
     summary: dict[str, Any]
+    metrics_summary: dict[str, Any]
 
 
 @dataclass
@@ -370,6 +377,7 @@ def discover_metrics_summary_files(
             json_path=json_path,
             cot_df=cot_df,
             summary=summary,
+            metrics_summary=metrics_summary,
         )
 
         key = (env_name, run_name)
@@ -863,6 +871,431 @@ def plot_cot_comparison(
     plt.close(fig)
 
 
+def resolve_sim_data_path(json_path: Path) -> Path:
+    return json_path.parent / "plots" / "sim_data.npz"
+
+
+def extract_scenario_tag(scenario_entry: Any) -> str | None:
+    if isinstance(scenario_entry, (list, tuple)) and scenario_entry:
+        return scenario_entry[0] if isinstance(scenario_entry[0], str) else None
+    if isinstance(scenario_entry, dict):
+        scenario_tag = scenario_entry.get("tag")
+        return scenario_tag if isinstance(scenario_tag, str) else None
+    return None
+
+
+def infer_fixed_command_scenario_ranges(metrics_summary: dict[str, Any]) -> dict[str, tuple[int, int]]:
+    scenarios = metrics_summary.get("fixed_command_scenarios")
+    random_sim_steps = metrics_summary.get("random_sim_steps")
+    total_sim_steps = metrics_summary.get("total_sim_steps")
+
+    if not isinstance(scenarios, list) or not scenarios:
+        raise ValueError("metrics_summary does not contain a valid non-empty 'fixed_command_scenarios' list.")
+    if not isinstance(random_sim_steps, (int, float)):
+        raise ValueError("metrics_summary does not contain a valid 'random_sim_steps' value.")
+    if not isinstance(total_sim_steps, (int, float)):
+        raise ValueError("metrics_summary does not contain a valid 'total_sim_steps' value.")
+
+    random_sim_steps_int = int(random_sim_steps)
+    total_sim_steps_int = int(total_sim_steps)
+    if random_sim_steps_int < 0 or total_sim_steps_int <= random_sim_steps_int:
+        raise ValueError(
+            f"Invalid total/random simulation step counts in metrics_summary: "
+            f"random_sim_steps={random_sim_steps_int}, total_sim_steps={total_sim_steps_int}"
+        )
+
+    fixed_command_total_steps = total_sim_steps_int - random_sim_steps_int
+    if fixed_command_total_steps <= 0:
+        raise ValueError("No fixed-command steps available in metrics_summary.")
+
+    fixed_command_steps_per_scenario_float = fixed_command_total_steps / len(scenarios)
+    fixed_command_steps_per_scenario = int(round(fixed_command_steps_per_scenario_float))
+    if not np.isclose(fixed_command_steps_per_scenario_float, fixed_command_steps_per_scenario):
+        raise ValueError(
+            "Could not infer a consistent fixed-command window length from metrics_summary: "
+            f"fixed_command_total_steps={fixed_command_total_steps}, num_scenarios={len(scenarios)}"
+        )
+
+    ranges: dict[str, tuple[int, int]] = {}
+    for scenario_index, scenario_entry in enumerate(scenarios):
+        scenario_tag = extract_scenario_tag(scenario_entry)
+        if not scenario_tag:
+            raise ValueError(f"Encountered invalid fixed-command scenario entry: {scenario_entry!r}")
+
+        if scenario_tag in ranges:
+            raise ValueError(f"Duplicate fixed-command scenario tag in metrics_summary: {scenario_tag!r}")
+
+        start_step = random_sim_steps_int + scenario_index * fixed_command_steps_per_scenario
+        end_step_exclusive = start_step + fixed_command_steps_per_scenario
+        ranges[scenario_tag] = (start_step, end_step_exclusive)
+
+    return ranges
+
+
+def load_sim_data_npz(sim_data_path: Path) -> dict[str, Any]:
+    with np.load(sim_data_path, allow_pickle=True) as npz_file:
+        return {key: npz_file[key] for key in npz_file.files}
+
+
+def compute_swing_height_records_for_range(
+    sim_data: dict[str, Any],
+    start_step: int,
+    end_step_exclusive: int,
+) -> list[dict[str, Any]]:
+    sim_times = np.asarray(sim_data["sim_times"])
+    contact_state_array = np.asarray(sim_data["contact_state_array"])
+    foot_positions_contact_frame_array = np.asarray(sim_data["foot_positions_contact_frame_array"])
+    reset_times = np.asarray(sim_data["reset_times"])
+    foot_labels = [str(label) for label in np.asarray(sim_data["foot_labels"]).tolist()]
+
+    if start_step < 0 or end_step_exclusive > len(sim_times) or start_step >= end_step_exclusive:
+        raise ValueError(
+            f"Invalid timestep range [{start_step}, {end_step_exclusive}) for sim_data with {len(sim_times)} steps."
+        )
+
+    time_slice = slice(start_step, end_step_exclusive)
+    sim_times_sliced = sim_times[time_slice]
+    if len(sim_times_sliced) < 2:
+        return []
+
+    contact_state_sliced = contact_state_array[time_slice]
+    foot_heights_contact_sliced = foot_positions_contact_frame_array[time_slice, :, 2]
+
+    t0 = float(sim_times_sliced[0])
+    t1 = float(sim_times_sliced[-1])
+    step_dt = float(sim_times_sliced[1] - sim_times_sliced[0])
+
+    resets_in_window = reset_times[(reset_times >= t0) & (reset_times <= t1)]
+    local_reset_steps = [int(round((reset_time - t0) / step_dt)) for reset_time in resets_in_window]
+
+    swing_heights_dict = compute_swing_heights(
+        contact_state=contact_state_sliced,
+        foot_heights_contact=foot_heights_contact_sliced,
+        reset_steps=local_reset_steps,
+        foot_labels=foot_labels,
+    )
+
+    records: list[dict[str, Any]] = []
+    for foot_label, heights in swing_heights_dict.items():
+        for height in heights:
+            records.append(
+                {
+                    "foot_label": foot_label,
+                    "swing_height": float(height),
+                }
+            )
+    return records
+
+
+def collect_step_height_records(
+    series_data: dict[str, SeriesData],
+    flat_scenario_tag: str,
+    uneven_scenario_tag: str,
+) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+
+    for label, data in series_data.items():
+        if not data.selected_json_run_names:
+            logging.warning("Skipping step-height extraction for '%s': no selected local JSON runs.", label)
+            continue
+
+        for run_name in data.selected_json_run_names:
+            json_run = data.json_runs.get(run_name)
+            if json_run is None:
+                continue
+
+            sim_data_path = resolve_sim_data_path(json_run.json_path)
+            if not sim_data_path.is_file():
+                logging.warning(
+                    "Skipping step-height extraction for label='%s', run='%s': sim_data.npz not found at %s",
+                    label,
+                    run_name,
+                    sim_data_path,
+                )
+                continue
+
+            try:
+                scenario_ranges = infer_fixed_command_scenario_ranges(json_run.metrics_summary)
+            except Exception as exception:
+                logging.warning(
+                    "Skipping step-height extraction for label='%s', run='%s': failed to infer scenario ranges from %s (%s)",
+                    label,
+                    run_name,
+                    json_run.json_path,
+                    exception,
+                )
+                continue
+
+            missing_tags = [tag for tag in (flat_scenario_tag, uneven_scenario_tag) if tag not in scenario_ranges]
+            if missing_tags:
+                logging.warning(
+                    "Skipping step-height extraction for label='%s', run='%s': missing required scenario tags %s in %s",
+                    label,
+                    run_name,
+                    missing_tags,
+                    json_run.json_path,
+                )
+                continue
+
+            try:
+                sim_data = load_sim_data_npz(sim_data_path)
+            except Exception as exception:
+                logging.warning(
+                    "Skipping step-height extraction for label='%s', run='%s': failed to load %s (%s)",
+                    label,
+                    run_name,
+                    sim_data_path,
+                    exception,
+                )
+                continue
+
+            for terrain_condition, scenario_tag in (("flat", flat_scenario_tag), ("uneven", uneven_scenario_tag)):
+                start_step, end_step_exclusive = scenario_ranges[scenario_tag]
+                precomputed_scenario_metrics = json_run.metrics_summary.get("fixed_command_scenarios_metrics", {}).get(scenario_tag, {})
+                try:
+                    scenario_records = compute_swing_height_records_for_range(
+                        sim_data=sim_data,
+                        start_step=start_step,
+                        end_step_exclusive=end_step_exclusive,
+                    )
+                except Exception as exception:
+                    logging.warning(
+                        "Skipping step-height extraction for label='%s', run='%s', scenario='%s': %s",
+                        label,
+                        run_name,
+                        scenario_tag,
+                        exception,
+                    )
+                    continue
+
+                for record in scenario_records:
+                    rows.append(
+                        {
+                            "label": label,
+                            "env_name": data.env_name,
+                            "run_name": run_name,
+                            "terrain_condition": terrain_condition,
+                            "scenario_tag": scenario_tag,
+                            "json_path": str(json_run.json_path),
+                            "sim_data_path": str(sim_data_path),
+                            "checkpoint": json_run.checkpoint,
+                            "start_step": start_step,
+                            "end_step_exclusive": end_step_exclusive,
+                            "foot_label": record["foot_label"],
+                            "swing_height": record["swing_height"],
+                            "precomputed_step_height_summary_available": isinstance(
+                                precomputed_scenario_metrics.get("step_height_summary"), dict
+                            ),
+                        }
+                    )
+
+            logging.info(
+                "Extracted step-height data for label='%s', run='%s' using flat='%s' and uneven='%s'.",
+                label,
+                run_name,
+                flat_scenario_tag,
+                uneven_scenario_tag,
+            )
+
+    if not rows:
+        return pd.DataFrame(
+            columns=[
+                "label",
+                "env_name",
+                "run_name",
+                "terrain_condition",
+                "scenario_tag",
+                "json_path",
+                "sim_data_path",
+                "checkpoint",
+                "start_step",
+                "end_step_exclusive",
+                "foot_label",
+                "swing_height",
+                "precomputed_step_height_summary_available",
+            ]
+        )
+
+    df = pd.DataFrame(rows)
+    df.sort_values(["label", "run_name", "terrain_condition", "foot_label", "swing_height"], inplace=True)
+    return df
+
+
+def build_step_height_summary(step_height_df: pd.DataFrame) -> pd.DataFrame:
+    if step_height_df.empty:
+        return pd.DataFrame()
+
+    rows: list[dict[str, Any]] = []
+
+    grouping_columns = ["label", "env_name", "terrain_condition", "scenario_tag"]
+    for group_keys, group in step_height_df.groupby(grouping_columns):
+        label, env_name, terrain_condition, scenario_tag = group_keys
+        heights = pd.to_numeric(group["swing_height"], errors="coerce").dropna().to_numpy(dtype=float)
+        summary = summarize_metric(heights.tolist())
+
+        row: dict[str, Any] = {
+            "label": label,
+            "env_name": env_name,
+            "terrain_condition": terrain_condition,
+            "scenario_tag": scenario_tag,
+            "num_swing_events": int(len(heights)),
+            "num_runs": int(group["run_name"].nunique()),
+        }
+        row.update(summary)
+        rows.append(row)
+
+    paired_rows: list[dict[str, Any]] = []
+    for (label, env_name), group in df_groupby_label_env(rows):
+        flat_row = next((row for row in group if row["terrain_condition"] == "flat"), None)
+        uneven_row = next((row for row in group if row["terrain_condition"] == "uneven"), None)
+        if flat_row is not None and uneven_row is not None:
+            paired_rows.append(
+                {
+                    "label": label,
+                    "env_name": env_name,
+                    "flat_mean": flat_row.get("mean", np.nan),
+                    "uneven_mean": uneven_row.get("mean", np.nan),
+                    "mean_difference_uneven_minus_flat": float(uneven_row.get("mean", np.nan) - flat_row.get("mean", np.nan))
+                    if not pd.isna(flat_row.get("mean", np.nan)) and not pd.isna(uneven_row.get("mean", np.nan))
+                    else np.nan,
+                    "flat_stddev": flat_row.get("stddev", np.nan),
+                    "uneven_stddev": uneven_row.get("stddev", np.nan),
+                    "stddev_difference_uneven_minus_flat": float(uneven_row.get("stddev", np.nan) - flat_row.get("stddev", np.nan))
+                    if not pd.isna(flat_row.get("stddev", np.nan)) and not pd.isna(uneven_row.get("stddev", np.nan))
+                    else np.nan,
+                }
+            )
+
+    df = pd.DataFrame(rows)
+    df.sort_values(["label", "terrain_condition"], inplace=True)
+
+    if paired_rows:
+        paired_df = pd.DataFrame(paired_rows)
+        df = df.merge(paired_df, on=["label", "env_name"], how="left")
+
+    return df
+
+
+def df_groupby_label_env(rows: list[dict[str, Any]]) -> list[tuple[tuple[str, str], list[dict[str, Any]]]]:
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        key = (row["label"], row["env_name"])
+        grouped.setdefault(key, []).append(row)
+    return list(grouped.items())
+
+
+def plot_step_height_box_comparison(
+    step_height_df: pd.DataFrame,
+    output_dir: Path,
+    export_formats: list[str],
+    showfliers: bool,
+) -> None:
+    if step_height_df.empty:
+        logging.warning("Skipping step-height box plot: no step-height samples were collected.")
+        return
+
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    ordered_labels = list(dict.fromkeys(step_height_df["label"].tolist()))
+
+    datasets: list[np.ndarray] = []
+    positions: list[float] = []
+    tick_positions: list[float] = []
+    tick_labels: list[str] = []
+    box_facecolors: list[tuple[Any, float]] = []
+
+    current_position = 1.0
+    group_gap = 0.9
+    pair_spacing = 0.9
+
+    for label_index, label in enumerate(ordered_labels):
+        label_group = step_height_df[step_height_df["label"] == label]
+        flat_values = pd.to_numeric(
+            label_group[label_group["terrain_condition"] == "flat"]["swing_height"],
+            errors="coerce",
+        ).dropna().to_numpy(dtype=float)
+        uneven_values = pd.to_numeric(
+            label_group[label_group["terrain_condition"] == "uneven"]["swing_height"],
+            errors="coerce",
+        ).dropna().to_numpy(dtype=float)
+
+        if flat_values.size == 0 and uneven_values.size == 0:
+            logging.warning("Skipping step-height box entries for '%s': both terrain conditions are empty.", label)
+            current_position += 2.0 + group_gap
+            continue
+
+        base_color = colors[label_index % len(colors)]
+
+        for condition_name, values, alpha in (
+            ("Flat", flat_values, 0.35),
+            ("Uneven", uneven_values, 0.75),
+        ):
+            if values.size == 0:
+                logging.warning("No step-height samples for label='%s', condition='%s'.", label, condition_name)
+                current_position += pair_spacing
+                continue
+
+            datasets.append(values)
+            positions.append(current_position)
+            tick_positions.append(current_position)
+            tick_labels.append(f"{label}\n{condition_name}")
+            box_facecolors.append((base_color, alpha))
+            current_position += pair_spacing
+
+        current_position += group_gap
+
+    if not datasets:
+        logging.warning("Skipping step-height box plot: all step-height groups were empty.")
+        return
+
+    figure_width = max(12.0, 2.8 * len(datasets))
+    fig, ax = plt.subplots(figsize=(figure_width, 8))
+
+    boxplot = ax.boxplot(
+        datasets,
+        positions=positions,
+        widths=0.65,
+        patch_artist=True,
+        showmeans=True,
+        showfliers=showfliers,
+        meanprops={
+            "marker": "D",
+            "markerfacecolor": "black",
+            "markeredgecolor": "black",
+            "markersize": 7,
+        },
+        medianprops={
+            "color": "black",
+            "linewidth": 1.5,
+        },
+        whiskerprops={
+            "linewidth": 1.3,
+        },
+        capprops={
+            "linewidth": 1.3,
+        },
+    )
+
+    for patch, (facecolor, alpha) in zip(boxplot["boxes"], box_facecolors):
+        patch.set_facecolor(facecolor)
+        patch.set_alpha(alpha)
+        patch.set_edgecolor("black")
+        patch.set_linewidth(1.3)
+
+    ax.set_title("Swing Height Distribution: Flat vs Uneven Terrain", fontsize=34)
+    ax.set_ylabel(r"Max Swing Height ($\mathrm{m}$)")
+    ax.set_xticks(tick_positions)
+    ax.set_xticklabels(tick_labels)
+
+    legend_handles = [
+        Patch(facecolor="black", edgecolor="black", alpha=0.35, label="Flat terrain"),
+        Patch(facecolor="black", edgecolor="black", alpha=0.75, label="Uneven terrain"),
+    ]
+    ax.legend(handles=legend_handles, loc="upper left")
+
+    export_plot(fig, output_dir, "plot_step_height_box_comparison", export_formats)
+    plt.close(fig)
+
+
 def build_series_specs(args: argparse.Namespace) -> list[SeriesSpec]:
     num_series = len(args.labels)
     if not (
@@ -981,6 +1414,23 @@ def parse_args() -> argparse.Namespace:
         default="intersection",
         help="How WandB and local JSON runs are matched before aggregation.",
     )
+    parser.add_argument(
+        "--step_height_flat_scenario_tag",
+        type=str,
+        default=DEFAULT_STEP_HEIGHT_FLAT_SCENARIO_TAG,
+        help="Fixed-command scenario tag used for the flat-terrain step-height box plot.",
+    )
+    parser.add_argument(
+        "--step_height_uneven_scenario_tag",
+        type=str,
+        default=DEFAULT_STEP_HEIGHT_UNEVEN_SCENARIO_TAG,
+        help="Fixed-command scenario tag used for the uneven-terrain step-height box plot.",
+    )
+    parser.add_argument(
+        "--step_height_showfliers",
+        action="store_true",
+        help="Show outliers in the step-height box plot.",
+    )
 
     parser.add_argument("--output_name", type=str, default="analysis", help="Base name for the output directory.")
     parser.add_argument("--export_formats", nargs="+", default=["pdf"], help="Plot export formats such as pdf png svg.")
@@ -1003,6 +1453,10 @@ def main() -> None:
         raise ValueError("--summary_tail_points must be positive")
     if args.plot_skip_initial_iterations < 0:
         raise ValueError("--plot_skip_initial_iterations must be non-negative")
+    if not args.step_height_flat_scenario_tag:
+        raise ValueError("--step_height_flat_scenario_tag must be non-empty")
+    if not args.step_height_uneven_scenario_tag:
+        raise ValueError("--step_height_uneven_scenario_tag must be non-empty")
 
     output_dir = create_output_directory(args.output_name, args.labels)
     setup_logging(args.log_level, output_dir)
@@ -1198,6 +1652,23 @@ def main() -> None:
         save_dataframe(cot_stats_df, output_dir / "cot_sweep_stats.csv")
 
     plot_cot_comparison(cot_plot_series, output_dir, args.export_formats, args.plot_baseline)
+
+    step_height_df = collect_step_height_records(
+        series_data=series_data,
+        flat_scenario_tag=args.step_height_flat_scenario_tag,
+        uneven_scenario_tag=args.step_height_uneven_scenario_tag,
+    )
+    save_dataframe(step_height_df, output_dir / "step_height_boxplot_samples.csv")
+
+    step_height_summary_df = build_step_height_summary(step_height_df)
+    save_dataframe(step_height_summary_df, output_dir / "step_height_boxplot_summary.csv")
+
+    plot_step_height_box_comparison(
+        step_height_df=step_height_df,
+        output_dir=output_dir,
+        export_formats=args.export_formats,
+        showfliers=args.step_height_showfliers,
+    )
 
     logging.info("Finished. Outputs written to: %s", output_dir)
 
