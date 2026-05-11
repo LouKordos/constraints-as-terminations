@@ -7,6 +7,7 @@ __all__ = [
     "compute_trimmed_histogram_data",
     "total_variation_distance",
     "optimal_bin_edges",
+    "compute_energy_arrays",
     "compute_stance_segments",
     "summarize_metric",
     "compute_swing_durations",
@@ -89,6 +90,23 @@ def compute_stance_segments(in_contact: np.ndarray) -> list[tuple[int, int]]:
 def compute_swing_segments(in_contact: np.ndarray) -> list[tuple[int, int]]:
     # Air-time segments are contact segments of the inverted array
     return compute_stance_segments(in_contact=~in_contact)
+
+def compute_energy_arrays(power_array: np.ndarray, base_lin_vel: np.ndarray, reset_steps: List[int], step_dt: float, robot_mass: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Returns (energy_per_joint, combined_energy, cot_time_series) for the *full* run.
+    """
+    instantaneous_speed = np.linalg.norm(base_lin_vel[:, :2], axis=1)
+
+    # repair teleports / resets
+    for r in reset_steps:
+        instantaneous_speed[max(0, r - 1):r + 1] = instantaneous_speed[max(0, r - 1)]
+        power_array[max(0, r - 1):r + 1, :] = power_array[max(0, r - 1), :]
+
+    energy_per_joint = np.cumsum(np.abs(power_array), axis=0) * step_dt
+    combined_energy = np.cumsum(np.abs(power_array).sum(axis=1)) * step_dt
+    with np.errstate(divide="ignore", invalid="ignore"):
+        cost_of_transport_time_series = np.abs(power_array).sum(axis=1) / (robot_mass * 9.81 * instantaneous_speed + 1e-12)
+    return energy_per_joint, combined_energy, cost_of_transport_time_series
 
 
 def summarize_metric(values: list[float]) -> dict[str, float]:
