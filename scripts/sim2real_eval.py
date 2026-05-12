@@ -938,6 +938,93 @@ def main() -> None:
     with summary_path.open("w", encoding="utf-8") as file:
         json.dump(summary_metrics, file, indent=4)
 
+        print("\n=== Key sim2real metrics ===")
+    print(
+        f"Selected window: "
+        f"{summary_metrics['selected_start_offset_sec']:.3f}s -> "
+        f"{summary_metrics['selected_end_offset_sec']:.3f}s "
+        f"(duration: {summary_metrics['selected_duration_sec']:.3f}s)"
+    )
+    print(
+        f"Window clamped: "
+        f"start={summary_metrics['start_was_clamped']}, "
+        f"end={summary_metrics['end_was_clamped']}"
+    )
+    print(
+        f"Commanded velocity: "
+        f"lin_x={summary_metrics['commanded_velocity']['linear_x']:.3f} m/s, "
+        f"lin_y={summary_metrics['commanded_velocity']['linear_y']:.3f} m/s, "
+        f"ang_z={summary_metrics['commanded_velocity']['angular_z']:.3f} rad/s"
+    )
+    print(
+        f"Eval samples: {summary_metrics['num_eval_samples']}, "
+        f"estimated joint-state rate: "
+        f"{summary_metrics['estimated_joint_state_rate_hz']:.3f} Hz"
+        if summary_metrics["estimated_joint_state_rate_hz"] is not None
+        else f"Eval samples: {summary_metrics['num_eval_samples']}, estimated joint-state rate: n/a"
+    )
+
+    print(
+        f"Reported CoT (smoothed): "
+        f"{summary_metrics['cost_of_transport']:.6f}"
+        if summary_metrics["cost_of_transport"] is not None
+        else "Reported CoT (smoothed): n/a"
+    )
+    print(
+        f"Raw CoT: {summary_metrics['raw_cost_of_transport']:.6f}"
+        if summary_metrics["raw_cost_of_transport"] is not None
+        else "Raw CoT: n/a"
+    )
+    print(
+        f"Horizontal distance: "
+        f"{summary_metrics['distance_walked_horizontal']:.6f} m "
+        f"(raw: {summary_metrics['raw_distance_walked_horizontal']:.6f} m)"
+    )
+    print(
+        f"Total energy: "
+        f"{summary_metrics['total_energy_consumption']:.6f} J "
+        f"(raw: {summary_metrics['raw_total_energy_consumption']:.6f} J)"
+    )
+    print(
+        f"Mean total abs power: "
+        f"{summary_metrics['total_absolute_power_smoothed_summary']['mean']:.6f} W "
+        f"(raw: {summary_metrics['total_absolute_power_raw_summary']['mean']:.6f} W)"
+    )
+    print(
+        f"P90 total abs power: "
+        f"{summary_metrics['total_absolute_power_smoothed_summary']['90th_percentile']:.6f} W "
+        f"(raw: {summary_metrics['total_absolute_power_raw_summary']['90th_percentile']:.6f} W)"
+    )
+    print(
+        f"P99 total abs power: "
+        f"{summary_metrics['total_absolute_power_smoothed_summary']['99th_percentile']:.6f} W "
+        f"(raw: {summary_metrics['total_absolute_power_raw_summary']['99th_percentile']:.6f} W)"
+    )
+
+    joint_velocity_violation = summary_metrics["constraint_violations_percent"]["joint_velocity"]
+    if joint_velocity_violation is not None:
+        print(
+            f"Joint velocity violations @ |v|>{joint_velocity_violation['abs_limit']:.6f}: "
+            f"{joint_velocity_violation['percent_of_all_joint_samples']:.4f}% of joint samples, "
+            f"{joint_velocity_violation['percent_of_timesteps_with_any_joint_violation']:.4f}% of timesteps"
+        )
+
+    joint_torque_violation = summary_metrics["constraint_violations_percent"]["joint_torque"]
+    if joint_torque_violation is not None:
+        print(
+            f"Joint torque violations @ |tau|>{joint_torque_violation['abs_limit']:.6f}: "
+            f"{joint_torque_violation['percent_of_all_joint_samples']:.4f}% of joint samples, "
+            f"{joint_torque_violation['percent_of_timesteps_with_any_joint_violation']:.4f}% of timesteps"
+        )
+
+    joint_acceleration_violation = summary_metrics["constraint_violations_percent"]["joint_acceleration"]
+    if joint_acceleration_violation is not None:
+        print(
+            f"Joint acceleration violations @ |a|>{joint_acceleration_violation['abs_limit']:.6f}: "
+            f"{joint_acceleration_violation['percent_of_all_joint_samples']:.4f}% of joint samples, "
+            f"{joint_acceleration_violation['percent_of_timesteps_with_any_joint_violation']:.4f}% of timesteps"
+        )
+
     print(f"Wrote summary metrics to {summary_path}")
     print(f"Wrote aligned evaluation arrays to {npz_path}")
     print(f"Wrote diagnostic plots to {plots_dir}")
