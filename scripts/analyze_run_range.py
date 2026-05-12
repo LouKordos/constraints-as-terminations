@@ -976,14 +976,37 @@ def compute_swing_height_records_for_range(
     )
 
     records: list[dict[str, Any]] = []
+    filtered_negative_count = 0
+    filtered_nonfinite_count = 0
+
     for foot_label, heights in swing_heights_dict.items():
         for height in heights:
+            height_value = float(height)
+
+            if not np.isfinite(height_value):
+                filtered_nonfinite_count += 1
+                continue
+
+            if height_value < 0.0:
+                filtered_negative_count += 1
+                continue
+
             records.append(
                 {
                     "foot_label": foot_label,
-                    "swing_height": float(height),
+                    "swing_height": height_value,
                 }
             )
+
+    if filtered_negative_count > 0 or filtered_nonfinite_count > 0:
+        logging.debug(
+            "Filtered swing-height samples for range [%d, %d): negative=%d, nonfinite=%d",
+            start_step,
+            end_step_exclusive,
+            filtered_negative_count,
+            filtered_nonfinite_count,
+        )
+
     return records
 
 
