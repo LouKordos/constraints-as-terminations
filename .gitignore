@@ -1,4 +1,5 @@
 videos
+go2_logs
 /isaacgymenvs/logs
 *train_dir*
 wandb
