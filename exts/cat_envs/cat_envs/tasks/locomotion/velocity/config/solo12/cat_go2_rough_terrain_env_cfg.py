@@ -707,6 +707,7 @@ class ConstraintsCfg:
         max_p=1.0, 
         params={"limit": 0.0}
     )
+    # NOT needed after adding energy minimization, only kept for backwards compat in code
     hip_position = ConstraintTerm(
         func=constraints.relative_joint_position_upper_and_lower_bound_when_moving_forward,
         max_p=0.25, # Overwritten by curriculum!
