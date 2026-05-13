@@ -552,6 +552,53 @@ def resolve_selected_run_names(
     raise ValueError(f"Unsupported match_mode: {match_mode}")
 
 
+def get_history_max_iteration(history: pd.DataFrame) -> int | None:
+    if history.empty or "iteration" not in history.columns:
+        return None
+
+    iterations = pd.to_numeric(history["iteration"], errors="coerce").dropna()
+    if iterations.empty:
+        return None
+
+    return int(iterations.max())
+
+
+def compute_global_shortest_selected_wandb_iteration(series_data: dict[str, SeriesData]) -> int | None:
+    max_iterations: list[int] = []
+
+    for data in series_data.values():
+        for run_name in data.selected_wandb_run_names:
+            run_entry = data.wandb_runs.get(run_name)
+            if run_entry is None:
+                continue
+
+            history = run_entry.get("history")
+            if not isinstance(history, pd.DataFrame):
+                continue
+
+            max_iteration = get_history_max_iteration(history)
+            if max_iteration is None:
+                continue
+
+            max_iterations.append(max_iteration)
+
+    if not max_iterations:
+        return None
+
+    return min(max_iterations)
+
+
+def truncate_history_to_max_iteration(history: pd.DataFrame, max_iteration: int | None) -> pd.DataFrame:
+    if max_iteration is None or history.empty or "iteration" not in history.columns:
+        return history.copy()
+
+    truncated = history.copy()
+    truncated["iteration"] = pd.to_numeric(truncated["iteration"], errors="coerce")
+    truncated = truncated.dropna(subset=["iteration"])
+    truncated = truncated[truncated["iteration"] <= max_iteration].copy()
+    return truncated
+
+
 def align_timeseries_data(run_histories: list[pd.DataFrame], metric_name: str) -> pd.DataFrame:
     if not run_histories:
         return pd.DataFrame(columns=["iteration", "mean", "std", "count", "sem", "ci95"])
@@ -568,8 +615,9 @@ def align_timeseries_data(run_histories: list[pd.DataFrame], metric_name: str) -
         if metric_df.empty:
             continue
 
+        metric_df["iteration"] = pd.to_numeric(metric_df["iteration"], errors="coerce")
         metric_df[metric_name] = pd.to_numeric(metric_df[metric_name], errors="coerce")
-        metric_df = metric_df.dropna(subset=[metric_name])
+        metric_df = metric_df.dropna(subset=["iteration", metric_name])
 
         if metric_df.empty:
             continue
@@ -742,6 +790,8 @@ def save_text_summary(
     cot_velocity_range: tuple[float, float],
     cot_filtered_plot_min_velocity: float | None,
     cot_filtered_plot_max_velocity: float | None,
+    truncate_wandb_timeseries_to_shortest_run: bool,
+    wandb_timeseries_truncation_iteration: int | None,
 ) -> None:
     lines: list[str] = []
     lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -752,6 +802,13 @@ def save_text_summary(
         "cot_filtered_plot_velocity_range: "
         f"{cot_filtered_plot_min_velocity if cot_filtered_plot_min_velocity is not None else '-inf'} "
         f"to {cot_filtered_plot_max_velocity if cot_filtered_plot_max_velocity is not None else 'inf'}"
+    )
+    lines.append(
+        f"truncate_wandb_timeseries_to_shortest_run: {truncate_wandb_timeseries_to_shortest_run}"
+    )
+    lines.append(
+        "wandb_timeseries_truncation_iteration: "
+        f"{wandb_timeseries_truncation_iteration if wandb_timeseries_truncation_iteration is not None else 'Not applied'}"
     )
     lines.append("")
 
@@ -1490,6 +1547,16 @@ def parse_args() -> argparse.Namespace:
         help="Skip iterations below this threshold for WandB progression plots and exported time-series CSVs.",
     )
     parser.add_argument(
+        "--truncate_wandb_timeseries_to_shortest_run",
+        action="store_true",
+        default=True,
+        help=(
+            "If set, truncate WandB time-series histories used for progression plots and exported "
+            "time-series CSVs to the maximum iteration of the globally shortest selected WandB run "
+            "across all specified series. This does not affect final tail-based summary metrics."
+        ),
+    )
+    parser.add_argument(
         "--cot_velocity_range",
         type=float,
         nargs=2,
@@ -1661,6 +1728,13 @@ def main() -> None:
 
         for run_name in sorted(set(wandb_runs.keys()).union(json_runs.keys())):
             json_run = json_runs.get(run_name)
+            wandb_run = wandb_runs.get(run_name)
+            wandb_max_iteration = None
+            if wandb_run is not None:
+                history = wandb_run.get("history")
+                if isinstance(history, pd.DataFrame):
+                    wandb_max_iteration = get_history_max_iteration(history)
+
             selection_rows.append(
                 {
                     "label": spec.label,
@@ -1673,6 +1747,7 @@ def main() -> None:
                     "selected_for_local_json": run_name in selected_json_run_names,
                     "json_path": str(json_run.json_path) if json_run else None,
                     "checkpoint": json_run.checkpoint if json_run else None,
+                    "wandb_max_iteration": wandb_max_iteration,
                 }
             )
 
@@ -1690,6 +1765,19 @@ def main() -> None:
     if not selection_df.empty:
         selection_df.sort_values(["label", "run_name"], inplace=True)
     save_dataframe(selection_df, output_dir / "selected_runs.csv")
+
+    wandb_timeseries_truncation_iteration: int | None = None
+    if args.truncate_wandb_timeseries_to_shortest_run:
+        wandb_timeseries_truncation_iteration = compute_global_shortest_selected_wandb_iteration(series_data)
+        if wandb_timeseries_truncation_iteration is None:
+            logging.warning(
+                "WandB time-series truncation was requested, but no valid selected WandB histories were available."
+            )
+        else:
+            logging.info(
+                "Truncating WandB time-series data to the shortest selected run: max iteration = %d",
+                wandb_timeseries_truncation_iteration,
+            )
 
     per_run_df = build_per_run_summary(series_data)
     save_dataframe(per_run_df, output_dir / "per_run_summary.csv")
@@ -1716,6 +1804,8 @@ def main() -> None:
         cot_velocity_range=cot_velocity_range,
         cot_filtered_plot_min_velocity=args.cot_filtered_plot_min_velocity,
         cot_filtered_plot_max_velocity=args.cot_filtered_plot_max_velocity,
+        truncate_wandb_timeseries_to_shortest_run=args.truncate_wandb_timeseries_to_shortest_run,
+        wandb_timeseries_truncation_iteration=wandb_timeseries_truncation_iteration,
     )
 
     for metric_name in args.wandb_metrics:
@@ -1723,11 +1813,17 @@ def main() -> None:
         metric_stats_tables: list[pd.DataFrame] = []
 
         for label, data in series_data.items():
-            histories = [
-                data.wandb_runs[run_name]["history"]
-                for run_name in data.selected_wandb_run_names
-                if run_name in data.wandb_runs
-            ]
+            histories: list[pd.DataFrame] = []
+            for run_name in data.selected_wandb_run_names:
+                if run_name not in data.wandb_runs:
+                    continue
+
+                history = data.wandb_runs[run_name]["history"]
+                if args.truncate_wandb_timeseries_to_shortest_run:
+                    history = truncate_history_to_max_iteration(history, wandb_timeseries_truncation_iteration)
+
+                histories.append(history)
+
             stats = align_timeseries_data(histories, metric_name)
             stats = filter_timeseries_for_plotting(stats, args.plot_skip_initial_iterations)
 
@@ -1743,6 +1839,8 @@ def main() -> None:
                 stats_to_save.insert(0, "label", label)
                 stats_to_save.insert(1, "env_name", data.env_name)
                 stats_to_save.insert(2, "metric", metric_name)
+                if args.truncate_wandb_timeseries_to_shortest_run:
+                    stats_to_save.insert(3, "truncated_to_iteration", wandb_timeseries_truncation_iteration)
                 metric_stats_tables.append(stats_to_save)
 
         if metric_stats_tables:
