@@ -739,6 +739,7 @@ class ConstraintsCfg:
             "joint_vel_limit": 4.0,
         },
     )
+    
     '''
     two_foot_contact = ConstraintTerm(
         func=constraints.n_foot_contact,
