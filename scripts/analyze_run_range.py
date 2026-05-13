@@ -303,7 +303,11 @@ def parse_cot_dataframe(metrics_summary: dict[str, Any], cot_scenario_pattern: r
     return df
 
 
-def parse_json_summary(metrics_summary: dict[str, Any], cot_velocity_range: tuple[float, float], cot_df: pd.DataFrame | None) -> dict[str, Any]:
+def parse_json_summary(
+    metrics_summary: dict[str, Any],
+    cot_velocity_range: tuple[float, float],
+    cot_df: pd.DataFrame | None,
+) -> dict[str, Any]:
     summary: dict[str, Any] = {}
 
     summary["rms_error_x"] = metrics_summary.get("base_linear_velocity_x_rms_error", np.nan)
@@ -622,6 +626,26 @@ def aggregate_cot_data(run_entries: list[tuple[str, pd.DataFrame]]) -> pd.DataFr
     return stats
 
 
+def filter_cot_stats_by_velocity_range(
+    stats: pd.DataFrame,
+    min_velocity: float | None,
+    max_velocity: float | None,
+) -> pd.DataFrame:
+    if stats.empty:
+        return stats.copy()
+
+    filtered = stats.copy()
+
+    if min_velocity is not None:
+        filtered = filtered[filtered["velocity"] >= min_velocity]
+
+    if max_velocity is not None:
+        filtered = filtered[filtered["velocity"] <= max_velocity]
+
+    filtered = filtered.sort_values("velocity").reset_index(drop=True)
+    return filtered
+
+
 def build_per_run_summary(series_data: dict[str, SeriesData]) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
 
@@ -716,12 +740,19 @@ def save_text_summary(
     summary_tail_points: int,
     match_mode: str,
     cot_velocity_range: tuple[float, float],
+    cot_filtered_plot_min_velocity: float | None,
+    cot_filtered_plot_max_velocity: float | None,
 ) -> None:
     lines: list[str] = []
     lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     lines.append(f"match_mode: {match_mode}")
     lines.append(f"summary_tail_points: {summary_tail_points}")
     lines.append(f"cot_velocity_range: {cot_velocity_range[0]} to {cot_velocity_range[1]}")
+    lines.append(
+        "cot_filtered_plot_velocity_range: "
+        f"{cot_filtered_plot_min_velocity if cot_filtered_plot_min_velocity is not None else '-inf'} "
+        f"to {cot_filtered_plot_max_velocity if cot_filtered_plot_max_velocity is not None else 'inf'}"
+    )
     lines.append("")
 
     if aggregate_df.empty:
@@ -807,6 +838,10 @@ def plot_cot_comparison(
     output_dir: Path,
     export_formats: list[str],
     plot_baseline: bool,
+    output_stem: str = "plot_cot_sweep",
+    title: str = "Cost of Transport Velocity Sweep",
+    velocity_min: float | None = None,
+    velocity_max: float | None = None,
 ) -> None:
     fig, ax = plt.subplots(figsize=(12, 8))
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
@@ -814,9 +849,19 @@ def plot_cot_comparison(
     plotted_any = False
 
     for index, series in enumerate(plot_series):
-        stats = series["stats"]
+        stats = filter_cot_stats_by_velocity_range(
+            series["stats"],
+            min_velocity=velocity_min,
+            max_velocity=velocity_max,
+        )
+
         if stats.empty:
-            logging.warning("No CoT data to plot for series '%s'.", series["label"])
+            logging.warning(
+                "No CoT data to plot for series '%s' after applying velocity range [%s, %s].",
+                series["label"],
+                velocity_min,
+                velocity_max,
+            )
             continue
 
         plotted_any = True
@@ -843,31 +888,51 @@ def plot_cot_comparison(
             )
 
     if plot_baseline:
-        baseline_velocities = [0.6, 0.8, 1.0, 1.2, 1.4, 1.6]
-        baseline_cot = [0.92, 0.75, 0.65, 0.60, 0.55, 0.50]
-        ax.plot(
-            baseline_velocities,
-            baseline_cot,
-            label="Baseline (Ref. Paper)",
-            color="dimgray",
-            linestyle="--",
-            marker="s",
-            linewidth=2.5,
-            markersize=8,
+        baseline_df = pd.DataFrame(
+            {
+                "velocity": [0.6, 0.8, 1.0, 1.2, 1.4, 1.6],
+                "cost_of_transport": [0.92, 0.75, 0.65, 0.60, 0.55, 0.50],
+            }
         )
-        plotted_any = True
+
+        baseline_df = filter_cot_stats_by_velocity_range(
+            baseline_df,
+            min_velocity=velocity_min,
+            max_velocity=velocity_max,
+        )
+
+        if not baseline_df.empty:
+            ax.plot(
+                baseline_df["velocity"],
+                baseline_df["cost_of_transport"],
+                label="Baseline (Ref. Paper)",
+                color="dimgray",
+                linestyle="--",
+                marker="s",
+                linewidth=2.5,
+                markersize=8,
+            )
+            plotted_any = True
 
     if not plotted_any:
         plt.close(fig)
         return
 
-    ax.set_title("Cost of Transport Velocity Sweep", fontsize=34)
+    ax.set_title(title, fontsize=34)
     ax.set_xlabel("Commanded Velocity (m/s)")
     ax.set_ylabel("Cost of Transport")
     ax.legend()
     ax.yaxis.set_major_locator(mticker.MaxNLocator(nbins=10, prune="both"))
 
-    export_plot(fig, output_dir, "plot_cot_sweep", export_formats)
+    current_left, current_right = ax.get_xlim()
+    if velocity_min is not None:
+        current_left = velocity_min
+    if velocity_max is not None:
+        current_right = velocity_max
+    if current_left < current_right:
+        ax.set_xlim(left=current_left, right=current_right)
+
+    export_plot(fig, output_dir, output_stem, export_formats)
     plt.close(fig)
 
 
@@ -1074,7 +1139,9 @@ def collect_step_height_records(
 
             for terrain_condition, scenario_tag in (("flat", flat_scenario_tag), ("uneven", uneven_scenario_tag)):
                 start_step, end_step_exclusive = scenario_ranges[scenario_tag]
-                precomputed_scenario_metrics = json_run.metrics_summary.get("fixed_command_scenarios_metrics", {}).get(scenario_tag, {})
+                precomputed_scenario_metrics = json_run.metrics_summary.get("fixed_command_scenarios_metrics", {}).get(
+                    scenario_tag, {}
+                )
                 try:
                     scenario_records = compute_swing_height_records_for_range(
                         sim_data=sim_data,
@@ -1178,12 +1245,16 @@ def build_step_height_summary(step_height_df: pd.DataFrame) -> pd.DataFrame:
                     "env_name": env_name,
                     "flat_mean": flat_row.get("mean", np.nan),
                     "uneven_mean": uneven_row.get("mean", np.nan),
-                    "mean_difference_uneven_minus_flat": float(uneven_row.get("mean", np.nan) - flat_row.get("mean", np.nan))
+                    "mean_difference_uneven_minus_flat": float(
+                        uneven_row.get("mean", np.nan) - flat_row.get("mean", np.nan)
+                    )
                     if not pd.isna(flat_row.get("mean", np.nan)) and not pd.isna(uneven_row.get("mean", np.nan))
                     else np.nan,
                     "flat_stddev": flat_row.get("stddev", np.nan),
                     "uneven_stddev": uneven_row.get("stddev", np.nan),
-                    "stddev_difference_uneven_minus_flat": float(uneven_row.get("stddev", np.nan) - flat_row.get("stddev", np.nan))
+                    "stddev_difference_uneven_minus_flat": float(
+                        uneven_row.get("stddev", np.nan) - flat_row.get("stddev", np.nan)
+                    )
                     if not pd.isna(flat_row.get("stddev", np.nan)) and not pd.isna(uneven_row.get("stddev", np.nan))
                     else np.nan,
                 }
@@ -1423,7 +1494,22 @@ def parse_args() -> argparse.Namespace:
         type=float,
         nargs=2,
         default=(0.6, 1.6),
-        help="Velocity range used to compute per-run mean cost of transport summaries.",
+        help=(
+            "Velocity range used only for the per-run summary metric "
+            "'mean_cost_of_transport_range'. This does not affect which CoT sweep points are plotted."
+        ),
+    )
+    parser.add_argument(
+        "--cot_filtered_plot_min_velocity",
+        type=float,
+        default=0.4,
+        help="Lower commanded-velocity bound for the additional filtered CoT plot.",
+    )
+    parser.add_argument(
+        "--cot_filtered_plot_max_velocity",
+        type=float,
+        default=None,
+        help="Optional upper commanded-velocity bound for the additional filtered CoT plot.",
     )
     parser.add_argument(
         "--cot_scenario_pattern",
@@ -1481,13 +1567,33 @@ def main() -> None:
     if not args.step_height_uneven_scenario_tag:
         raise ValueError("--step_height_uneven_scenario_tag must be non-empty")
 
+    cot_velocity_range = (float(args.cot_velocity_range[0]), float(args.cot_velocity_range[1]))
+    if not np.isfinite(cot_velocity_range[0]) or not np.isfinite(cot_velocity_range[1]):
+        raise ValueError("--cot_velocity_range values must be finite")
+    if cot_velocity_range[0] > cot_velocity_range[1]:
+        raise ValueError("--cot_velocity_range lower bound must be <= upper bound")
+
+    if not np.isfinite(args.cot_filtered_plot_min_velocity):
+        raise ValueError("--cot_filtered_plot_min_velocity must be finite")
+    if (
+        args.cot_filtered_plot_max_velocity is not None
+        and not np.isfinite(args.cot_filtered_plot_max_velocity)
+    ):
+        raise ValueError("--cot_filtered_plot_max_velocity must be finite when provided")
+    if (
+        args.cot_filtered_plot_max_velocity is not None
+        and args.cot_filtered_plot_min_velocity > args.cot_filtered_plot_max_velocity
+    ):
+        raise ValueError(
+            "--cot_filtered_plot_min_velocity must be <= --cot_filtered_plot_max_velocity"
+        )
+
     output_dir = create_output_directory(args.output_name, args.labels)
     setup_logging(args.log_level, output_dir)
     setup_plotting_style()
     log_runtime_context(args, output_dir)
 
     series_specs = build_series_specs(args)
-    cot_velocity_range = (float(args.cot_velocity_range[0]), float(args.cot_velocity_range[1]))
 
     logging.info("Series configuration:")
     for index, spec in enumerate(series_specs, start=1):
@@ -1608,6 +1714,8 @@ def main() -> None:
         summary_tail_points=args.summary_tail_points,
         match_mode=args.match_mode,
         cot_velocity_range=cot_velocity_range,
+        cot_filtered_plot_min_velocity=args.cot_filtered_plot_min_velocity,
+        cot_filtered_plot_max_velocity=args.cot_filtered_plot_max_velocity,
     )
 
     for metric_name in args.wandb_metrics:
@@ -1646,6 +1754,9 @@ def main() -> None:
     cot_plot_series: list[dict[str, Any]] = []
     cot_stats_tables: list[pd.DataFrame] = []
 
+    cot_filtered_plot_series: list[dict[str, Any]] = []
+    cot_filtered_stats_tables: list[pd.DataFrame] = []
+
     for label, data in series_data.items():
         run_entries: list[tuple[str, pd.DataFrame]] = []
 
@@ -1656,11 +1767,23 @@ def main() -> None:
             run_entries.append((run_name, json_run.cot_df))
 
         stats = aggregate_cot_data(run_entries)
+        filtered_stats = filter_cot_stats_by_velocity_range(
+            stats,
+            min_velocity=args.cot_filtered_plot_min_velocity,
+            max_velocity=args.cot_filtered_plot_max_velocity,
+        )
 
         cot_plot_series.append(
             {
                 "label": label,
                 "stats": stats,
+            }
+        )
+
+        cot_filtered_plot_series.append(
+            {
+                "label": label,
+                "stats": filtered_stats,
             }
         )
 
@@ -1670,11 +1793,41 @@ def main() -> None:
             stats_to_save.insert(1, "env_name", data.env_name)
             cot_stats_tables.append(stats_to_save)
 
+        if not filtered_stats.empty:
+            filtered_stats_to_save = filtered_stats.copy()
+            filtered_stats_to_save.insert(0, "label", label)
+            filtered_stats_to_save.insert(1, "env_name", data.env_name)
+            filtered_stats_to_save.insert(2, "plot_velocity_min", args.cot_filtered_plot_min_velocity)
+            filtered_stats_to_save.insert(3, "plot_velocity_max", args.cot_filtered_plot_max_velocity)
+            cot_filtered_stats_tables.append(filtered_stats_to_save)
+
     if cot_stats_tables:
         cot_stats_df = pd.concat(cot_stats_tables, ignore_index=True)
         save_dataframe(cot_stats_df, output_dir / "cot_sweep_stats.csv")
 
-    plot_cot_comparison(cot_plot_series, output_dir, args.export_formats, args.plot_baseline)
+    if cot_filtered_stats_tables:
+        cot_filtered_stats_df = pd.concat(cot_filtered_stats_tables, ignore_index=True)
+        save_dataframe(cot_filtered_stats_df, output_dir / "cot_sweep_stats_filtered.csv")
+
+    plot_cot_comparison(
+        cot_plot_series,
+        output_dir,
+        args.export_formats,
+        args.plot_baseline,
+        output_stem="plot_cot_sweep",
+        title="Cost of Transport Velocity Sweep",
+    )
+
+    plot_cot_comparison(
+        cot_filtered_plot_series,
+        output_dir,
+        args.export_formats,
+        args.plot_baseline,
+        output_stem="plot_cot_sweep_filtered",
+        title="Cost of Transport Velocity Sweep",
+        velocity_min=args.cot_filtered_plot_min_velocity,
+        velocity_max=args.cot_filtered_plot_max_velocity,
+    )
 
     step_height_df = collect_step_height_records(
         series_data=series_data,
