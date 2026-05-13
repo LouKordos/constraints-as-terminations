@@ -1548,14 +1548,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--truncate_wandb_timeseries_to_shortest_run",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
         help=(
             "If set, truncate WandB time-series histories used for progression plots and exported "
             "time-series CSVs to the maximum iteration of the globally shortest selected WandB run "
-            "across all specified series. This does not affect final tail-based summary metrics."
-        ),
-    )
+            "across all specified series. This does not affect final tail-based summary metrics. "
+            "Use --no-truncate_wandb_timeseries_to_shortest_run to disable."
+    ),
+)
     parser.add_argument(
         "--cot_velocity_range",
         type=float,
