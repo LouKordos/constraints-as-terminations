@@ -10,12 +10,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from cycler import cycler
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
-import scienceplots  # noqa: F401
+
+try:
+    import scienceplots  # noqa: F401
+except ImportError:
+    scienceplots = None
+
 import wandb
 
 from metrics_utils import compute_swing_heights, summarize_metric
@@ -35,11 +41,11 @@ DEFAULT_SUMMARY_WANDB_METRICS = [
 ]
 
 DEFAULT_LABEL_MAP = {
-    "Curriculum/terrain_levels": "Terrain Level",
-    "Episode_Reward/track_lin_vel_xy_exp": "Velocity Tracking Reward",
-    "Episode/MaxJointPos": "Max. Joint Position (rad)",
-    "Episode/MaxAirTime": "Max. Air Time (s)",
-    "Episode/EnergyConsumed": "Energy Consumed (J)",
+    "Curriculum/terrain_levels": "Terrain level",
+    "Episode_Reward/track_lin_vel_xy_exp": "Velocity tracking reward",
+    "Episode/MaxJointPos": "Max. joint position (rad)",
+    "Episode/MaxAirTime": "Max. air time (s)",
+    "Episode/EnergyConsumed": "Energy consumed (J)",
 }
 
 DEFAULT_SUMMARY_LABEL_MAP = {
@@ -58,8 +64,32 @@ DEFAULT_SUMMARY_LABEL_MAP = {
 
 DEFAULT_STEP_HEIGHT_FLAT_SCENARIO_TAG = "walk_x_flat_terrain_1.0mps"
 DEFAULT_STEP_HEIGHT_UNEVEN_SCENARIO_TAG = "medium_walk_x_uneven_terrain"
-
 ALL_TIME_PLACEHOLDER = "ALL"
+
+# A long, publication-oriented qualitative palette. The first eight colors are based on
+# the Okabe-Ito colorblind-safe palette; the remaining colors extend the cycle for plots
+# with many baselines. Repeated colors are further disambiguated by line style and marker.
+PAPER_COLORS = [
+    "#0072B2",  # blue
+    "#D55E00",  # vermillion
+    "#009E73",  # bluish green
+    "#CC79A7",  # reddish purple
+    "#E69F00",  # orange
+    "#56B4E9",  # sky blue
+    "#000000",  # black
+    "#F0E442",  # yellow
+    "#882255",  # wine
+    "#44AA99",  # teal
+    "#999933",  # olive
+    "#332288",  # indigo
+    "#AA4499",  # purple
+    "#DDCC77",  # sand
+    "#88CCEE",  # cyan
+    "#117733",  # dark green
+]
+PAPER_LINESTYLES = ["-", "--", "-.", ":"]
+PAPER_MARKERS = ["o", "s", "D", "^", "v", "P", "X", "<", ">", "h", "*", "p"]
+BASELINE_COLOR = "0.25"
 
 
 @dataclass
@@ -125,8 +155,28 @@ def is_within_time_range(value: datetime, start_dt: datetime | None, end_dt: dat
     return True
 
 
-def setup_plotting_style() -> None:
-    plt.style.use(["science", "ieee"])
+def setup_plotting_style(plot_style: str) -> None:
+    if plot_style == "scienceplots":
+        setup_scienceplots_plotting_style()
+        return
+
+    if plot_style == "corl":
+        setup_corl_plotting_style()
+        return
+
+    raise ValueError(f"Unsupported plot_style: {plot_style}")
+
+
+def setup_scienceplots_plotting_style() -> None:
+    # This intentionally keeps the original SciencePlots-based approach available.
+    # The style stack and large font defaults mirror the earlier script, while the
+    # plotting functions below keep the newer wording of titles and axis labels.
+    try:
+        plt.style.use(["science", "ieee"])
+    except OSError:
+        logging.warning("Falling back to Matplotlib default style because SciencePlots styles were unavailable.")
+        plt.style.use("default")
+
     plt.rcParams.update(
         {
             "font.size": 28,
@@ -137,6 +187,62 @@ def setup_plotting_style() -> None:
             "legend.fontsize": 28,
             "figure.titlesize": 28,
             "figure.constrained_layout.use": True,
+            "savefig.dpi": 600,
+            "savefig.bbox": "tight",
+            "savefig.pad_inches": 0.02,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+            "svg.fonttype": "none",
+        }
+    )
+
+
+def setup_corl_plotting_style() -> None:
+    # Keep SciencePlots' compact scientific defaults, but avoid the IEEE preset because CoRL/PMLR
+    # papers are not IEEE two-column papers. The no-latex style keeps this script usable on machines
+    # without a full LaTeX installation while retaining Computer-Modern-like mathtext.
+    try:
+        plt.style.use(["science", "no-latex"])
+    except OSError:
+        logging.warning("Falling back to Matplotlib default style because SciencePlots styles were unavailable.")
+        plt.style.use("default")
+
+    plt.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "Times", "DejaVu Serif", "Computer Modern Roman"],
+            "mathtext.fontset": "cm",
+            "font.size": 8.0,
+            "axes.labelsize": 8.0,
+            "axes.titlesize": 8.5,
+            "xtick.labelsize": 7.5,
+            "ytick.labelsize": 7.5,
+            "legend.fontsize": 7.2,
+            "figure.titlesize": 8.5,
+            "axes.linewidth": 0.7,
+            "lines.linewidth": 1.35,
+            "lines.markersize": 4.2,
+            "xtick.major.width": 0.7,
+            "ytick.major.width": 0.7,
+            "xtick.minor.width": 0.5,
+            "ytick.minor.width": 0.5,
+            "xtick.major.size": 3.0,
+            "ytick.major.size": 3.0,
+            "xtick.minor.size": 1.8,
+            "ytick.minor.size": 1.8,
+            "legend.frameon": False,
+            "legend.handlelength": 1.8,
+            "legend.handletextpad": 0.4,
+            "legend.borderaxespad": 0.2,
+            "legend.columnspacing": 0.8,
+            "figure.constrained_layout.use": True,
+            "savefig.dpi": 600,
+            "savefig.bbox": "tight",
+            "savefig.pad_inches": 0.02,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+            "svg.fonttype": "none",
+            "axes.prop_cycle": cycler(color=PAPER_COLORS),
         }
     )
 
@@ -251,7 +357,142 @@ def save_dataframe(df: pd.DataFrame, path: Path) -> None:
 
 def export_plot(fig: plt.Figure, output_dir: Path, stem: str, export_formats: list[str]) -> None:
     for export_format in export_formats:
-        fig.savefig(output_dir / f"{stem}.{export_format}", dpi=600, bbox_inches="tight")
+        fig.savefig(
+            output_dir / f"{stem}.{export_format}",
+            dpi=600,
+            bbox_inches="tight",
+            pad_inches=0.02,
+            facecolor="white",
+        )
+
+
+def get_series_plot_style(index: int, with_marker: bool, plot_style: str) -> dict[str, Any]:
+    if plot_style == "scienceplots":
+        colors = plt.rcParams["axes.prop_cycle"].by_key().get("color", PAPER_COLORS)
+        if not colors:
+            colors = PAPER_COLORS
+
+        style: dict[str, Any] = {
+            "color": colors[index % len(colors)],
+            "linestyle": "-",
+        }
+        if with_marker:
+            style["marker"] = "o"
+        return style
+
+    style = {
+        "color": PAPER_COLORS[index % len(PAPER_COLORS)],
+        "linestyle": PAPER_LINESTYLES[index % len(PAPER_LINESTYLES)],
+    }
+    if with_marker:
+        style["marker"] = PAPER_MARKERS[index % len(PAPER_MARKERS)]
+        style["markerfacecolor"] = "white"
+        style["markeredgewidth"] = 0.8
+    return style
+
+
+def format_iteration_tick(value: float, _position: int) -> str:
+    if abs(value) >= 1000:
+        scaled = value / 1000.0
+        if abs(scaled - round(scaled)) < 1e-8:
+            return f"{int(round(scaled))}k"
+        return f"{scaled:.1f}k"
+    if abs(value - round(value)) < 1e-8:
+        return f"{int(round(value))}"
+    return f"{value:g}"
+
+
+def as_float_array(values: pd.Series) -> np.ndarray:
+    return pd.to_numeric(values, errors="coerce").to_numpy(dtype=float)
+
+
+def format_paper_axis(
+    ax: plt.Axes,
+    grid_alpha: float,
+    enable_minor_ticks: bool = True,
+    hide_top_right_spines: bool = True,
+) -> None:
+    if enable_minor_ticks:
+        ax.minorticks_on()
+
+    ax.grid(True, which="major", axis="both", color="0.82", linewidth=0.45, alpha=grid_alpha)
+    ax.grid(True, which="minor", axis="both", color="0.90", linewidth=0.30, alpha=0.65 * grid_alpha)
+    ax.tick_params(axis="both", which="both", direction="out")
+
+    if hide_top_right_spines:
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+
+def format_plot_axis(ax: plt.Axes, grid_alpha: float, plot_style: str) -> None:
+    if plot_style == "scienceplots":
+        ax.tick_params(axis="both", which="both", direction="out")
+        return
+
+    format_paper_axis(ax, grid_alpha=grid_alpha)
+
+
+def add_paper_legend(ax: plt.Axes, legend_columns: int, legend_location: str) -> None:
+    handles, labels = ax.get_legend_handles_labels()
+    if not handles:
+        return
+
+    ncol = min(max(1, legend_columns), len(handles))
+    common_kwargs = {
+        "ncol": ncol,
+        "frameon": False,
+        "columnspacing": 0.8,
+        "handlelength": 1.9,
+        "handletextpad": 0.4,
+        "borderaxespad": 0.2,
+    }
+
+    if legend_location == "auto":
+        if len(handles) > 4:
+            ax.legend(
+                handles,
+                labels,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 1.01),
+                **common_kwargs,
+            )
+        else:
+            ax.legend(handles, labels, loc="best", **common_kwargs)
+    else:
+        ax.legend(handles, labels, loc=legend_location, **common_kwargs)
+
+
+def add_plot_legend(ax: plt.Axes, legend_columns: int, legend_location: str, plot_style: str) -> None:
+    if plot_style == "scienceplots":
+        if legend_location == "auto":
+            ax.legend()
+        else:
+            ax.legend(loc=legend_location, ncol=max(1, legend_columns))
+        return
+
+    add_paper_legend(ax, legend_columns=legend_columns, legend_location=legend_location)
+
+
+def fill_ci_band(
+    ax: plt.Axes,
+    x: np.ndarray,
+    mean: np.ndarray,
+    ci95: np.ndarray,
+    color: str,
+    alpha: float,
+) -> None:
+    finite_mask = np.isfinite(x) & np.isfinite(mean) & np.isfinite(ci95)
+    if not finite_mask.any():
+        return
+
+    ax.fill_between(
+        x[finite_mask],
+        mean[finite_mask] - ci95[finite_mask],
+        mean[finite_mask] + ci95[finite_mask],
+        color=color,
+        alpha=alpha,
+        linewidth=0.0,
+    )
 
 
 def extract_checkpoint_from_path(path: Path) -> int | None:
@@ -792,10 +1033,12 @@ def save_text_summary(
     cot_filtered_plot_max_velocity: float | None,
     truncate_wandb_timeseries_to_shortest_run: bool,
     wandb_timeseries_truncation_iteration: int | None,
+    plot_style: str,
 ) -> None:
     lines: list[str] = []
     lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     lines.append(f"match_mode: {match_mode}")
+    lines.append(f"plot_style: {plot_style}")
     lines.append(f"summary_tail_points: {summary_tail_points}")
     lines.append(f"cot_velocity_range: {cot_velocity_range[0]} to {cot_velocity_range[1]}")
     lines.append(
@@ -840,10 +1083,17 @@ def plot_timeseries(
     plot_series: list[dict[str, Any]],
     output_dir: Path,
     export_formats: list[str],
+    figure_width: float,
+    figure_height: float,
+    show_titles: bool,
+    legend_columns: int,
+    legend_location: str,
+    ci_alpha: float,
+    grid_alpha: float,
+    plot_style: str,
 ) -> None:
-    fig, ax = plt.subplots(figsize=(12, 8))
-    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    linewidth = 2.0 if metric_name == "Curriculum/terrain_levels" else 1.5
+    fig, ax = plt.subplots(figsize=(figure_width, figure_height))
+    linewidth = 1.55 if metric_name == "Curriculum/terrain_levels" else 1.35
     ylabel = DEFAULT_LABEL_MAP.get(metric_name, metric_name.split("/")[-1].replace("_", " ").title())
 
     plotted_any = False
@@ -854,37 +1104,46 @@ def plot_timeseries(
             logging.warning("No data to plot for series '%s' and metric '%s'.", series["label"], metric_name)
             continue
 
+        x = as_float_array(stats["iteration"])
+        mean = as_float_array(stats["mean"])
+        ci95 = as_float_array(stats["ci95"])
+        finite_line_mask = np.isfinite(x) & np.isfinite(mean)
+        if not finite_line_mask.any():
+            logging.warning("No finite data to plot for series '%s' and metric '%s'.", series["label"], metric_name)
+            continue
+
         plotted_any = True
-        color = colors[index % len(colors)]
+        style = get_series_plot_style(index, with_marker=False, plot_style=plot_style)
+        color = style["color"]
 
         ax.plot(
-            stats["iteration"],
-            stats["mean"],
+            x[finite_line_mask],
+            mean[finite_line_mask],
             label=series["label"],
-            color=color,
             linewidth=linewidth,
+            solid_capstyle="round",
+            **style,
         )
-
-        if not np.all(np.isnan(stats["ci95"])):
-            ax.fill_between(
-                stats["iteration"],
-                stats["mean"] - stats["ci95"],
-                stats["mean"] + stats["ci95"],
-                color=color,
-                alpha=0.2,
-            )
+        fill_ci_band(ax, x, mean, ci95, color=color, alpha=ci_alpha)
 
     if not plotted_any:
         plt.close(fig)
         return
 
-    ax.set_title(f"{ylabel} Progression", fontsize=34)
-    ax.set_xlabel("Iteration")
+    if show_titles:
+        ax.set_title(f"{ylabel} progression")
+    ax.set_xlabel("Training iteration")
     ax.set_ylabel(ylabel)
-    ax.legend()
+    ax.xaxis.set_major_locator(mticker.MaxNLocator(nbins=5, integer=True))
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(format_iteration_tick))
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(nbins=5, prune=None))
+    ax.margins(x=0.01)
 
     if metric_name == "Episode/EnergyConsumed":
         ax.set_ylim(0, 2000)
+
+    format_plot_axis(ax, grid_alpha=grid_alpha, plot_style=plot_style)
+    add_plot_legend(ax, legend_columns=legend_columns, legend_location=legend_location, plot_style=plot_style)
 
     export_plot(fig, output_dir, f"plot_wandb_{sanitize_filename(metric_name)}", export_formats)
     plt.close(fig)
@@ -895,13 +1154,20 @@ def plot_cot_comparison(
     output_dir: Path,
     export_formats: list[str],
     plot_baseline: bool,
+    figure_width: float,
+    figure_height: float,
+    show_titles: bool,
+    legend_columns: int,
+    legend_location: str,
+    ci_alpha: float,
+    grid_alpha: float,
+    plot_style: str,
     output_stem: str = "plot_cot_sweep",
-    title: str = "Cost of Transport Velocity Sweep",
+    title: str = "Cost of transport velocity sweep",
     velocity_min: float | None = None,
     velocity_max: float | None = None,
 ) -> None:
-    fig, ax = plt.subplots(figsize=(12, 8))
-    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    fig, ax = plt.subplots(figsize=(figure_width, figure_height))
 
     plotted_any = False
 
@@ -921,28 +1187,28 @@ def plot_cot_comparison(
             )
             continue
 
+        x = as_float_array(stats["velocity"])
+        mean = as_float_array(stats["mean"])
+        ci95 = as_float_array(stats["ci95"])
+        finite_line_mask = np.isfinite(x) & np.isfinite(mean)
+        if not finite_line_mask.any():
+            logging.warning("No finite CoT data to plot for series '%s'.", series["label"])
+            continue
+
         plotted_any = True
-        color = colors[index % len(colors)]
+        style = get_series_plot_style(index, with_marker=True, plot_style=plot_style)
+        color = style["color"]
 
         ax.plot(
-            stats["velocity"],
-            stats["mean"],
+            x[finite_line_mask],
+            mean[finite_line_mask],
             label=series["label"],
-            color=color,
-            linestyle="-",
-            marker="o",
-            linewidth=2.5,
-            markersize=8,
+            linewidth=1.55,
+            markersize=4.4,
+            solid_capstyle="round",
+            **style,
         )
-
-        if not np.all(np.isnan(stats["ci95"])):
-            ax.fill_between(
-                stats["velocity"],
-                stats["mean"] - stats["ci95"],
-                stats["mean"] + stats["ci95"],
-                color=color,
-                alpha=0.2,
-            )
+        fill_ci_band(ax, x, mean, ci95, color=color, alpha=ci_alpha)
 
     if plot_baseline:
         baseline_df = pd.DataFrame(
@@ -962,12 +1228,14 @@ def plot_cot_comparison(
             ax.plot(
                 baseline_df["velocity"],
                 baseline_df["cost_of_transport"],
-                label="Baseline (Ref. Paper)",
-                color="dimgray",
-                linestyle="--",
+                label="Baseline (ref.)",
+                color=BASELINE_COLOR,
+                linestyle=(0, (4, 2)),
                 marker="s",
-                linewidth=2.5,
-                markersize=8,
+                markerfacecolor="white",
+                markeredgewidth=0.8,
+                linewidth=1.45,
+                markersize=4.2,
             )
             plotted_any = True
 
@@ -975,11 +1243,13 @@ def plot_cot_comparison(
         plt.close(fig)
         return
 
-    ax.set_title(title, fontsize=34)
-    ax.set_xlabel("Commanded Velocity (m/s)")
-    ax.set_ylabel("Cost of Transport")
-    ax.legend()
-    ax.yaxis.set_major_locator(mticker.MaxNLocator(nbins=10, prune="both"))
+    if show_titles:
+        ax.set_title(title)
+    ax.set_xlabel(r"Commanded velocity ($\mathrm{m\,s^{-1}}$)")
+    ax.set_ylabel("Cost of transport")
+    ax.xaxis.set_major_locator(mticker.MultipleLocator(0.2))
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(nbins=6, prune=None))
+    ax.margins(x=0.02, y=0.08)
 
     current_left, current_right = ax.get_xlim()
     if velocity_min is not None:
@@ -988,6 +1258,9 @@ def plot_cot_comparison(
         current_right = velocity_max
     if current_left < current_right:
         ax.set_xlim(left=current_left, right=current_right)
+
+    format_plot_axis(ax, grid_alpha=grid_alpha, plot_style=plot_style)
+    add_plot_legend(ax, legend_columns=legend_columns, legend_location=legend_location, plot_style=plot_style)
 
     export_plot(fig, output_dir, output_stem, export_formats)
     plt.close(fig)
@@ -1340,23 +1613,29 @@ def plot_step_height_box_comparison(
     output_dir: Path,
     export_formats: list[str],
     showfliers: bool,
+    figure_width: float,
+    figure_height: float,
+    show_titles: bool,
+    legend_columns: int,
+    legend_location: str,
+    grid_alpha: float,
+    plot_style: str,
 ) -> None:
     if step_height_df.empty:
         logging.warning("Skipping step-height box plot: no step-height samples were collected.")
         return
 
-    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     ordered_labels = list(dict.fromkeys(step_height_df["label"].tolist()))
 
     datasets: list[np.ndarray] = []
     positions: list[float] = []
+    box_kinds: list[str] = []
     tick_positions: list[float] = []
     tick_labels: list[str] = []
-    box_facecolors: list[tuple[Any, float]] = []
 
-    current_position = 1.0
-    group_gap = 0.9
-    pair_spacing = 0.9
+    flat_offset = -0.18
+    uneven_offset = 0.18
+    box_width = 0.30
 
     for label_index, label in enumerate(ordered_labels):
         label_group = step_height_df[step_height_df["label"] == label]
@@ -1371,40 +1650,36 @@ def plot_step_height_box_comparison(
 
         if flat_values.size == 0 and uneven_values.size == 0:
             logging.warning("Skipping step-height box entries for '%s': both terrain conditions are empty.", label)
-            current_position += 2.0 + group_gap
             continue
 
-        base_color = colors[label_index % len(colors)]
+        center = float(label_index + 1)
+        tick_positions.append(center)
+        tick_labels.append(label)
 
-        for condition_name, values, alpha in (
-            ("Flat", flat_values, 0.35),
-            ("Uneven", uneven_values, 0.75),
-        ):
-            if values.size == 0:
-                logging.warning("No step-height samples for label='%s', condition='%s'.", label, condition_name)
-                current_position += pair_spacing
-                continue
+        if flat_values.size > 0:
+            datasets.append(flat_values)
+            positions.append(center + flat_offset)
+            box_kinds.append("flat")
+        else:
+            logging.warning("No step-height samples for label='%s', condition='flat'.", label)
 
-            datasets.append(values)
-            positions.append(current_position)
-            tick_positions.append(current_position)
-            tick_labels.append(f"{label}\n{condition_name}")
-            box_facecolors.append((base_color, alpha))
-            current_position += pair_spacing
-
-        current_position += group_gap
+        if uneven_values.size > 0:
+            datasets.append(uneven_values)
+            positions.append(center + uneven_offset)
+            box_kinds.append("uneven")
+        else:
+            logging.warning("No step-height samples for label='%s', condition='uneven'.", label)
 
     if not datasets:
         logging.warning("Skipping step-height box plot: all step-height groups were empty.")
         return
 
-    figure_width = max(12.0, 2.8 * len(datasets))
-    fig, ax = plt.subplots(figsize=(figure_width, 8))
+    fig, ax = plt.subplots(figsize=(figure_width, figure_height))
 
     boxplot = ax.boxplot(
         datasets,
         positions=positions,
-        widths=0.65,
+        widths=box_width,
         patch_artist=True,
         showmeans=True,
         showfliers=showfliers,
@@ -1412,36 +1687,63 @@ def plot_step_height_box_comparison(
             "marker": "D",
             "markerfacecolor": "black",
             "markeredgecolor": "black",
-            "markersize": 7,
+            "markersize": 3.2,
         },
         medianprops={
             "color": "black",
-            "linewidth": 1.5,
+            "linewidth": 0.9,
         },
         whiskerprops={
-            "linewidth": 1.3,
+            "linewidth": 0.8,
         },
         capprops={
-            "linewidth": 1.3,
+            "linewidth": 0.8,
+        },
+        flierprops={
+            "marker": ".",
+            "markersize": 2.2,
+            "markeredgecolor": "0.25",
+            "alpha": 0.45,
         },
     )
 
-    for patch, (facecolor, alpha) in zip(boxplot["boxes"], box_facecolors):
-        patch.set_facecolor(facecolor)
-        patch.set_alpha(alpha)
-        patch.set_edgecolor("black")
-        patch.set_linewidth(1.3)
+    for patch, kind in zip(boxplot["boxes"], box_kinds):
+        if kind == "flat":
+            patch.set_facecolor("white")
+            patch.set_edgecolor("0.20")
+            patch.set_hatch("//")
+            patch.set_alpha(1.0)
+        else:
+            patch.set_facecolor("0.75")
+            patch.set_edgecolor("0.20")
+            patch.set_hatch("")
+            patch.set_alpha(1.0)
+        patch.set_linewidth(0.8)
 
-    ax.set_title("Swing Height Distribution: Flat vs Uneven Terrain", fontsize=34)
-    ax.set_ylabel(r"Max Swing Height ($\mathrm{m}$)")
+    if show_titles:
+        ax.set_title("Swing-height distribution: flat vs. uneven terrain")
+    ax.set_ylabel(r"Max swing height ($\mathrm{m}$)")
     ax.set_xticks(tick_positions)
     ax.set_xticklabels(tick_labels)
+    if len(tick_labels) > 4:
+        for tick_label in ax.get_xticklabels():
+            tick_label.set_rotation(25)
+            tick_label.set_ha("right")
 
     legend_handles = [
-        Patch(facecolor="black", edgecolor="black", alpha=0.35, label="Flat terrain"),
-        Patch(facecolor="black", edgecolor="black", alpha=0.75, label="Uneven terrain"),
+        Patch(facecolor="white", edgecolor="0.20", hatch="//", label="Flat terrain"),
+        Patch(facecolor="0.75", edgecolor="0.20", label="Uneven terrain"),
     ]
-    ax.legend(handles=legend_handles, loc="upper left")
+    ax.legend(
+        handles=legend_handles,
+        loc="best" if legend_location == "auto" else legend_location,
+        ncol=min(legend_columns, 2),
+        frameon=False if plot_style == "corl" else plt.rcParams.get("legend.frameon", True),
+    )
+
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(nbins=6, prune=None))
+    ax.margins(x=0.03, y=0.08)
+    format_plot_axis(ax, grid_alpha=grid_alpha, plot_style=plot_style)
 
     export_plot(fig, output_dir, "plot_step_height_box_comparison", export_formats)
     plt.close(fig)
@@ -1555,8 +1857,8 @@ def parse_args() -> argparse.Namespace:
             "time-series CSVs to the maximum iteration of the globally shortest selected WandB run "
             "across all specified series. This does not affect final tail-based summary metrics. "
             "Use --no-truncate_wandb_timeseries_to_shortest_run to disable."
-    ),
-)
+        ),
+    )
     parser.add_argument(
         "--cot_velocity_range",
         type=float,
@@ -1608,6 +1910,71 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Show outliers in the step-height box plot.",
     )
+    parser.add_argument(
+        "--plot_style",
+        choices=["corl", "scienceplots"],
+        default="corl",
+        help=(
+            "Plot styling backend. 'corl' uses the publication-oriented style with a long "
+            "color/marker/line-style cycle. 'scienceplots' uses the previous SciencePlots "
+            "+ IEEE style stack while keeping the updated axis labels and titles."
+        ),
+    )
+
+    parser.add_argument(
+        "--figure_width",
+        type=float,
+        default=6.75,
+        help="Figure width in inches. The default is intended for full-width single-column CoRL/PMLR-style figures.",
+    )
+    parser.add_argument(
+        "--timeseries_figure_height",
+        type=float,
+        default=3.35,
+        help="Figure height in inches for WandB time-series plots.",
+    )
+    parser.add_argument(
+        "--cot_figure_height",
+        type=float,
+        default=3.35,
+        help="Figure height in inches for CoT sweep plots.",
+    )
+    parser.add_argument(
+        "--step_height_figure_height",
+        type=float,
+        default=3.55,
+        help="Figure height in inches for the step-height box plot.",
+    )
+    parser.add_argument(
+        "--plot_titles",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Draw titles inside figure files. For papers, captions usually make internal titles redundant.",
+    )
+    parser.add_argument(
+        "--legend_columns",
+        type=int,
+        default=2,
+        help="Maximum number of legend columns. For more than four entries, auto legends are placed above the axes.",
+    )
+    parser.add_argument(
+        "--legend_location",
+        type=str,
+        default="auto",
+        help="Matplotlib legend location, or 'auto' for inside legends up to four entries and top legends above that.",
+    )
+    parser.add_argument(
+        "--ci_alpha",
+        type=float,
+        default=0.14,
+        help="Alpha value for 95%% CI bands.",
+    )
+    parser.add_argument(
+        "--grid_alpha",
+        type=float,
+        default=0.55,
+        help="Alpha value for the light plot grid.",
+    )
 
     parser.add_argument("--output_name", type=str, default="analysis", help="Base name for the output directory.")
     parser.add_argument("--export_formats", nargs="+", default=["pdf"], help="Plot export formats such as pdf png svg.")
@@ -1634,6 +2001,20 @@ def main() -> None:
         raise ValueError("--step_height_flat_scenario_tag must be non-empty")
     if not args.step_height_uneven_scenario_tag:
         raise ValueError("--step_height_uneven_scenario_tag must be non-empty")
+    if args.figure_width <= 0.0:
+        raise ValueError("--figure_width must be positive")
+    if args.timeseries_figure_height <= 0.0:
+        raise ValueError("--timeseries_figure_height must be positive")
+    if args.cot_figure_height <= 0.0:
+        raise ValueError("--cot_figure_height must be positive")
+    if args.step_height_figure_height <= 0.0:
+        raise ValueError("--step_height_figure_height must be positive")
+    if args.legend_columns <= 0:
+        raise ValueError("--legend_columns must be positive")
+    if not (0.0 <= args.ci_alpha <= 1.0):
+        raise ValueError("--ci_alpha must be between 0 and 1")
+    if not (0.0 <= args.grid_alpha <= 1.0):
+        raise ValueError("--grid_alpha must be between 0 and 1")
 
     cot_velocity_range = (float(args.cot_velocity_range[0]), float(args.cot_velocity_range[1]))
     if not np.isfinite(cot_velocity_range[0]) or not np.isfinite(cot_velocity_range[1]):
@@ -1658,7 +2039,7 @@ def main() -> None:
 
     output_dir = create_output_directory(args.output_name, args.labels)
     setup_logging(args.log_level, output_dir)
-    setup_plotting_style()
+    setup_plotting_style(args.plot_style)
     log_runtime_context(args, output_dir)
 
     series_specs = build_series_specs(args)
@@ -1807,6 +2188,7 @@ def main() -> None:
         cot_filtered_plot_max_velocity=args.cot_filtered_plot_max_velocity,
         truncate_wandb_timeseries_to_shortest_run=args.truncate_wandb_timeseries_to_shortest_run,
         wandb_timeseries_truncation_iteration=wandb_timeseries_truncation_iteration,
+        plot_style=args.plot_style,
     )
 
     for metric_name in args.wandb_metrics:
@@ -1848,7 +2230,20 @@ def main() -> None:
             metric_df = pd.concat(metric_stats_tables, ignore_index=True)
             save_dataframe(metric_df, output_dir / f"timeseries_{sanitize_filename(metric_name)}.csv")
 
-        plot_timeseries(metric_name, plot_series, output_dir, args.export_formats)
+        plot_timeseries(
+            metric_name=metric_name,
+            plot_series=plot_series,
+            output_dir=output_dir,
+            export_formats=args.export_formats,
+            figure_width=args.figure_width,
+            figure_height=args.timeseries_figure_height,
+            show_titles=args.plot_titles,
+            legend_columns=args.legend_columns,
+            legend_location=args.legend_location,
+            ci_alpha=args.ci_alpha,
+            grid_alpha=args.grid_alpha,
+            plot_style=args.plot_style,
+        )
 
     cot_plot_series: list[dict[str, Any]] = []
     cot_stats_tables: list[pd.DataFrame] = []
@@ -1909,21 +2304,37 @@ def main() -> None:
         save_dataframe(cot_filtered_stats_df, output_dir / "cot_sweep_stats_filtered.csv")
 
     plot_cot_comparison(
-        cot_plot_series,
-        output_dir,
-        args.export_formats,
-        args.plot_baseline,
+        plot_series=cot_plot_series,
+        output_dir=output_dir,
+        export_formats=args.export_formats,
+        plot_baseline=args.plot_baseline,
+        figure_width=args.figure_width,
+        figure_height=args.cot_figure_height,
+        show_titles=args.plot_titles,
+        legend_columns=args.legend_columns,
+        legend_location=args.legend_location,
+        ci_alpha=args.ci_alpha,
+        grid_alpha=args.grid_alpha,
+        plot_style=args.plot_style,
         output_stem="plot_cot_sweep",
-        title="Cost of Transport Velocity Sweep",
+        title="Cost of transport velocity sweep",
     )
 
     plot_cot_comparison(
-        cot_filtered_plot_series,
-        output_dir,
-        args.export_formats,
-        args.plot_baseline,
+        plot_series=cot_filtered_plot_series,
+        output_dir=output_dir,
+        export_formats=args.export_formats,
+        plot_baseline=args.plot_baseline,
+        figure_width=args.figure_width,
+        figure_height=args.cot_figure_height,
+        show_titles=args.plot_titles,
+        legend_columns=args.legend_columns,
+        legend_location=args.legend_location,
+        ci_alpha=args.ci_alpha,
+        grid_alpha=args.grid_alpha,
+        plot_style=args.plot_style,
         output_stem="plot_cot_sweep_filtered",
-        title="Cost of Transport Velocity Sweep",
+        title="Cost of transport velocity sweep",
         velocity_min=args.cot_filtered_plot_min_velocity,
         velocity_max=args.cot_filtered_plot_max_velocity,
     )
@@ -1943,6 +2354,13 @@ def main() -> None:
         output_dir=output_dir,
         export_formats=args.export_formats,
         showfliers=args.step_height_showfliers,
+        figure_width=args.figure_width,
+        figure_height=args.step_height_figure_height,
+        show_titles=args.plot_titles,
+        legend_columns=args.legend_columns,
+        legend_location=args.legend_location,
+        grid_alpha=args.grid_alpha,
+        plot_style=args.plot_style,
     )
 
     logging.info("Finished. Outputs written to: %s", output_dir)
