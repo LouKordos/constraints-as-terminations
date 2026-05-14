@@ -66,26 +66,23 @@ DEFAULT_STEP_HEIGHT_FLAT_SCENARIO_TAG = "walk_x_flat_terrain_1.0mps"
 DEFAULT_STEP_HEIGHT_UNEVEN_SCENARIO_TAG = "medium_walk_x_uneven_terrain"
 ALL_TIME_PLACEHOLDER = "ALL"
 
-# A long, publication-oriented qualitative palette. The first eight colors are based on
-# the Okabe-Ito colorblind-safe palette; the remaining colors extend the cycle for plots
-# with many baselines. Repeated colors are further disambiguated by line style and marker.
 PAPER_COLORS = [
-    "#0072B2",  # blue
-    "#D55E00",  # vermillion
-    "#009E73",  # bluish green
-    "#CC79A7",  # reddish purple
-    "#E69F00",  # orange
-    "#56B4E9",  # sky blue
-    "#000000",  # black
-    "#F0E442",  # yellow
-    "#882255",  # wine
-    "#44AA99",  # teal
-    "#999933",  # olive
-    "#332288",  # indigo
-    "#AA4499",  # purple
-    "#DDCC77",  # sand
-    "#88CCEE",  # cyan
-    "#117733",  # dark green
+    "#0072B2",
+    "#D55E00",
+    "#009E73",
+    "#CC79A7",
+    "#E69F00",
+    "#56B4E9",
+    "#000000",
+    "#F0E442",
+    "#882255",
+    "#44AA99",
+    "#999933",
+    "#332288",
+    "#AA4499",
+    "#DDCC77",
+    "#88CCEE",
+    "#117733",
 ]
 PAPER_LINESTYLES = ["-", "--", "-.", ":"]
 PAPER_MARKERS = ["o", "s", "D", "^", "v", "P", "X", "<", ">", "h", "*", "p"]
@@ -168,9 +165,6 @@ def setup_plotting_style(plot_style: str) -> None:
 
 
 def setup_scienceplots_plotting_style() -> None:
-    # This intentionally keeps the original SciencePlots-based approach available.
-    # The style stack and large font defaults mirror the earlier script, while the
-    # plotting functions below keep the newer wording of titles and axis labels.
     try:
         plt.style.use(["science", "ieee"])
     except OSError:
@@ -198,9 +192,6 @@ def setup_scienceplots_plotting_style() -> None:
 
 
 def setup_corl_plotting_style() -> None:
-    # Keep SciencePlots' compact scientific defaults, but avoid the IEEE preset because CoRL/PMLR
-    # papers are not IEEE two-column papers. The no-latex style keeps this script usable on machines
-    # without a full LaTeX installation while retaining Computer-Modern-like mathtext.
     try:
         plt.style.use(["science", "no-latex"])
     except OSError:
@@ -248,7 +239,6 @@ def setup_corl_plotting_style() -> None:
 
 
 def get_repo_root() -> Path:
-    # This script is assumed to live in $REPO_ROOT/scripts.
     return Path(__file__).resolve().parent.parent
 
 
@@ -391,6 +381,14 @@ def get_series_plot_style(index: int, with_marker: bool, plot_style: str) -> dic
     return style
 
 
+def get_timeseries_linewidth(metric_name: str) -> float:
+    if metric_name == "Curriculum/terrain_levels":
+        return 1.4
+    if metric_name == "Episode_Reward/track_lin_vel_xy_exp":
+        return 1.0
+    return 1.3
+
+
 def format_iteration_tick(value: float, _position: int) -> str:
     if abs(value) >= 1000:
         scaled = value / 1000.0
@@ -415,9 +413,18 @@ def format_paper_axis(
     if enable_minor_ticks:
         ax.minorticks_on()
 
+    ax.set_axisbelow(True)
     ax.grid(True, which="major", axis="both", color="0.82", linewidth=0.45, alpha=grid_alpha)
     ax.grid(True, which="minor", axis="both", color="0.90", linewidth=0.30, alpha=0.65 * grid_alpha)
-    ax.tick_params(axis="both", which="both", direction="out")
+    ax.tick_params(
+        axis="both",
+        which="both",
+        direction="out",
+        top=False,
+        right=False,
+        labeltop=False,
+        labelright=False,
+    )
 
     if hide_top_right_spines:
         ax.spines["top"].set_visible(False)
@@ -1093,7 +1100,7 @@ def plot_timeseries(
     plot_style: str,
 ) -> None:
     fig, ax = plt.subplots(figsize=(figure_width, figure_height))
-    linewidth = 1.55 if metric_name == "Curriculum/terrain_levels" else 1.35
+    linewidth = get_timeseries_linewidth(metric_name)
     ylabel = DEFAULT_LABEL_MAP.get(metric_name, metric_name.split("/")[-1].replace("_", " ").title())
 
     plotted_any = False
@@ -1954,7 +1961,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--legend_columns",
         type=int,
-        default=2,
+        default=6,
         help="Maximum number of legend columns. For more than four entries, auto legends are placed above the axes.",
     )
     parser.add_argument(
@@ -1966,7 +1973,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ci_alpha",
         type=float,
-        default=0.14,
+        default=0.28,
         help="Alpha value for 95%% CI bands.",
     )
     parser.add_argument(
