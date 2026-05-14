@@ -8,6 +8,7 @@ import json
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
 import matplotlib.animation as animation
 import matplotlib.colors as colors
@@ -227,27 +228,307 @@ def create_height_map_animation(height_map_sequence: np.ndarray, foot_positions_
     animation_obj.save(output_path, fps=fps)
     plt.close()
 
-def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_times: list[float], foot_labels: list[str], output_path: str, spacing: float = 1.0):
+CORL_GAIT_FIGURE_WIDTH = 6.75
+CORL_GAIT_ROW_HEIGHT = 0.34
+CORL_GAIT_ROW_GAP = 0.10
+CORL_GAIT_TOP_BOTTOM_MARGIN = 0.30
+CORL_GAIT_RESET_COLOR = "#E69F00"
+CORL_GAIT_FOOT_COLORS = [
+    "#1f77b4",  # blue
+    "#ff7f0e",  # orange
+    "#2ca02c",  # green
+    "#cc79a7",  # pink/magenta-like accent used in the CoRL plots
+]
+
+
+def _shorten_foot_label(label: str) -> str:
+    """
+    Converts verbose foot labels to compact paper labels.
+
+    Examples:
+    - "Front right" -> "FR"
+    - "front_right" -> "FR"
+    - "Rear left" / "Hind left" -> "RL"
+    - already-short labels such as "FR" are preserved.
+    """
+    label_str = str(label)
+    normalized = (
+        label_str.strip()
+        .lower()
+        .replace("-", "_")
+        .replace(" ", "_")
+        .replace("__", "_")
+    )
+
+    direct_map = {
+        "front_left": "FL",
+        "front_right": "FR",
+        "rear_left": "RL",
+        "rear_right": "RR",
+        "hind_left": "RL",
+        "hind_right": "RR",
+        "back_left": "RL",
+        "back_right": "RR",
+        "left_front": "FL",
+        "right_front": "FR",
+        "left_rear": "RL",
+        "right_rear": "RR",
+        "left_hind": "RL",
+        "right_hind": "RR",
+        "fl": "FL",
+        "fr": "FR",
+        "rl": "RL",
+        "rr": "RR",
+        "hl": "RL",
+        "hr": "RR",
+    }
+
+    if normalized in direct_map:
+        return direct_map[normalized]
+
+    upper_label = label_str.strip().upper()
+    for prefix in ("FL", "FR", "RL", "RR", "HL", "HR"):
+        if upper_label == prefix or upper_label.startswith(prefix + "_") or upper_label.startswith(prefix + "-"):
+            if prefix == "HL":
+                return "RL"
+            if prefix == "HR":
+                return "RR"
+            return prefix
+
+    return label_str
+
+
+def _get_nominal_step_dt(sim_times: np.ndarray) -> float:
+    if sim_times.shape[0] < 2:
+        return 0.0
+
+    diffs = np.diff(sim_times.astype(float))
+    positive_diffs = diffs[np.isfinite(diffs) & (diffs > 0.0)]
+    if positive_diffs.size == 0:
+        return 0.0
+
+    return float(np.median(positive_diffs))
+
+
+def _format_gait_axis_for_corl(ax: plt.Axes, grid_alpha: float = 0.55) -> None:
+    ax.set_axisbelow(True)
+    ax.minorticks_on()
+
+    ax.grid(
+        True,
+        which="major",
+        axis="x",
+        color="0.82",
+        linewidth=0.45,
+        alpha=grid_alpha,
+    )
+    ax.grid(
+        True,
+        which="minor",
+        axis="x",
+        color="0.90",
+        linewidth=0.30,
+        alpha=0.65 * grid_alpha,
+    )
+
+    ax.tick_params(
+        axis="both",
+        which="both",
+        direction="out",
+        top=False,
+        right=False,
+        labeltop=False,
+        labelright=False,
+    )
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.xaxis.set_major_locator(mticker.MaxNLocator(nbins=5, prune=None))
+    ax.xaxis.set_minor_locator(mticker.AutoMinorLocator(2))
+
+def _get_corl_gait_foot_colors(num_feet: int) -> list[str]:
+    """
+    Returns a stable per-foot color list using the same palette family as the
+    CoRL sweep plots. For quadrupeds this yields:
+    FL/foot0 -> blue, FR/foot1 -> orange, RL/foot2 -> green, RR/foot3 -> pink.
+    """
+    if num_feet <= 0:
+        return []
+
+    colors = []
+    for foot_index in range(num_feet):
+        colors.append(CORL_GAIT_FOOT_COLORS[foot_index % len(CORL_GAIT_FOOT_COLORS)])
+    return colors
+
+def plot_gait_diagram(
+    contact_states: np.ndarray,
+    sim_times: np.ndarray,
+    reset_times: list[float],
+    foot_labels: list[str],
+    output_path: str,
+    spacing: float = 1.0,
+    corl_style: bool = True,
+):
     T, F = contact_states.shape
     assert sim_times.shape[0] == T, "sim_times length must match contact_states"
+
+    short_foot_labels = [_shorten_foot_label(label) for label in foot_labels]
+    nominal_step_dt = _get_nominal_step_dt(sim_times)
+
+    if corl_style:
+        figure_height = (
+            CORL_GAIT_TOP_BOTTOM_MARGIN * 2.0
+            + F * CORL_GAIT_ROW_HEIGHT
+            + max(0, F - 1) * CORL_GAIT_ROW_GAP
+        )
+
+        rc_params = {
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "Times", "DejaVu Serif", "Computer Modern Roman"],
+            "mathtext.fontset": "cm",
+            "text.usetex": False,
+            "font.size": 8.0,
+            "axes.labelsize": 8.0,
+            "axes.titlesize": 8.5,
+            "xtick.labelsize": 7.5,
+            "ytick.labelsize": 7.5,
+            "legend.fontsize": 7.2,
+            "figure.titlesize": 8.5,
+            "axes.linewidth": 0.7,
+            "xtick.major.width": 0.7,
+            "ytick.major.width": 0.7,
+            "xtick.minor.width": 0.5,
+            "ytick.minor.width": 0.5,
+            "xtick.major.size": 3.0,
+            "ytick.major.size": 3.0,
+            "xtick.minor.size": 1.8,
+            "ytick.minor.size": 1.8,
+            "legend.frameon": False,
+            "figure.constrained_layout.use": True,
+            "savefig.dpi": 600,
+            "savefig.bbox": "tight",
+            "savefig.pad_inches": 0.02,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+            "svg.fonttype": "none",
+        }
+
+        with plt.rc_context(rc_params):
+            fig, ax = plt.subplots(figsize=(CORL_GAIT_FIGURE_WIDTH, figure_height))
+
+            row_centers: list[float] = []
+            row_height = CORL_GAIT_ROW_HEIGHT
+            foot_colors = _get_corl_gait_foot_colors(F)
+
+            for foot_index, label in enumerate(short_foot_labels):
+                y0 = foot_index * (CORL_GAIT_ROW_HEIGHT + CORL_GAIT_ROW_GAP)
+                row_centers.append(y0 + 0.5 * row_height)
+
+                in_contact = contact_states[:, foot_index].astype(bool)
+                contact_segments = compute_stance_segments(in_contact)
+                foot_color = foot_colors[foot_index]
+
+                stance_bars: list[tuple[float, float]] = []
+                for start_index, end_index in contact_segments:
+                    if start_index >= end_index:
+                        continue
+
+                    segment_start_time = float(sim_times[start_index])
+
+                    if end_index < T:
+                        segment_end_time = float(sim_times[end_index])
+                    else:
+                        segment_end_time = float(sim_times[end_index - 1] + nominal_step_dt)
+
+                    segment_width = max(segment_end_time - segment_start_time, nominal_step_dt)
+                    if segment_width <= 0.0:
+                        continue
+
+                    stance_bars.append((segment_start_time, segment_width))
+
+                if stance_bars:
+                    ax.broken_barh(
+                        stance_bars,
+                        (y0, row_height),
+                        facecolors=foot_color,
+                        edgecolors=foot_color,
+                        linewidth=0.0,
+                    )
+
+            if reset_times:
+                first_reset = True
+                for reset_time in reset_times:
+                    reset_time_float = float(reset_time)
+                    if reset_time_float < float(sim_times[0]) or reset_time_float > float(sim_times[-1]):
+                        continue
+
+                    ax.axvline(
+                        x=reset_time_float,
+                        linestyle=":",
+                        linewidth=0.8,
+                        color=CORL_GAIT_RESET_COLOR,
+                        alpha=0.85,
+                        label="reset" if first_reset else None,
+                    )
+                    first_reset = False
+
+            ax.set_xlabel(r"Time ($\mathrm{s}$)")
+            ax.set_yticks(row_centers)
+            ax.set_yticklabels(short_foot_labels)
+            ax.set_ylim(-0.5 * CORL_GAIT_ROW_GAP, row_centers[-1] + 0.5 * row_height + 0.5 * CORL_GAIT_ROW_GAP)
+            ax.set_xlim(float(sim_times[0]), float(sim_times[-1]))
+            ax.margins(x=0.005, y=0.04)
+
+            _format_gait_axis_for_corl(ax)
+
+            if reset_times:
+                handles, labels = ax.get_legend_handles_labels()
+                if handles:
+                    ax.legend(
+                        handles,
+                        labels,
+                        loc="upper right",
+                        frameon=False,
+                        handlelength=1.4,
+                        handletextpad=0.4,
+                        borderaxespad=0.2,
+                    )
+
+            fig.savefig(
+                output_path,
+                dpi=600,
+                bbox_inches="tight",
+                pad_inches=0.02,
+                facecolor="white",
+            )
+            return fig
 
     fig, ax = plt.subplots(figsize=(180 if sim_times[0] == 0.0 else 16, F * 1.2))
     ax.set_xlabel(r'Time ($\text{s}$)')
     ax.set_title('Gait Diagram with Air and Contact Times (white text = contact/stance phase, black text = air/swing phase)', fontsize=18)
 
     for reset_time in reset_times:
-            ax.axvline(x=reset_time, linestyle=":", linewidth=1, color="orange", label='reset' if reset_time == reset_times[0] else None)
+        ax.axvline(x=reset_time, linestyle=":", linewidth=1, color="orange", label='reset' if reset_time == reset_times[0] else None)
 
-    for i, label in enumerate(foot_labels):
+    fallback_foot_colors = _get_corl_gait_foot_colors(F)
+    for i, label in enumerate(short_foot_labels):
         y0 = i * spacing
         in_contact = contact_states[:, i].astype(bool)
         contact_segments = compute_stance_segments(in_contact)
+        foot_color = fallback_foot_colors[i]
 
-        # Plot contact
         for s, e in contact_segments:
-            ax.fill_between(sim_times[s:e], y0, y0 + spacing * 0.8, step='post', alpha=0.8, label=label + " stance" if s == contact_segments[0][0] else None)
+            ax.fill_between(
+                sim_times[s:e],
+                y0,
+                y0 + spacing * 0.8,
+                step='post',
+                alpha=0.8,
+                color=foot_color,
+                label=label + " stance" if s == contact_segments[0][0] else None,
+            )
             t_start = sim_times[s]
-            t_end   = sim_times[e - 1]
+            t_end = sim_times[e - 1]
             duration = t_end - t_start
             t_mid = 0.5 * (t_start + t_end)
             y_text = y0 + spacing * 0.3
@@ -255,22 +536,19 @@ def plot_gait_diagram(contact_states: np.ndarray, sim_times: np.ndarray, reset_t
 
         swing_segments = compute_swing_segments(in_contact)
 
-        # Annotate durations
         for a, b in swing_segments:
             t_start = sim_times[a]
-            t_end   = sim_times[b - 1]
+            t_end = sim_times[b - 1]
             duration = t_end - t_start
             t_mid = 0.5 * (t_start + t_end)
             ax.text(t_mid, y0 + spacing * 0.5, f"{duration:.3f} s", ha='center', va='center', fontsize=8, rotation=90)
 
     ax.set_xticks(np.arange(0, sim_times[-1], 1))
     ax.set_yticks([i * spacing for i in range(F)])
-    ax.set_yticklabels(foot_labels)
+    ax.set_yticklabels(short_foot_labels)
     ax.tick_params(axis='both', which='major', labelsize=18)
     ax.margins(x=0.005)
     ax.set_ylim(-spacing * 0.5, (F - 1) * spacing + spacing)
-    # ax.legend(loc='upper right', ncol=1)
-    # ax.legend(loc='upper right', ncol=1)
     fig.savefig(output_path, dpi=600)
     return fig
 
@@ -1813,11 +2091,33 @@ def _plot_command_abs_error_base_kinematics(
     plt.close(fig_overview)
 
 
-def _plot_gait_diagram(contact_state_array, sim_times, reset_times, foot_labels, output_dir, pickle_dir):
-    fig = plot_gait_diagram(contact_state_array, sim_times, reset_times, foot_labels, os.path.join(output_dir, "aggregates", 'gait_diagram.pdf'), spacing=1.0)
+def _plot_gait_diagram(
+    contact_state_array,
+    sim_times,
+    reset_times,
+    foot_labels,
+    output_dir,
+    pickle_dir,
+    corl_style: bool = True,
+):
+    output_path = os.path.join(output_dir, "aggregates", "gait_diagram.pdf")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    fig = plot_gait_diagram(
+        contact_states=contact_state_array,
+        sim_times=sim_times,
+        reset_times=reset_times,
+        foot_labels=foot_labels,
+        output_path=output_path,
+        spacing=1.0,
+        corl_style=corl_style,
+    )
+
     if pickle_dir != "":
-        with open(os.path.join(pickle_dir, 'gait_diagram.pickle'), 'wb') as f:
+        with open(os.path.join(pickle_dir, "gait_diagram.pickle"), "wb") as f:
             pickle.dump(fig, f)
+
+    plt.close(fig)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # box-plot helpers
