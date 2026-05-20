@@ -228,18 +228,12 @@ def create_height_map_animation(height_map_sequence: np.ndarray, foot_positions_
     animation_obj.save(output_path, fps=fps)
     plt.close()
 
-CORL_GAIT_FIGURE_WIDTH = 6.75
-CORL_GAIT_ROW_HEIGHT = 0.34
-CORL_GAIT_ROW_GAP = 0.10
-CORL_GAIT_TOP_BOTTOM_MARGIN = 0.30
+CORL_GAIT_FIGURE_SIZE = (3.5, 2)  # width, height in inches
+CORL_GAIT_ROW_HEIGHT = 0.3
+CORL_GAIT_ROW_GAP = 0.15
+CORL_GAIT_TOP_BOTTOM_MARGIN = 0.3
+CORL_GAIT_STANCE_COLOR = "0.25"  # dark grey
 CORL_GAIT_RESET_COLOR = "#E69F00"
-CORL_GAIT_FOOT_COLORS = [
-    "#1f77b4",  # blue
-    "#ff7f0e",  # orange
-    "#2ca02c",  # green
-    "#cc79a7",  # pink/magenta-like accent used in the CoRL plots
-]
-
 
 def _shorten_foot_label(label: str) -> str:
     """
@@ -368,6 +362,8 @@ def plot_gait_diagram(
     output_path: str,
     spacing: float = 1.0,
     corl_style: bool = True,
+    figure_size: tuple[float, float] = CORL_GAIT_FIGURE_SIZE,
+    stance_color: str = CORL_GAIT_STANCE_COLOR,
 ):
     T, F = contact_states.shape
     assert sim_times.shape[0] == T, "sim_times length must match contact_states"
@@ -376,12 +372,6 @@ def plot_gait_diagram(
     nominal_step_dt = _get_nominal_step_dt(sim_times)
 
     if corl_style:
-        figure_height = (
-            CORL_GAIT_TOP_BOTTOM_MARGIN * 2.0
-            + F * CORL_GAIT_ROW_HEIGHT
-            + max(0, F - 1) * CORL_GAIT_ROW_GAP
-        )
-
         rc_params = {
             "font.family": "serif",
             "font.serif": ["Times New Roman", "Times", "DejaVu Serif", "Computer Modern Roman"],
@@ -406,7 +396,7 @@ def plot_gait_diagram(
             "legend.frameon": False,
             "figure.constrained_layout.use": True,
             "savefig.dpi": 600,
-            "savefig.bbox": "tight",
+            "savefig.bbox": "standard",
             "savefig.pad_inches": 0.02,
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
@@ -414,11 +404,10 @@ def plot_gait_diagram(
         }
 
         with plt.rc_context(rc_params):
-            fig, ax = plt.subplots(figsize=(CORL_GAIT_FIGURE_WIDTH, figure_height))
+            fig, ax = plt.subplots(figsize=figure_size)
 
             row_centers: list[float] = []
             row_height = CORL_GAIT_ROW_HEIGHT
-            foot_colors = _get_corl_gait_foot_colors(F)
 
             for foot_index, label in enumerate(short_foot_labels):
                 y0 = foot_index * (CORL_GAIT_ROW_HEIGHT + CORL_GAIT_ROW_GAP)
@@ -426,7 +415,6 @@ def plot_gait_diagram(
 
                 in_contact = contact_states[:, foot_index].astype(bool)
                 contact_segments = compute_stance_segments(in_contact)
-                foot_color = foot_colors[foot_index]
 
                 stance_bars: list[tuple[float, float]] = []
                 for start_index, end_index in contact_segments:
@@ -450,8 +438,8 @@ def plot_gait_diagram(
                     ax.broken_barh(
                         stance_bars,
                         (y0, row_height),
-                        facecolors=foot_color,
-                        edgecolors=foot_color,
+                        facecolors=stance_color,
+                        edgecolors=stance_color,
                         linewidth=0.0,
                     )
 
@@ -475,7 +463,10 @@ def plot_gait_diagram(
             ax.set_xlabel(r"Time ($\mathrm{s}$)")
             ax.set_yticks(row_centers)
             ax.set_yticklabels(short_foot_labels)
-            ax.set_ylim(-0.5 * CORL_GAIT_ROW_GAP, row_centers[-1] + 0.5 * row_height + 0.5 * CORL_GAIT_ROW_GAP)
+            ax.set_ylim(
+                -0.5 * CORL_GAIT_ROW_GAP,
+                row_centers[-1] + 0.5 * row_height + 0.5 * CORL_GAIT_ROW_GAP,
+            )
             ax.set_xlim(float(sim_times[0]), float(sim_times[-1]))
             ax.margins(x=0.005, y=0.04)
 
@@ -497,25 +488,32 @@ def plot_gait_diagram(
             fig.savefig(
                 output_path,
                 dpi=600,
-                bbox_inches="tight",
-                pad_inches=0.02,
+                bbox_inches=None,
                 facecolor="white",
             )
             return fig
 
-    fig, ax = plt.subplots(figsize=(180 if sim_times[0] == 0.0 else 16, F * 1.2))
+    fig, ax = plt.subplots(figsize=figure_size)
     ax.set_xlabel(r'Time ($\text{s}$)')
-    ax.set_title('Gait Diagram with Air and Contact Times (white text = contact/stance phase, black text = air/swing phase)', fontsize=18)
+    ax.set_title(
+        'Gait Diagram with Air and Contact Times '
+        '(white text = contact/stance phase, black text = air/swing phase)',
+        fontsize=18,
+    )
 
     for reset_time in reset_times:
-        ax.axvline(x=reset_time, linestyle=":", linewidth=1, color="orange", label='reset' if reset_time == reset_times[0] else None)
+        ax.axvline(
+            x=reset_time,
+            linestyle=":",
+            linewidth=1,
+            color="orange",
+            label='reset' if reset_time == reset_times[0] else None,
+        )
 
-    fallback_foot_colors = _get_corl_gait_foot_colors(F)
     for i, label in enumerate(short_foot_labels):
         y0 = i * spacing
         in_contact = contact_states[:, i].astype(bool)
         contact_segments = compute_stance_segments(in_contact)
-        foot_color = fallback_foot_colors[i]
 
         for s, e in contact_segments:
             ax.fill_between(
@@ -524,15 +522,25 @@ def plot_gait_diagram(
                 y0 + spacing * 0.8,
                 step='post',
                 alpha=0.8,
-                color=foot_color,
+                color=stance_color,
                 label=label + " stance" if s == contact_segments[0][0] else None,
             )
+
             t_start = sim_times[s]
             t_end = sim_times[e - 1]
             duration = t_end - t_start
             t_mid = 0.5 * (t_start + t_end)
             y_text = y0 + spacing * 0.3
-            ax.text(t_mid, y_text, f"{duration:.3f}s", ha='center', va='center', color='white', fontsize=8, rotation=90)
+            ax.text(
+                t_mid,
+                y_text,
+                f"{duration:.3f}s",
+                ha='center',
+                va='center',
+                color='white',
+                fontsize=8,
+                rotation=90,
+            )
 
         swing_segments = compute_swing_segments(in_contact)
 
@@ -541,7 +549,15 @@ def plot_gait_diagram(
             t_end = sim_times[b - 1]
             duration = t_end - t_start
             t_mid = 0.5 * (t_start + t_end)
-            ax.text(t_mid, y0 + spacing * 0.5, f"{duration:.3f} s", ha='center', va='center', fontsize=8, rotation=90)
+            ax.text(
+                t_mid,
+                y0 + spacing * 0.5,
+                f"{duration:.3f} s",
+                ha='center',
+                va='center',
+                fontsize=8,
+                rotation=90,
+            )
 
     ax.set_xticks(np.arange(0, sim_times[-1], 1))
     ax.set_yticks([i * spacing for i in range(F)])
@@ -549,7 +565,13 @@ def plot_gait_diagram(
     ax.tick_params(axis='both', which='major', labelsize=18)
     ax.margins(x=0.005)
     ax.set_ylim(-spacing * 0.5, (F - 1) * spacing + spacing)
-    fig.savefig(output_path, dpi=600)
+
+    fig.savefig(
+        output_path,
+        dpi=600,
+        bbox_inches="tight",
+        facecolor="white",
+    )
     return fig
 
 def get_leg_linestyle(joint_name):
@@ -2099,6 +2121,8 @@ def _plot_gait_diagram(
     output_dir,
     pickle_dir,
     corl_style: bool = True,
+    figure_size: tuple[float, float] = CORL_GAIT_FIGURE_SIZE,
+    stance_color: str = CORL_GAIT_STANCE_COLOR,
 ):
     output_path = os.path.join(output_dir, "aggregates", "gait_diagram.pdf")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -2111,6 +2135,8 @@ def _plot_gait_diagram(
         output_path=output_path,
         spacing=1.0,
         corl_style=corl_style,
+        figure_size=figure_size,
+        stance_color=stance_color,
     )
 
     if pickle_dir != "":

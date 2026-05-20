@@ -27,9 +27,13 @@ import wandb
 from metrics_utils import compute_swing_heights, summarize_metric
 
 
+DEFAULT_FIGURE_WIDTH_IN = 3.5
+DEFAULT_FIGURE_HEIGHT_IN = 2.2
+
 DEFAULT_WANDB_METRICS = [
     "Curriculum/terrain_levels",
     "Episode_Reward/track_lin_vel_xy_exp",
+    "Episode/EnergyConsumed",
 ]
 
 DEFAULT_SUMMARY_WANDB_METRICS = [
@@ -1790,6 +1794,24 @@ def build_series_specs(args: argparse.Namespace) -> list[SeriesSpec]:
     return specs
 
 
+def apply_global_figure_size_override(args: argparse.Namespace) -> None:
+    if args.figure_size is None:
+        return
+
+    figure_width = float(args.figure_size[0])
+    figure_height = float(args.figure_size[1])
+
+    if figure_width <= 0.0:
+        raise ValueError("--figure_size WIDTH must be positive")
+    if figure_height <= 0.0:
+        raise ValueError("--figure_size HEIGHT must be positive")
+
+    args.figure_width = figure_width
+    args.timeseries_figure_height = figure_height
+    args.cot_figure_height = figure_height
+    args.step_height_figure_height = figure_height
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Unified analysis script for WandB histories and recursively discovered metrics_summary.json files.",
@@ -1929,27 +1951,39 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--figure_size",
+        type=float,
+        nargs=2,
+        default=None,
+        metavar=("WIDTH", "HEIGHT"),
+        help=(
+            "Optional global figure size in inches. If provided, this overrides --figure_width, "
+            "--timeseries_figure_height, --cot_figure_height, and --step_height_figure_height. "
+            "Example: --figure_size 3.5 2.2"
+        ),
+    )
+    parser.add_argument(
         "--figure_width",
         type=float,
-        default=6.75,
-        help="Figure width in inches. The default is intended for full-width single-column CoRL/PMLR-style figures.",
+        default=DEFAULT_FIGURE_WIDTH_IN,
+        help="Figure width in inches.",
     )
     parser.add_argument(
         "--timeseries_figure_height",
         type=float,
-        default=3.35,
+        default=DEFAULT_FIGURE_HEIGHT_IN,
         help="Figure height in inches for WandB time-series plots.",
     )
     parser.add_argument(
         "--cot_figure_height",
         type=float,
-        default=3.35,
+        default=DEFAULT_FIGURE_HEIGHT_IN,
         help="Figure height in inches for CoT sweep plots.",
     )
     parser.add_argument(
         "--step_height_figure_height",
         type=float,
-        default=3.55,
+        default=DEFAULT_FIGURE_HEIGHT_IN,
         help="Figure height in inches for the step-height box plot.",
     )
     parser.add_argument(
@@ -1961,7 +1995,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--legend_columns",
         type=int,
-        default=6,
+        default=3,
         help="Maximum number of legend columns. For more than four entries, auto legends are placed above the axes.",
     )
     parser.add_argument(
@@ -1998,6 +2032,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    apply_global_figure_size_override(args)
+
     if not args.metrics_summary_root_dir.is_dir():
         raise FileNotFoundError(f"metrics_summary_root_dir does not exist: {args.metrics_summary_root_dir}")
     if args.summary_tail_points <= 0:
