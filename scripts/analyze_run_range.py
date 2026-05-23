@@ -124,8 +124,59 @@ class SeriesData:
     selected_json_run_names: list[str]
 
 
-def sanitize_filename(name: str) -> str:
-    return re.sub(r'[/\\?%*:|"<> ]+', "_", name).strip("_")
+def sanitize_filename(name: str, max_length: int = 96) -> str:
+    """
+    Convert an arbitrary label/title into a conservative filesystem and shell-friendly
+    path component.
+
+    Examples:
+        "$\\lambda_E=xy$"  -> "lambda_E_xy"
+        "B4-blind (no energy)" -> "B4-blind_no_energy"
+
+    The returned string avoids spaces, quotes, dollar signs, braces, slashes, and other
+    shell-special characters. It is still good practice to quote paths in shell commands.
+    """
+    sanitized = str(name)
+
+    latex_replacements = {
+        r"\lambda": "lambda",
+        r"\Lambda": "Lambda",
+        r"\alpha": "alpha",
+        r"\beta": "beta",
+        r"\gamma": "gamma",
+        r"\delta": "delta",
+        r"\epsilon": "epsilon",
+        r"\varepsilon": "epsilon",
+        r"\theta": "theta",
+        r"\mu": "mu",
+        r"\sigma": "sigma",
+        r"\omega": "omega",
+    }
+
+    for latex_token, replacement in latex_replacements.items():
+        sanitized = sanitized.replace(latex_token, replacement)
+
+    sanitized = sanitized.replace("$", "")
+    sanitized = sanitized.replace("{", "_")
+    sanitized = sanitized.replace("}", "_")
+    sanitized = sanitized.replace("^", "_")
+    sanitized = sanitized.replace("=", "_")
+    sanitized = sanitized.replace("+", "plus")
+    sanitized = sanitized.replace("-", "-")
+
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", sanitized)
+    sanitized = re.sub(r"_+", "_", sanitized)
+    sanitized = sanitized.strip("._-")
+
+    if not sanitized:
+        sanitized = "unnamed"
+
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length].rstrip("._-")
+        if not sanitized:
+            sanitized = "unnamed"
+
+    return sanitized
 
 
 def parse_run_name_to_datetime(run_name: str) -> datetime | None:
