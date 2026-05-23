@@ -303,11 +303,19 @@ def create_output_directory(base_name: str, labels: list[str]) -> Path:
     logs_root.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    label_part = "__".join(sanitize_filename(label) for label in labels[:6])
+
+    safe_base_name = sanitize_filename(base_name, max_length=64)
+    safe_labels = [sanitize_filename(label, max_length=48) for label in labels[:6]]
+    label_part = "__".join(safe_labels)
+
     if len(labels) > 6:
         label_part = f"{label_part}__and_{len(labels) - 6}_more"
 
-    dir_name = f"{sanitize_filename(base_name)}__{label_part}__{timestamp}"
+    if label_part:
+        dir_name = f"{timestamp}__{safe_base_name}__{label_part}"
+    else:
+        dir_name = f"{timestamp}__{safe_base_name}"
+
     output_dir = logs_root / dir_name
     output_dir.mkdir(parents=True, exist_ok=False)
     return output_dir
