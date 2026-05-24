@@ -25,12 +25,70 @@ import re
 import yaml
 import uuid
 from typing import Dict, Tuple, Optional, List, Any
-from metrics_utils import compute_summary_metrics
+from metrics_utils import compute_summary_metrics, summarize_metric
 
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8" # Determinism
 os.environ["OMNICLIENT_HUB_MODE"] = "disabled"
 
 eval_script_path = os.path.dirname(os.path.abspath(__file__))
+
+UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS: Dict[str, Tuple[Optional[float], Optional[float]]] = {
+    "joint_torque": (-20.0, 20.0),
+    "joint_velocity": (-25.0, 25.0),
+    "joint_acceleration": (-800.0, 800.0),
+    "action_rate": (-80.0, 80.0),
+    "foot_contact_force": (0.0, 300.0),
+}
+
+
+def is_upstream_go2_rough_task(task_name: str) -> bool:
+    """
+    Detect the upstream Isaac Lab rough-terrain Unitree Go2 task family.
+
+    This intentionally does not match the custom CaT-Go2 task names, because
+    those should keep using the constraint bounds saved in params/env.yaml.
+    """
+    task_name_lower = task_name.lower()
+
+    is_custom_cat_task = "cat-go2" in task_name_lower or "cat_go2" in task_name_lower
+    if is_custom_cat_task:
+        return False
+
+    mentions_rough = "rough" in task_name_lower
+    mentions_unitree_go2 = "unitree-go2" in task_name_lower or "unitree_go2" in task_name_lower
+
+    return mentions_rough and mentions_unitree_go2
+
+
+def get_hardcoded_upstream_go2_constraint_bounds() -> Dict[str, Tuple[Optional[float], Optional[float]]]:
+    """
+    Return eval-only constraint bounds for upstream Isaac Lab rough-terrain Unitree Go2 baselines.
+
+    These bounds mirror the constraint thresholds used for the comparable custom
+    CaT-style evaluation metrics, but only include terms already supported by
+    metrics_utils.compute_summary_metrics without changing metrics_utils.py.
+
+    Not included here by design:
+    - base_orientation: user explicitly does not care about this metric here.
+    - contact: user explicitly does not care about this metric here.
+    - front_hfe_position: user explicitly does not care about this metric here,
+      and metrics_utils.py currently does not compute per-pattern joint-position
+      constraint violations from a named term without modification.
+    """
+    return dict(UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS)
+
+
+def format_constraint_bounds_for_logging(
+    constraint_bounds: Dict[str, Tuple[Optional[float], Optional[float]]]
+) -> str:
+    if not constraint_bounds:
+        return "{}"
+
+    lines = ["{"]
+    for key, (lower_bound, upper_bound) in constraint_bounds.items():
+        lines.append(f"    {key}: ({lower_bound}, {upper_bound})")
+    lines.append("}")
+    return "\n".join(lines)
 
 
 def infer_checkpoint_input_dimensions(state_dict: dict[str, torch.Tensor]) -> int:
@@ -44,13 +102,72 @@ def infer_checkpoint_input_dimensions(state_dict: dict[str, torch.Tensor]) -> in
     raise RuntimeError("Could not infer input dimension from checkpoint")
 
 
+def load_checkpoint_for_format_detection(checkpoint_path: str) -> dict:
+    try:
+        return torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    except TypeError:
+        return torch.load(checkpoint_path, map_location="cpu")
+    except Exception as exception:
+        print(f"[WARN] weights_only=True checkpoint inspection failed: {exception}")
+        print("[WARN] Falling back to weights_only=False for local checkpoint inspection.")
+        return torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+
+
+def detect_policy_backend_from_checkpoint(checkpoint_object: dict) -> str:
+    if not isinstance(checkpoint_object, dict):
+        raise RuntimeError(f"Unsupported checkpoint object type: {type(checkpoint_object)}")
+
+    if "model_state_dict" in checkpoint_object:
+        return "rsl_rl"
+
+    if any(isinstance(value, torch.Tensor) for value in checkpoint_object.values()):
+        return "clean_rl"
+
+    raise RuntimeError(
+        "Could not infer checkpoint backend. Expected either an RSL-RL checkpoint with "
+        "'model_state_dict' or a CleanRL-style plain state_dict."
+    )
+
+
+def extract_cleanrl_state_dict(checkpoint_object: dict) -> dict[str, torch.Tensor]:
+    if "model_state_dict" in checkpoint_object:
+        raise RuntimeError("Received an RSL-RL checkpoint where a CleanRL state_dict was expected.")
+
+    tensor_values = [value for value in checkpoint_object.values() if isinstance(value, torch.Tensor)]
+    if not tensor_values:
+        raise RuntimeError("CleanRL checkpoint does not appear to contain tensor parameters.")
+
+    return checkpoint_object
+
+
+def build_rsl_rl_runner_cfg_dict(agent_cfg) -> dict:
+    runner_cfg_dict = agent_cfg.to_dict()
+
+    obs_groups = runner_cfg_dict.get("obs_groups")
+    if not isinstance(obs_groups, dict) or not obs_groups:
+        runner_cfg_dict["obs_groups"] = {
+            "actor": ["policy"],
+            "critic": ["policy"],
+        }
+    else:
+        if "actor" not in runner_cfg_dict["obs_groups"]:
+            runner_cfg_dict["obs_groups"]["actor"] = ["policy"]
+        if "critic" not in runner_cfg_dict["obs_groups"]:
+            runner_cfg_dict["obs_groups"]["critic"] = ["policy"]
+
+    return runner_cfg_dict
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Play an RL agent with detailed logging.")
     parser.add_argument("--run_dir", type=str, required=True, help="ABSOLUTE path to directory containing model checkpoints and params.")
     parser.add_argument("--eval_checkpoint", type=str, default=None, help="Optionally specify the model save checkpoint number instead of automatically using the last saved one.")
     parser.add_argument("--random_sim_step_length", type=int, default=4000, help="Number of steps to run with random commands and spawn points. Standardized tests like standing and walking forward will always run.")
     parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate. If you change this, hell will break loose")
-    parser.add_argument("--task", type=str, default="CaT-Go2-Rough-Terrain-Play-v0", help="Name of the task/environment.")
+    parser.add_argument("--task", type=str, default="Isaac-Velocity-Rough-Unitree-Go2-Play-v0", help="Name of the task/environment.")
+    parser.add_argument("--policy_backend", choices=["auto", "clean_rl", "rsl_rl"], default="auto", help="Policy checkpoint backend. Use auto unless debugging.")
+    parser.add_argument("--agent_entry_point", type=str, default="rsl_rl_cfg_entry_point", help="Gym registry entry point key for the RSL-RL agent config.")
+    parser.add_argument("--downscale_upstream_go2_tracking_rewards", action=argparse.BooleanOptionalAction, default=True, help="Evaluate upstream Go2 tracking rewards with the custom-env common scale: 1.5->1.0 and 0.75->0.5.")
     parser.add_argument("--foot_vel_height_threshold", type=float, default=0.02, help="Maximum foot height to include in the foot-velocity-vs-height plot.")
     parser.add_argument("--num_plot_jobs_in_parallel", type=int, default=2, help="Number of plot generation jobs to run in parallel.")
     parser.add_argument("--plot_job_stagger_delay", type=int, default=10, help="Delay in seconds between starting each plot generation job in a parallel batch.")
@@ -68,7 +185,7 @@ def parse_arguments():
     cli_args.add_clean_rl_args(parser)
     AppLauncher.add_app_launcher_args(parser)
     arguments = parser.parse_args()
-    arguments.enable_cameras = True # Video
+    arguments.enable_cameras = True  # Video
     return arguments
 
 
@@ -91,10 +208,10 @@ def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[fl
     """
     Returns a dict mapping each constraint key (either a global term
     like 'joint_torque' or an individual joint name) to a (lb, ub) tuple.
-    - joint_position    → (None, limit)
-    - joint_position_when_moving_forward → (default-limit, default+limit)
-    - foot_contact_force → (0, limit)
-    - everything else   → (-limit, +limit)
+    - joint_position    -> (None, limit)
+    - joint_position_when_moving_forward -> (default-limit, default+limit)
+    - foot_contact_force -> (0, limit)
+    - everything else   -> (-limit, +limit)
     """
     yaml_file = os.path.join(params_directory, 'env.yaml')
     text = open(yaml_file).read()
@@ -140,28 +257,88 @@ def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[fl
                         out.add(jn)
             return sorted(out)
 
-        # 3a) joint_position → only upper bound
+        # 3a) joint_position -> only upper bound
         if func.endswith('joint_position_absolute_upper_bound'):
             joints = expand_patterns(patterns)
             for jn in joints:
                 bounds[jn] = (None, limit)
 
-        # 3b) joint_position_when_moving_forward → relative bound about default
+        # 3b) joint_position_when_moving_forward -> relative bound about default
         elif func.endswith('relative_joint_position_upper_and_lower_bound_when_moving_forward'):
             joints = expand_patterns(patterns)
             for jn in joints:
                 base = default_pos.get(jn, 0.0)
                 bounds[jn] = (base - limit, base + limit)
 
-        # 3c) foot_contact_force → only positive
+        # 3c) foot_contact_force -> only positive
         elif term == 'foot_contact_force':
             bounds[term] = (0.0, limit)
 
-        # 3d) everything else → symmetric ±limit
+        # 3d) everything else -> symmetric +/- limit
         else:
             bounds[term] = (-limit, limit)
 
     return bounds
+
+
+def resolve_constraint_bounds_for_eval(
+    params_directory: str,
+    env_cfg,
+    task_name: str,
+) -> tuple[Dict[str, Tuple[Optional[float], Optional[float]]], str]:
+    """
+    Resolve the constraint bounds used by metrics_utils.compute_summary_metrics.
+
+    Priority:
+    1. Custom CaT-style envs with env_cfg.constraints:
+       load the saved training/eval bounds from params/env.yaml.
+    2. Upstream rough Unitree Go2 envs without custom constraints:
+       use hardcoded eval-only bounds so their metrics_summary.json contains
+       comparable constraint_violations_percent entries.
+    3. Everything else:
+       return an empty bounds dict.
+
+    This function deliberately does not modify metrics_utils.py. It only supplies
+    the same kind of constraint_bounds dictionary that metrics_utils already expects.
+    """
+    constraint_bounds: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
+    constraint_bounds_source = "empty"
+
+    if hasattr(env_cfg, "constraints") and env_cfg.constraints is not None:
+        try:
+            constraint_bounds = load_constraint_bounds(params_directory)
+            constraint_bounds_source = "params/env.yaml"
+
+            if hasattr(env_cfg.constraints, "foot_contact_force") and "foot_contact_force" in constraint_bounds:
+                env_cfg.constraints.foot_contact_force.params["limit"] = constraint_bounds["foot_contact_force"][1]
+
+            if hasattr(env_cfg.constraints, "front_hfe_position") and "RL_thigh_joint" in constraint_bounds:
+                # For runs that do not use style constraints.
+                env_cfg.constraints.front_hfe_position.params["limit"] = constraint_bounds["RL_thigh_joint"][1]
+
+            if constraint_bounds:
+                print("[INFO] Loaded eval constraint bounds from params/env.yaml:")
+                print(format_constraint_bounds_for_logging(constraint_bounds))
+            else:
+                print("[WARN] params/env.yaml was parsed, but no usable constraint bounds were found.")
+
+        except Exception as exception:
+            print(f"[WARN] Could not load/apply constraint bounds from params/env.yaml. Reason: {exception}")
+            constraint_bounds = {}
+            constraint_bounds_source = "failed_params/env.yaml"
+    else:
+        print("[INFO] env_cfg has no custom constraints block. Constraint-bound loading skipped.")
+
+    if not constraint_bounds and is_upstream_go2_rough_task(task_name):
+        constraint_bounds = get_hardcoded_upstream_go2_constraint_bounds()
+        constraint_bounds_source = "hardcoded_upstream_go2_rough_eval_thresholds"
+        print("[INFO] Using hardcoded eval constraint bounds for upstream rough Unitree Go2 task:")
+        print(format_constraint_bounds_for_logging(constraint_bounds))
+    elif not constraint_bounds:
+        constraint_bounds_source = "empty"
+        print("[WARNING] No constraint bounds will be used for constraint_violations_percent.")
+
+    return constraint_bounds, constraint_bounds_source
 
 
 def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory: str, sim_data_file_path: str, foot_vel_height_threshold: float, num_parallel: int, stagger_delay: int):
@@ -192,7 +369,7 @@ def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory
                 "--end_step", str(job_params["end_step"]),
                 "--foot_vel_height_threshold", str(foot_vel_height_threshold),
             ]
-            print(f"[INFO] Spawning plot generation for '{subdir}' (log → {log_path}), command={' '.join(cmd)}")
+            print(f"[INFO] Spawning plot generation for '{subdir}' (log -> {log_path}), command={' '.join(cmd)}")
             log_file = open(log_path, "w")
             proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
             running_procs.append((proc, subdir, log_file))
@@ -230,11 +407,177 @@ def ensure_tex_env():
         sys.exit(e.returncode)
 
 
+def scene_entity_exists(env, entity_name: str) -> bool:
+    try:
+        env.scene[entity_name]
+        return True
+    except Exception:
+        return False
+
+
+def add_eval_foot_sensors_to_env_cfg(env_cfg, foot_links: list[str], sim_dt: float):
+    from isaaclab.sensors.ray_caster import RayCasterCfg, patterns
+    from isaaclab.sensors.frame_transformer import FrameTransformerCfg
+
+    for link_name in foot_links:
+        sensor_name = f"ray_caster_{link_name}"
+        if not hasattr(env_cfg.scene, sensor_name):
+            setattr(
+                env_cfg.scene,
+                sensor_name,
+                RayCasterCfg(
+                    prim_path=f"{{ENV_REGEX_NS}}/Robot/{link_name}",
+                    update_period=sim_dt,
+                    offset=RayCasterCfg.OffsetCfg(pos=(0, 0, 1)),
+                    mesh_prim_paths=["/World/ground"],
+                    ray_alignment="yaw",
+                    pattern_cfg=patterns.GridPatternCfg(resolution=1.0, size=(0.0, 0.0)),
+                    debug_vis=True,
+                ),
+            )
+
+    if not hasattr(env_cfg.scene, "foot_frame_transformer"):
+        env_cfg.scene.foot_frame_transformer = FrameTransformerCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/base",
+            target_frames=[
+                FrameTransformerCfg.FrameCfg(prim_path=f"{{ENV_REGEX_NS}}/Robot/{link_name}")
+                for link_name in foot_links
+            ],
+            debug_vis=False
+        )
+
+
+def get_height_map_sequence(env, asset_cfg):
+    robot = env.scene["robot"]
+    base_pose_world_frame = robot.data.root_pos_w.clone()
+
+    sensor_name_candidates = []
+    if scene_entity_exists(env, asset_cfg.name):
+        sensor_name_candidates.append(asset_cfg.name)
+    if scene_entity_exists(env, "height_scanner"):
+        sensor_name_candidates.append("height_scanner")
+
+    if not sensor_name_candidates:
+        return torch.empty((env.num_envs, 0), device=base_pose_world_frame.device)
+
+    sensor = env.scene[sensor_name_candidates[0]]
+    ray_hit_positions_world_frame = sensor.data.ray_hits_w.clone()
+
+    base_expanded_to_match_shape_world_frame = base_pose_world_frame.view(-1, 1, 3).expand_as(ray_hit_positions_world_frame)
+    non_finite_mask = ~torch.isfinite(ray_hit_positions_world_frame)
+    if non_finite_mask.any():
+        hits_clean = ray_hit_positions_world_frame.clone()
+        hits_clean[non_finite_mask] = base_expanded_to_match_shape_world_frame[non_finite_mask]
+    else:
+        hits_clean = ray_hit_positions_world_frame
+
+    local = hits_clean - base_expanded_to_match_shape_world_frame
+    return local[..., 2]
+
+
+def maybe_unscale_cat_reward(reward: torch.Tensor, terminated: torch.Tensor, policy_backend: str) -> torch.Tensor:
+    if policy_backend != "clean_rl":
+        return reward
+
+    if not torch.is_tensor(terminated):
+        return reward
+
+    if not torch.is_floating_point(terminated):
+        return reward
+
+    denominator = 1.0 - terminated
+    if torch.all(denominator <= 0.0):
+        return reward
+
+    safe_denominator = torch.clamp(denominator, min=1e-6)
+    return reward / safe_denominator
+
+
+def compute_common_tracking_rewards(
+    commanded_velocity: np.ndarray,
+    base_linear_velocity_body: np.ndarray,
+    base_angular_velocity_body: np.ndarray,
+) -> tuple[float, float, float]:
+    std_squared = 0.25
+
+    lin_error_squared = float(np.sum((commanded_velocity[:2] - base_linear_velocity_body[:2]) ** 2))
+    yaw_error_squared = float((commanded_velocity[2] - base_angular_velocity_body[2]) ** 2)
+
+    track_lin_vel_xy_exp_common = float(np.exp(-lin_error_squared / std_squared))
+    track_ang_vel_z_exp_common = float(0.5 * np.exp(-yaw_error_squared / std_squared))
+    track_total_common = track_lin_vel_xy_exp_common + track_ang_vel_z_exp_common
+
+    return track_lin_vel_xy_exp_common, track_ang_vel_z_exp_common, track_total_common
+
+
+def add_eval_only_metrics_to_summary(
+    metrics: dict[str, Any],
+    mask: np.ndarray,
+    eval_arrays: dict[str, np.ndarray],
+) -> dict[str, Any]:
+    enriched_metrics = dict(metrics)
+
+    def masked_values(name: str) -> np.ndarray:
+        values = np.asarray(eval_arrays[name])
+        return values[mask]
+
+    for metric_name in (
+        "track_lin_vel_xy_exp_common_weight",
+        "track_ang_vel_z_exp_common_weight",
+        "track_vel_exp_total_common_weight",
+    ):
+        values = masked_values(metric_name)
+        finite_values = values[np.isfinite(values)]
+        if finite_values.size == 0:
+            enriched_metrics[f"mean_{metric_name}"] = None
+            enriched_metrics[f"cumulative_{metric_name}"] = None
+        else:
+            enriched_metrics[f"mean_{metric_name}"] = float(finite_values.mean())
+            enriched_metrics[f"cumulative_{metric_name}"] = float(finite_values.sum())
+
+    terrain_levels = masked_values("terrain_level")
+    finite_terrain_levels = terrain_levels[np.isfinite(terrain_levels)]
+    if finite_terrain_levels.size == 0:
+        enriched_metrics["terrain_level_summary"] = None
+        enriched_metrics["mean_terrain_level"] = None
+        enriched_metrics["final_terrain_level"] = None
+    else:
+        enriched_metrics["terrain_level_summary"] = summarize_metric(finite_terrain_levels.tolist())
+        enriched_metrics["mean_terrain_level"] = float(finite_terrain_levels.mean())
+        enriched_metrics["final_terrain_level"] = float(finite_terrain_levels[-1])
+
+    return enriched_metrics
+
+
+def apply_common_eval_reward_scale_if_needed(env_cfg, task_name: str, enabled: bool):
+    if not enabled:
+        return
+
+    task_name_lower = task_name.lower()
+    if "isaac-velocity-rough-unitree-go2" not in task_name_lower:
+        return
+
+    if hasattr(env_cfg, "rewards") and hasattr(env_cfg.rewards, "track_lin_vel_xy_exp"):
+        env_cfg.rewards.track_lin_vel_xy_exp.weight = 1.0
+
+    if hasattr(env_cfg, "rewards") and hasattr(env_cfg.rewards, "track_ang_vel_z_exp"):
+        env_cfg.rewards.track_ang_vel_z_exp.weight = 0.5
+
+    print("[INFO] Applied common eval reward scale for upstream Go2: track_lin_vel_xy_exp=1.0, track_ang_vel_z_exp=0.5")
+
+
+def get_current_terrain_level(env) -> float:
+    try:
+        return float(env.scene.terrain.terrain_levels[0].detach().cpu().item())
+    except Exception:
+        return float("nan")
+
+
 def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
 
-    #ensure_tex_env() # Used later for generate_plots.py
+    # ensure_tex_env()  # Used later for generate_plots.py
 
     if args.eval_checkpoint is None:
         checkpoint_path = get_latest_checkpoint(args.run_dir)
@@ -245,42 +588,70 @@ def main():
             exit(1)
 
     print(f"[INFO] Loading model from: {checkpoint_path}")
-    model_state = torch.load(checkpoint_path, weights_only=True)
+    checkpoint_object = load_checkpoint_for_format_detection(checkpoint_path)
+    detected_policy_backend = detect_policy_backend_from_checkpoint(checkpoint_object)
+    policy_backend = detected_policy_backend if args.policy_backend == "auto" else args.policy_backend
+    print(f"[INFO] Detected policy backend={detected_policy_backend}, selected policy backend={policy_backend}")
 
-    observation_dim = infer_checkpoint_input_dimensions(model_state)
-    if observation_dim == 236:
-        args.task = "CaT-Go2-Rough-Terrain-Joint-State-History-Play-v0"
-    elif observation_dim == 558:
-        args.task = "CaT-Go2-Rough-Terrain-Full-State-History-Play-v0"
-    print(f"Observation dimension={observation_dim}, selected task={args.task}")
+    model_state = None
+    if policy_backend == "clean_rl":
+        model_state = extract_cleanrl_state_dict(checkpoint_object)
+        observation_dim = infer_checkpoint_input_dimensions(model_state)
+        if observation_dim == 236:
+            args.task = "CaT-Go2-Rough-Terrain-Joint-State-History-Play-v0"
+        elif observation_dim == 558:
+            args.task = "CaT-Go2-Rough-Terrain-Full-State-History-Play-v0"
+        print(f"Observation dimension={observation_dim}, selected task={args.task}")
+    else:
+        print(f"[INFO] RSL-RL checkpoint selected, using task={args.task}")
 
     if not "play" in args.task.lower():
         input("\n\n-------------------------------------------------------------------\nKeyword 'Play' not found in task name, are you sure you are using the correct task/environment?\n-------------------------------------------------------------------\n\n")
 
     # Launch Isaac Lab environment
-    args.device = "cuda" # Using CPU Increases iterations/sec in some cases and reduces VRAM usage which allows parallel runs. Replace with "cuda" if you want pure GPU, because on more recent GPUs this might be faster depending on your hardware
+    args.device = "cuda"  # Using CPU Increases iterations/sec in some cases and reduces VRAM usage which allows parallel runs. Replace with "cuda" if you want pure GPU, because on more recent GPUs this might be faster depending on your hardware
     args.disable_fabric = True if args.device == "cpu" else False
-    if "--/rtx/verifyDriverVersion/enabled=false" not in sys.argv: # Needed because of overflow bug when checking nvidia driver version with minor version > 255
+    if "--/rtx/verifyDriverVersion/enabled=false" not in sys.argv:  # Needed because of overflow bug when checking nvidia driver version with minor version > 255
         sys.argv.append("--/rtx/verifyDriverVersion/enabled=false")
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
-    from isaaclab.utils.dict import print_dict
-    from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
-    from cat_envs.tasks.utils.cleanrl.ppo import Agent
-    from cat_envs.tasks.utils.cleanrl.ppo import ActorWithRMS
-    from cat_envs.tasks.locomotion.velocity.config.solo12.cat_go2_rough_terrain_env_cfg import height_map_grid
+    from isaaclab_tasks.utils import parse_env_cfg
+    from isaaclab_tasks.utils.parse_cfg import load_cfg_from_registry
     from isaaclab.managers import EventTermCfg
     from isaaclab.utils.math import euler_xyz_from_quat, quat_apply_inverse
     from isaaclab.envs.mdp.observations import root_quat_w
     from isaaclab.managers import SceneEntityCfg
     from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
+    from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
+    from rsl_rl.runners import DistillationRunner, OnPolicyRunner
+
+    # Register custom CaT Gymnasium environments before parse_env_cfg() calls gym.spec(args.task).
+    import cat_envs.tasks.locomotion.velocity.config.solo12  # noqa: F401
+
     print(f"ISAACLAB_NUCLEUS_DIR={ISAACLAB_NUCLEUS_DIR}")
 
+    if args.task not in gym.envs.registry:
+        matching_registered_tasks = sorted(
+            task_id
+            for task_id in gym.envs.registry.keys()
+            if "cat-go2" in task_id.lower() or "unitree-go2" in task_id.lower()
+        )
+        raise RuntimeError(
+            f"Task '{args.task}' is not registered after importing the custom CaT task package. "
+            f"Matching registered tasks: {matching_registered_tasks}"
+        )
+
     env_cfg = parse_env_cfg(args.task, device=args.device, num_envs=args.num_envs, use_fabric=not args.disable_fabric)
+    apply_common_eval_reward_scale_if_needed(
+        env_cfg=env_cfg,
+        task_name=args.task,
+        enabled=args.downscale_upstream_go2_tracking_rewards,
+    )
 
     # Inject Latency
     if hasattr(env_cfg.observations, "policy"):
         p = env_cfg.observations.policy
+
         # Helper to safely set latency if the term exists AND accepts the argument
         def set_latency(term_name, val):
             if hasattr(p, term_name):
@@ -308,6 +679,9 @@ def main():
 
     # Seeding
     import random
+    if env_cfg.seed is None:
+        env_cfg.seed = 0
+        print("[WARN] env_cfg.seed was None. Setting eval seed to 0.")
     random.seed(env_cfg.seed)
     np.random.seed(env_cfg.seed)
     torch.backends.cuda.matmul.allow_tf32 = False
@@ -324,12 +698,16 @@ def main():
     env_cfg.viewer.eye = (0.0, -3.0, 2.0)
     env_cfg.viewer.lookat = (0.0, 0.0, 0.5)
     env_cfg.sim.render.rendering_mode = "quality"
-    step_dt = env_cfg.sim.dt * env_cfg.decimation # Physics run at higher frequency, action is applied `decimation` physics-steps, but video uses env steps as unit
+    step_dt = env_cfg.sim.dt * env_cfg.decimation  # Physics run at higher frequency, action is applied `decimation` physics-steps, but video uses env steps as unit
     frame_width = 1920
     frame_height = 1080
     frame_rate = int(round(1.0 / step_dt))
     env_cfg.viewer.resolution = (frame_width, frame_height)
     device = torch.device(args.device)
+
+    foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] if "go2" in args.task.lower() else ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
+    foot_labels = ['front left', 'front right', 'rear left', 'rear right']
+    add_eval_foot_sensors_to_env_cfg(env_cfg, foot_links=foot_links, sim_dt=env_cfg.sim.dt)
 
     run_path = Path(args.run_dir).resolve()
     run_name = run_path.name
@@ -346,8 +724,8 @@ def main():
     plots_directory = os.path.join(eval_base_dir, "plots")
     os.makedirs(plots_directory, exist_ok=True)
 
-    fixed_command_sim_steps = 500 # If you want to increase this you also need to increase episode length otherwise env will reset mid-way
-    fixed_command_scenarios = [ # Scenario positions depend on seed!
+    fixed_command_sim_steps = 500  # If you want to increase this you also need to increase episode length otherwise env will reset mid-way
+    fixed_command_scenarios = [  # Scenario positions depend on seed!
         ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_stairs_up", torch.tensor([1, 0.0, 0.0], device=device), (torch.tensor([-8, 16, -0.1], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("pure_spin", torch.tensor([0.0, 0.0, 0.5], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
@@ -357,8 +735,8 @@ def main():
         ("medium_walk_x_uneven_terrain", torch.tensor([0.5, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_x_uneven_terrain", torch.tensor([1.0, 0.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_diagonal_uneven_terrain", torch.tensor([1.0, 1.0, 0.0], device=device), (torch.tensor([0, 0.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
-        ("medium_walk_diagonal_turning_uneven_terrain", torch.tensor([0.8, 0.5, 0.0], device=device), (torch.tensor([0.0, 3.0, 0.4], device=device), torch.tensor([np.cos(np.pi/8), 0.0, 0.0, np.sin(np.pi/8)], dtype=torch.float32, device=device))),
-        ("medium_walk_diagonal_random_steps", torch.tensor([0.7, 0.5, 0.0], device=device), (torch.tensor([2.0, 5.0, 0.4], device=device), torch.tensor([np.cos(np.pi/8), 0.0, 0.0, np.sin(np.pi/8)], dtype=torch.float32, device=device))),
+        ("medium_walk_diagonal_turning_uneven_terrain", torch.tensor([0.8, 0.5, 0.0], device=device), (torch.tensor([0.0, 3.0, 0.4], device=device), torch.tensor([np.cos(np.pi / 8), 0.0, 0.0, np.sin(np.pi / 8)], dtype=torch.float32, device=device))),
+        ("medium_walk_diagonal_random_steps", torch.tensor([0.7, 0.5, 0.0], device=device), (torch.tensor([2.0, 5.0, 0.4], device=device), torch.tensor([np.cos(np.pi / 8), 0.0, 0.0, np.sin(np.pi / 8)], dtype=torch.float32, device=device))),
     ]
 
     if not args.skip_cot_sweep:
@@ -381,22 +759,77 @@ def main():
     # which results in zero reward and can't be recovered by rescaling. Thus, we update the constraint limits based on the loaded values from
     # the training environment. Only contact force and thigh position limit are updated because other values are handled more robustly by the rescaling in the loop.
     # This allows more constraints to be added or removed without leading to issues in this eval script.
-    constraint_bounds = load_constraint_bounds(os.path.join(args.run_dir, 'params'))
-    env_cfg.constraints.foot_contact_force.params["limit"] = constraint_bounds["foot_contact_force"][1]
-    if "RL_thigh_joint" in constraint_bounds: # For runs that do not use style constraints
-        env_cfg.constraints.front_hfe_position.params["limit"] = constraint_bounds["RL_thigh_joint"][1]
+    #
+    # For upstream Isaac Lab rough Unitree Go2 baselines, there is usually no custom constraints block in the env config.
+    # In that case, we still populate constraint_bounds with fixed eval thresholds so metrics_utils.compute_summary_metrics()
+    # computes comparable constraint_violations_percent entries without changing metrics_utils.py.
+    constraint_bounds, constraint_bounds_source = resolve_constraint_bounds_for_eval(
+        params_directory=os.path.join(args.run_dir, "params"),
+        env_cfg=env_cfg,
+        task_name=args.task,
+    )
 
     total_sim_steps = args.random_sim_step_length + len(fixed_command_scenarios) * fixed_command_sim_steps
     env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array")
-    video_configuration = {
-        "pop_frames": True, # env.render() is called periodically in the sim loop to store the frames on disk and thus reduce memory usage. pop_frames clears the in-memory buffer after calling render()
-        "reset_clean": False, # Since sim loop resets the env for the hardcoded scenarios, the frames should be preserved on env.reset()
-    }
-    env = gym.wrappers.RenderCollection(env, **video_configuration)
 
-    policy_agent = Agent(env).to(device)
-    policy_agent.load_state_dict(model_state)
-    actor_with_rms = ActorWithRMS(policy_agent)
+    def get_render_frames(env):
+        if args.enable_cameras is not None and args.enable_cameras == False:
+            return []
+
+        raw_render_output = env.render()
+
+        if raw_render_output is None:
+            return []
+
+        if isinstance(raw_render_output, list):
+            return raw_render_output
+
+        if isinstance(raw_render_output, tuple):
+            return list(raw_render_output)
+
+        if isinstance(raw_render_output, np.ndarray):
+            return [raw_render_output]
+
+        raise TypeError(f"Unexpected render output type: {type(raw_render_output)}")
+
+    actor_with_rms = None
+    rsl_rl_policy = None
+    rsl_rl_policy_reset = None
+    rsl_rl_clip_actions = None
+    rsl_rl_env_for_runner = None
+
+    if policy_backend == "clean_rl":
+        from cat_envs.tasks.utils.cleanrl.ppo import Agent
+        from cat_envs.tasks.utils.cleanrl.ppo import ActorWithRMS
+
+        policy_agent = Agent(env).to(device)
+        policy_agent.load_state_dict(model_state)
+        actor_with_rms = ActorWithRMS(policy_agent)
+
+    elif policy_backend == "rsl_rl":
+        agent_cfg = load_cfg_from_registry(args.task, args.agent_entry_point)
+        agent_cfg.device = args.device
+        if hasattr(agent_cfg, "seed"):
+            agent_cfg.seed = env_cfg.seed
+
+        rsl_rl_env_for_runner = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+        runner_cfg_dict = build_rsl_rl_runner_cfg_dict(agent_cfg)
+
+        print(f"[INFO] Loading RSL-RL checkpoint from: {checkpoint_path}")
+        if agent_cfg.class_name == "OnPolicyRunner":
+            runner = OnPolicyRunner(rsl_rl_env_for_runner, runner_cfg_dict, log_dir=None, device=agent_cfg.device)
+        elif agent_cfg.class_name == "DistillationRunner":
+            runner = DistillationRunner(rsl_rl_env_for_runner, runner_cfg_dict, log_dir=None, device=agent_cfg.device)
+        else:
+            raise ValueError(f"Unsupported RSL-RL runner class: {agent_cfg.class_name}")
+
+        runner.load(checkpoint_path)
+        rsl_rl_policy = runner.get_inference_policy(device=env.unwrapped.device)
+        rsl_rl_policy_reset = getattr(rsl_rl_policy, "reset", None)
+        rsl_rl_clip_actions = getattr(agent_cfg, "clip_actions", None)
+
+    else:
+        raise ValueError(f"Unsupported policy_backend={policy_backend}")
 
     robot = env.unwrapped.scene["robot"]
     vel_term = env.unwrapped.command_manager.get_term("base_velocity")
@@ -414,8 +847,6 @@ def main():
         env.unwrapped.scene.write_data_to_sim()
 
     joint_names = env.unwrapped.scene["robot"].data.joint_names
-    foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] if "go2" in args.task.lower() else ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
-    foot_labels = ['front left', 'front right', 'rear left', 'rear right']
 
     # Initialize buffers for recording
     joint_positions_buffer = []
@@ -437,8 +868,12 @@ def main():
     foot_velocities_world_frame_buffer = []
     foot_velocities_body_frame_buffer = []
     foot_positions_body_frame_buffer = []
-    foot_positions_contact_frame_buffer = [] # Height above terrain, also called sole frame
+    foot_positions_contact_frame_buffer = []  # Height above terrain, also called sole frame
     distance_increment_buffer = []
+    terrain_level_buffer = []
+    track_lin_vel_xy_exp_common_weight_buffer = []
+    track_ang_vel_z_exp_common_weight_buffer = []
+    track_vel_exp_total_common_weight_buffer = []
 
     reward_buffer = []
     manual_reset_steps = []
@@ -464,7 +899,7 @@ def main():
         print(f"Starting ffmpeg process={' '.join(ffmpeg_cmd)}")
         ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdout=ffmpeg_process_logfile, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, bufsize=4 * 1024 * 1024)
 
-    CPP_INFERENCE = False # Allows testing C++ inference in devcontainer (test_pytorch_policy.cpp) in simulation
+    CPP_INFERENCE = False  # Allows testing C++ inference in devcontainer (test_pytorch_policy.cpp) in simulation
     if CPP_INFERENCE:
         print("NOTE: C++ inference selected, connecting to 127.0.0.1:5555 via zmq...")
         ctx = zmq.Context()
@@ -502,16 +937,27 @@ def main():
                 socket.send(policy_observation.cpu().numpy().tobytes())
                 action_np = np.frombuffer(socket.recv(), dtype=np.float32).reshape(1, 12).copy()
                 action = torch.from_numpy(action_np)
-            else:
+            elif policy_backend == "clean_rl":
                 action = actor_with_rms(policy_observation)
+            elif policy_backend == "rsl_rl":
+                action = rsl_rl_policy({"policy": policy_observation})
+                if rsl_rl_clip_actions is not None:
+                    action = torch.clamp(action, -rsl_rl_clip_actions, rsl_rl_clip_actions)
+            else:
+                raise ValueError(f"Unsupported policy_backend={policy_backend}")
 
             inference_end = time.perf_counter_ns()
             inference_duration_us = (inference_end - inference_start) / 1e+3
             inference_durations.append(inference_duration_us)
             # print(f"Inference took {inference_duration_us:.4f}us")
+
         step_tuple = env.step(action)
         # print(step_tuple)
         next_observation, reward, terminated, truncated, info = step_tuple
+
+        if policy_backend == "rsl_rl" and rsl_rl_policy_reset is not None:
+            dones = torch.logical_or(terminated.bool(), truncated.bool())
+            rsl_rl_policy_reset(dones)
 
         # Idea of constraints as terminations is to scale reward by max constraint violation, but since policies
         # being tested here might differ in the constraints they were trained with, it makes sense to remove this scaling
@@ -521,18 +967,15 @@ def main():
         # rewards in this eval environment as it always calculates based on the limits specified in the local code, not what
         # the policy was trained with. Additionally, any hard constraints (max_p=1.0) need to be manually increased earlier
         # in the setup because those terminate the environment and thus break the reproducibility and the if check below.
-        if terminated != 1.0:
-            # print(f"reward_before_scaling={reward}")
-            reward /= (1.0 - terminated)
-            # print(f"reward_after_scaling={reward}\tterminated={terminated}")
+        reward = maybe_unscale_cat_reward(reward, terminated, policy_backend)
 
         # Because of CaT, terminated is actually a nonzero probability instead of a boolean, so we have to check for resets this way
         if env.unwrapped.episode_length_buf[0].item() == 0 and t > 0:
             automatic_reset_steps.append(t)
-            # continue # Skip reset iteration because it's just wrong
+            # continue  # Skip reset iteration because it's just wrong
 
         if t % frame_storage_interval == 0:
-            raw_frames = env.render()
+            raw_frames = get_render_frames(env)
             for frame in raw_frames:
                 assert frame.shape[:2] == (frame_height, frame_width), "Returned frame does not match specified dimension."
                 ffmpeg_process.stdin.write(frame.tobytes())
@@ -566,13 +1009,14 @@ def main():
         action_rate_buffer.append(action_rate)
         previous_action = action_np
 
-        base_world_position = scene_robot_data.root_link_pos_w[0].cpu().numpy() # world-frame for env 0
-        # origin = env.unwrapped.scene.terrain.env_origins[0].cpu().numpy() # terrain origin for env 0
-        # relative_position = world_position + origin # position relative to terrain
+        base_world_position = scene_robot_data.root_link_pos_w[0].cpu().numpy()  # world-frame for env 0
+        # origin = env.unwrapped.scene.terrain.env_origins[0].cpu().numpy()  # terrain origin for env 0
+        # relative_position = world_position + origin  # position relative to terrain
         # quat_xyzw = scene_data.root_quat_w[0]
-        # quat_wxyz = torch.cat([quat_xyzw[3:], quat_xyzw[:3]]) # reorder to (w,x,y,z)
+        # quat_wxyz = torch.cat([quat_xyzw[3:], quat_xyzw[:3]])  # reorder to (w,x,y,z)
         quat_wxyz = root_quat_w(env.unwrapped, make_quat_unique=True, asset_cfg=SceneEntityCfg("robot"))
         roll_t, pitch_t, yaw_t = euler_xyz_from_quat(quat_wxyz)
+
         # Isaaclab returns 0 to 2pi euler angles, so small negative angles wrap around to ~2pi. Rescale accordingly
         def convert_to_signed_angle(a):
             return (a + np.pi) % (2 * np.pi) - np.pi
@@ -596,15 +1040,29 @@ def main():
         base_linear_velocity_body_buffer.append(linear_velocity_b.cpu().numpy())
         base_angular_velocity_body_buffer.append(angular_velocity_b.cpu().numpy())
 
-        commanded_velocity_buffer.append(env.unwrapped.command_manager.get_command("base_velocity").clone()) # three components: lin_vel_x, lin_vel_y, ang_vel_z
+        current_commanded_velocity = env.unwrapped.command_manager.get_command("base_velocity").clone()
+        commanded_velocity_buffer.append(current_commanded_velocity)  # three components: lin_vel_x, lin_vel_y, ang_vel_z
+
+        track_lin_vel_xy_exp_common, track_ang_vel_z_exp_common, track_vel_exp_total_common = compute_common_tracking_rewards(
+            commanded_velocity=current_commanded_velocity[0].detach().cpu().numpy(),
+            base_linear_velocity_body=linear_velocity_b.detach().cpu().numpy(),
+            base_angular_velocity_body=angular_velocity_b.detach().cpu().numpy(),
+        )
+        track_lin_vel_xy_exp_common_weight_buffer.append(track_lin_vel_xy_exp_common)
+        track_ang_vel_z_exp_common_weight_buffer.append(track_ang_vel_z_exp_common)
+        track_vel_exp_total_common_weight_buffer.append(track_vel_exp_total_common)
+
+        terrain_level_buffer.append(get_current_terrain_level(env.unwrapped))
+
         contact_state = (max_per_foot > 0).astype(int)
         contact_state_buffer.append(contact_state)
 
-        height_map_sequence = height_map_grid(env.unwrapped, SceneEntityCfg(name="ray_caster")).cpu().numpy()
+        height_map_sequence = get_height_map_sequence(env.unwrapped, SceneEntityCfg(name="ray_caster")).cpu().numpy()
         height_map_buffer.append(height_map_sequence[0])
 
         # This will not account for terrain height, i.e. if the robot is standing on a 1m obstacle, the world foot height will be 1m.
-        foot_positions_world = np.stack([scene_robot_data.body_link_pos_w[0, scene_robot_data.body_names.index(link)].cpu().numpy() for link in foot_links])
+        foot_positions_world_t = torch.stack([scene_robot_data.body_link_pos_w[0, scene_robot_data.body_names.index(link)] for link in foot_links])
+        foot_positions_world = foot_positions_world_t.cpu().numpy()
         foot_positions_world_frame_buffer.append(foot_positions_world)
 
         foot_velocities_world_t = torch.stack([scene_robot_data.body_link_vel_w[0, scene_robot_data.body_names.index(link), :3] for link in foot_links])
@@ -613,13 +1071,25 @@ def main():
         foot_velocities_world_frame_buffer.append(foot_velocities_world_t.cpu().numpy())
         foot_velocities_body_frame_buffer.append(foot_velocities_body_t.cpu().numpy())
 
-        foot_positions_body = env.unwrapped.scene["foot_frame_transformer"].data.target_pos_source[0].cpu().numpy()
+        if scene_entity_exists(env.unwrapped, "foot_frame_transformer"):
+            foot_positions_body = env.unwrapped.scene["foot_frame_transformer"].data.target_pos_source[0].cpu().numpy()
+        else:
+            base_position_t = scene_robot_data.root_link_pos_w[0]
+            foot_positions_body_t = quat_apply_inverse(quat_expanded, foot_positions_world_t - base_position_t)
+            foot_positions_body = foot_positions_body_t.cpu().numpy()
         # print(f"foot_positions_body={foot_positions_body}")
         foot_positions_body_frame_buffer.append(foot_positions_body)
 
         # Calculate foot height above ground using raycaster sensor in each foot (sole/contact frame)
-        foot_com_toe_tip_offset = 0.0228 # This makes swing height more intuitive, without the offset, standing still reports a positive stance height
-        terrain_offset_feet = np.array([[0, 0, env.unwrapped.scene[f"ray_caster_{link_name}"].data.ray_hits_w[:, 0, 2].cpu().item() + foot_com_toe_tip_offset] for link_name in foot_links])
+        foot_com_toe_tip_offset = 0.0228  # This makes swing height more intuitive, without the offset, standing still reports a positive stance height
+        terrain_offset_feet = np.array([
+            [
+                0,
+                0,
+                env.unwrapped.scene[f"ray_caster_{link_name}"].data.ray_hits_w[:, 0, 2].cpu().item() + foot_com_toe_tip_offset
+            ]
+            for link_name in foot_links
+        ])
         # print(f"terrain_z_feet={terrain_offset_feet}")
         foot_positions_contact_frame = foot_positions_world - terrain_offset_feet
         # print(f"foot_positions_contact_frame={foot_positions_contact_frame}")
@@ -659,6 +1129,10 @@ def main():
     base_angular_velocity_body_array = np.vstack(base_angular_velocity_body_buffer)
     contact_state_array = np.vstack(contact_state_buffer)
     commanded_velocity_array = np.vstack([cv.cpu().numpy() if isinstance(cv, torch.Tensor) else np.asarray(cv) for cv in commanded_velocity_buffer])
+    terrain_level_array = np.asarray(terrain_level_buffer, dtype=np.float64)
+    track_lin_vel_xy_exp_common_weight_array = np.asarray(track_lin_vel_xy_exp_common_weight_buffer, dtype=np.float64)
+    track_ang_vel_z_exp_common_weight_array = np.asarray(track_ang_vel_z_exp_common_weight_buffer, dtype=np.float64)
+    track_vel_exp_total_common_weight_array = np.asarray(track_vel_exp_total_common_weight_buffer, dtype=np.float64)
     foot_velocities_world_frame_array = np.array(foot_velocities_world_frame_buffer)
     foot_velocities_body_frame_array = np.array(foot_velocities_body_frame_buffer)
     foot_positions_world_frame_array = np.array(foot_positions_world_frame_buffer)
@@ -692,7 +1166,7 @@ def main():
         if 0 <= reset_step < total_sim_steps:
             distance_increment_array[reset_step] = pre_step_distance_increment_array[reset_step]
 
-    # Safety guard for any unmarked teleport / corrupted sample. 0.6m for 20ms is ~3m/s, so we fall back to a constant
+    # Safety guard for any unmarked teleport / corrupted sample. 0.06m for 20ms is ~3m/s, so we fall back to a constant
     MAX_REASONABLE_HORIZONTAL_DISTANCE_PER_STEP_METERS = 0.06
     invalid_distance_mask = ~np.isfinite(distance_increment_array) | (distance_increment_array > MAX_REASONABLE_HORIZONTAL_DISTANCE_PER_STEP_METERS)
     distance_increment_array[invalid_distance_mask] = pre_step_distance_increment_array[invalid_distance_mask]
@@ -733,10 +1207,15 @@ def main():
         raw_power_array=raw_power_array,
         power_array=repaired_power_array,
         distance_increment_array=distance_increment_array,
+        terrain_level_array=terrain_level_array,
+        track_lin_vel_xy_exp_common_weight_array=track_lin_vel_xy_exp_common_weight_array,
+        track_ang_vel_z_exp_common_weight_array=track_ang_vel_z_exp_common_weight_array,
+        track_vel_exp_total_common_weight_array=track_vel_exp_total_common_weight_array,
         foot_labels=np.array(foot_labels),
         joint_names=np.array(joint_names),
         total_robot_mass=total_robot_mass,
         constraint_bounds=np.array(constraint_bounds, dtype=object),
+        constraint_bounds_source=np.array(constraint_bounds_source),
     )
 
     arrays_dict = {
@@ -764,6 +1243,13 @@ def main():
         "reward": reward_array,
     }
 
+    eval_only_arrays = {
+        "terrain_level": terrain_level_array,
+        "track_lin_vel_xy_exp_common_weight": track_lin_vel_xy_exp_common_weight_array,
+        "track_ang_vel_z_exp_common_weight": track_ang_vel_z_exp_common_weight_array,
+        "track_vel_exp_total_common_weight": track_vel_exp_total_common_weight_array,
+    }
+
     constants_dict = {
         "step_dt": step_dt,
         "joint_names": joint_names,
@@ -778,19 +1264,31 @@ def main():
     random_timestep_mask = all_indices < args.random_sim_step_length
 
     scenario_masks = {}
-    for k, (scenario_tag, *_ ) in enumerate(fixed_command_scenarios):
+    for k, (scenario_tag, *_) in enumerate(fixed_command_scenarios):
         start = args.random_sim_step_length + k * fixed_command_sim_steps
-        end = start + fixed_command_sim_steps     # exclusive
+        end = start + fixed_command_sim_steps  # exclusive
         scenario_masks[scenario_tag] = (all_indices >= start) & (all_indices < end)
 
-    overall_metrics = compute_summary_metrics(np.ones(T, bool), manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict)
-    random_metrics = compute_summary_metrics(random_timestep_mask, manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict)
+    overall_metrics = add_eval_only_metrics_to_summary(
+        compute_summary_metrics(np.ones(T, bool), manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict),
+        np.ones(T, bool),
+        eval_only_arrays,
+    )
+    random_metrics = add_eval_only_metrics_to_summary(
+        compute_summary_metrics(random_timestep_mask, manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict),
+        random_timestep_mask,
+        eval_only_arrays,
+    )
     scenario_metrics = {
-        tag: compute_summary_metrics(msk, manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict)
+        tag: add_eval_only_metrics_to_summary(
+            compute_summary_metrics(msk, manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict),
+            msk,
+            eval_only_arrays,
+        )
         for tag, msk in scenario_masks.items()
     }
 
-    summary_metrics = dict(overall_metrics) # start with overall block
+    summary_metrics = dict(overall_metrics)  # start with overall block
     # metrics per segment / fixed command scenario
     summary_metrics["random_simulation_steps_metrics"] = random_metrics
     summary_metrics["fixed_command_scenarios_metrics"] = scenario_metrics
@@ -804,17 +1302,32 @@ def main():
         "total_sim_steps": total_sim_steps,
         "seed": env_cfg.seed,
         "used_checkpoint_path": checkpoint_path,
+        "policy_backend": policy_backend,
+        "detected_policy_backend": detected_policy_backend,
         "fixed_command_scenarios": fixed_command_scenarios,
         "manual_reset_steps": manual_reset_steps,
         "automatic_reset_steps": automatic_reset_steps,
+        "constraint_bounds": constraint_bounds,
+        "constraint_bounds_source": constraint_bounds_source,
+        "hardcoded_upstream_go2_constraint_bounds": UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS,
+        "hardcoded_upstream_go2_constraint_bounds_used": (
+            constraint_bounds_source == "hardcoded_upstream_go2_rough_eval_thresholds"
+        ),
+        "eval_tracking_reward_common_scale": {
+            "track_lin_vel_xy_exp_weight": 1.0,
+            "track_ang_vel_z_exp_weight": 0.5,
+            "std_squared": 0.25,
+            "note": "Common eval tracking scale matching the custom env. Upstream Go2 training uses 1.5 and 0.75, so this records downscaled fair-comparison tracking rewards.",
+        },
+        "downscale_upstream_go2_tracking_rewards": args.downscale_upstream_go2_tracking_rewards,
     })
 
     summary_path = os.path.join(eval_base_dir, "metrics_summary.json")
     with open(summary_path, 'w') as summary_file:
-        json.dump(summary_metrics, summary_file, indent=4, default=lambda o: o.tolist()) # lambda for torch/numpy tensor conversion or any other nested objects
+        json.dump(summary_metrics, summary_file, indent=4, default=lambda o: o.tolist())  # lambda for torch/numpy tensor conversion or any other nested objects
     # print(json.dumps(summary_metrics, indent=4, default=lambda o: o.tolist()))
 
-    raw_frames = env.render()
+    raw_frames = get_render_frames(env)
     for frame in raw_frames:
         ffmpeg_process.stdin.write(frame.tobytes())
     ffmpeg_process.stdin.close()
