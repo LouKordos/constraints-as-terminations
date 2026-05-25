@@ -228,7 +228,7 @@ def create_height_map_animation(height_map_sequence: np.ndarray, foot_positions_
     animation_obj.save(output_path, fps=fps)
     plt.close()
 
-CORL_GAIT_FIGURE_SIZE = (3.5, 2)  # width, height in inches
+CORL_GAIT_FIGURE_SIZE = (3.5 * 0.75, 2 * 0.75) # width, height in inches
 CORL_GAIT_ROW_HEIGHT = 0.3
 CORL_GAIT_ROW_GAP = 0.15
 CORL_GAIT_TOP_BOTTOM_MARGIN = 0.3
