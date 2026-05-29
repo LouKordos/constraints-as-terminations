@@ -329,7 +329,7 @@ def resolve_constraint_bounds_for_eval(
     else:
         print("[INFO] env_cfg has no custom constraints block. Constraint-bound loading skipped.")
 
-    if not constraint_bounds and is_upstream_go2_rough_task(task_name):
+    if not constraint_bounds: # and is_upstream_go2_rough_task(task_name):
         constraint_bounds = get_hardcoded_upstream_go2_constraint_bounds()
         constraint_bounds_source = "hardcoded_upstream_go2_rough_eval_thresholds"
         print("[INFO] Using hardcoded eval constraint bounds for upstream rough Unitree Go2 task:")
