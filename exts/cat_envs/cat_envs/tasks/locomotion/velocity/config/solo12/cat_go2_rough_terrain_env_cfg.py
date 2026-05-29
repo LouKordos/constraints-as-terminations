@@ -597,7 +597,7 @@ class EventCfg:
         func=mdp.apply_external_force_torque,
         mode="interval",
         is_global_time=False, # Don't apply in sync across all envs
-        interval_range_s=(0.05, 0.2), # frequency + implicit "hold" time
+        interval_range_s=(0.05, 0.1), # frequency + implicit "hold" time
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=["base"]),
             "force_range": (-10.0, 10.0),
