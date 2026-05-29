@@ -22,8 +22,6 @@ if TYPE_CHECKING:
 def joint_position_absolute_upper_bound(env: ManagerBasedRLEnv, limit: float, names: list[str], asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),) -> torch.Tensor:
     robot = env.scene[asset_cfg.name]
     pos0 = robot.data.root_pos_w[0]
-    x, y, z = pos0[0].item(), pos0[1].item(), pos0[2].item()
-    # print(f"robot base pose of env 0: x={x:.3f}, y={y:.3f}, z={z:.3f}")
     data = env.scene[asset_cfg.name].data
     joint_ids, _ = robot.find_joints(names, preserve_order=True)
     cstr = torch.abs(data.joint_pos[:, joint_ids]) - limit

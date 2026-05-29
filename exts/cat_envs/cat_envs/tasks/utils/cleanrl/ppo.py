@@ -284,7 +284,7 @@ def PPO(envs, ppo_cfg, run_path):
             # ALGO LOGIC: action logic
             with torch.no_grad():
                 action, logprob, _, value, action_std = agent.get_action_and_value(next_obs)
-                action_std_buffer.append(action_std.detach().cpu().numpy())
+                action_std_buffer.append(action_std.detach())
                 values[step] = value.flatten()
             actions[step] = action
             logprobs[step] = logprob
@@ -482,12 +482,6 @@ def PPO(envs, ppo_cfg, run_path):
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
-                with torch.no_grad():
-                    # calculate approx_kl http://joschu.net/blog/kl-approx.html
-                    old_approx_kl = (-logratio).mean()
-                    approx_kl = ((ratio - 1) - logratio).mean()
-                    clipfracs += [((ratio - 1.0).abs() > CLIP_COEF).float().mean().item()]
-
                 mb_advantages = b_advantages[mb_inds]
                 if NORM_ADV:
                     mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
@@ -529,7 +523,7 @@ def PPO(envs, ppo_cfg, run_path):
         writer.add_scalar("Loss/mean_surrogate_loss", sum_surrogate_loss / num_updates, iteration)
         writer.add_scalar("Loss/learning_rate", optimizer.param_groups[0]["lr"], iteration)
 
-        stacked_action_std_np = np.stack(action_std_buffer, axis=0).reshape(-1, num_joints)
+        stacked_action_std_np = torch.stack(action_std_buffer, dim=0).cpu().numpy().reshape(-1, num_joints)
         mean_per_joint = stacked_action_std_np.mean(axis=0)
         std_per_joint  = stacked_action_std_np.std(axis=0)
         for j, name in enumerate(joint_names):

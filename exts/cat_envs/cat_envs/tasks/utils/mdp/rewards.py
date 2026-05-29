@@ -17,7 +17,6 @@ def joint_power(env: ManagerBasedRLEnv, scaling_factor, asset_cfg: SceneEntityCf
     joint_torques = robot.data.applied_torque[:, asset_cfg.joint_ids]
     joint_vels = robot.data.joint_vel[:, asset_cfg.joint_ids]
     power = torch.sum(torch.abs(joint_torques * joint_vels), dim=1)
-    print(f"env.common_step_counter={env.common_step_counter}\tscaled power={(power.mean().cpu().item() * scaling_factor):.4f}\tscaling_factor={scaling_factor}")
     return -power * scaling_factor
 
 def squared_joint_power(env: ManagerBasedRLEnv, scaling_factor, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
@@ -25,7 +24,6 @@ def squared_joint_power(env: ManagerBasedRLEnv, scaling_factor, asset_cfg: Scene
     joint_torques = robot.data.applied_torque[:, asset_cfg.joint_ids]
     joint_vels = robot.data.joint_vel[:, asset_cfg.joint_ids]
     power = torch.sum(torch.square(torch.abs(joint_torques * joint_vels)), dim=1)
-    print(f"env.common_step_counter={env.common_step_counter}\tscaled squared power={(power.mean().cpu().item() * scaling_factor):.4f}\tscaling_factor={scaling_factor}")
     return -power * scaling_factor
 
 def squared_joint_torques(env: ManagerBasedRLEnv, scaling_factor, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:

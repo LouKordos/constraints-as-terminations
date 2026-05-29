@@ -87,12 +87,11 @@ def height_map_grid(env, asset_cfg: SceneEntityCfg):
     base_expanded_to_match_shape_world_frame = base_pose_world_frame.view(-1, 1, 3).expand_as(ray_hit_positions_world_frame) # [E, R, 3]
     
     non_finite_mask = ~torch.isfinite(ray_hit_positions_world_frame)
-    if non_finite_mask.any():
-        # print("NANS OR INF DURING HEIGHT MAP CALCULATION!!!")
-        hits_clean = ray_hit_positions_world_frame.clone()
-        hits_clean[non_finite_mask] = base_expanded_to_match_shape_world_frame[non_finite_mask]
-    else:
-        hits_clean = ray_hit_positions_world_frame
+    hits_clean = torch.where(
+        non_finite_mask, 
+        base_expanded_to_match_shape_world_frame, 
+        ray_hit_positions_world_frame
+    )
 
     local = hits_clean - base_expanded_to_match_shape_world_frame # [E, R, 3]
     height = local[..., 2] # [E, R]
@@ -863,8 +862,7 @@ class CurriculumCfg:
         }
     )
 
-    terrain_levels = CurrTerm(func=terrain_levels_with_ray_caster_refresh)
-    # terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
+    terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
 
 def enable_biased_gaussian_noise(env_cfg):
     # In Isaac Lab, NoiseModelWithAdditiveBias.reset() updates the stored bias by applying

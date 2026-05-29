@@ -243,13 +243,13 @@ class ConstraintManager(ManagerBase):
             self._episode_sums[key][env_ids] = 0.0
             self._cstr_mean_values[key][env_ids] = 0.0
 
-        extras["Episode/MaxAppliedTorque"] = torch.mean(self._episode_max_applied_torque[env_ids], dim=0).item()
-        extras["Episode/MaxJointVel"] = torch.mean(self._episode_max_joint_vel[env_ids], dim=0).item()
-        extras["Episode/MaxJointPos"] = torch.mean(self._episode_max_joint_pos[env_ids], dim=0).item()
-        extras["Episode/EnergyConsumed"] = self._episode_energy_consumed[env_ids].mean().item()
-        extras["Episode/MaxActionRate"] = self._episode_max_action_rate[env_ids].mean().item()
-        extras["Episode/MaxAirTime"] = self._episode_max_air_time[env_ids].mean().item()
-        extras["Episode/MaxFootContactForce"] = self._episode_max_foot_contact_force[env_ids].mean().item()
+        extras["Episode/MaxAppliedTorque"] = torch.mean(self._episode_max_applied_torque[env_ids], dim=0)
+        extras["Episode/MaxJointVel"] = torch.mean(self._episode_max_joint_vel[env_ids], dim=0)
+        extras["Episode/MaxJointPos"] = torch.mean(self._episode_max_joint_pos[env_ids], dim=0)
+        extras["Episode/EnergyConsumed"] = self._episode_energy_consumed[env_ids].mean()
+        extras["Episode/MaxActionRate"] = self._episode_max_action_rate[env_ids].mean()
+        extras["Episode/MaxAirTime"] = self._episode_max_air_time[env_ids].mean()
+        extras["Episode/MaxFootContactForce"] = self._episode_max_foot_contact_force[env_ids].mean()
 
         self._episode_max_applied_torque[env_ids] = 0.0
         self._episode_max_joint_vel[env_ids] = 0.0

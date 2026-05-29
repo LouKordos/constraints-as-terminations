@@ -82,9 +82,9 @@ def joint_state_history(env, names: List[str], history_len: int = 3, latency: in
     buf[:, 0, :] = cur
 
     # Re-initialise reset envs so all history slots equal the current state
-    just_reset = (env.episode_length_buf == 0).nonzero(as_tuple=False).squeeze(-1)
-    if just_reset.numel() > 0:
-        buf[just_reset] = cur[just_reset].unsqueeze(1).repeat(1, total_len, 1)
+    reset_mask = (env.episode_length_buf == 0).view(-1, 1, 1)
+    expanded_cur = cur.unsqueeze(1).expand(-1, total_len, -1)
+    buf = torch.where(reset_mask, expanded_cur, buf)
 
     setattr(env, key, buf) 
     
@@ -117,9 +117,9 @@ def base_ang_vel_history(env, history_len: int = 3, latency: int = 0):
     buf = torch.roll(buf, 1, 1)
     buf[:, 0] = cur
 
-    just_reset = (ep_buf == 0).nonzero(as_tuple=False).squeeze(-1)
-    if just_reset.numel():
-        buf[just_reset] = cur[just_reset].unsqueeze(1).repeat(1, total_len, 1)
+    reset_mask = (env.episode_length_buf == 0).view(-1, 1, 1)
+    expanded_cur = cur.unsqueeze(1).expand(-1, total_len, -1)
+    buf = torch.where(reset_mask, expanded_cur, buf)    
 
     setattr(env, key, buf)
     return buf[:, latency : latency + history_len].reshape(env.num_envs, -1)
@@ -147,9 +147,9 @@ def projected_gravity_history(env, history_len: int = 3, latency: int = 0):
     buf = torch.roll(buf, 1, 1)
     buf[:, 0] = cur
 
-    just_reset = (ep_buf == 0).nonzero(as_tuple=False).squeeze(-1)
-    if just_reset.numel():
-        buf[just_reset] = cur[just_reset].unsqueeze(1).repeat(1, total_len, 1)
+    reset_mask = (env.episode_length_buf == 0).view(-1, 1, 1)
+    expanded_cur = cur.unsqueeze(1).expand(-1, total_len, -1)
+    buf = torch.where(reset_mask, expanded_cur, buf)
 
     setattr(env, key, buf)
     return buf[:, latency : latency + history_len].reshape(env.num_envs, -1)
@@ -179,9 +179,9 @@ def actions_history(env, history_len: int = 3, latency: int = 0):
     buf = torch.roll(buf, 1, 1)
     buf[:, 0] = cur
 
-    just_reset = (ep_buf == 0).nonzero(as_tuple=False).squeeze(-1)
-    if just_reset.numel():
-        buf[just_reset] = cur[just_reset].unsqueeze(1).repeat(1, total_len, 1)
+    reset_mask = (env.episode_length_buf == 0).view(-1, 1, 1)
+    expanded_cur = cur.unsqueeze(1).expand(-1, total_len, -1)
+    buf = torch.where(reset_mask, expanded_cur, buf)
 
     setattr(env, key, buf)
     return buf[:, latency : latency + history_len].reshape(env.num_envs, -1)
@@ -218,9 +218,9 @@ def height_map_history(env, history_len: int = 3, latency: int = 0, asset_cfg: S
     buf = torch.roll(buf, 1, 1)
     buf[:, 0] = cur
 
-    just_reset = (ep_buf == 0).nonzero(as_tuple=False).squeeze(-1)
-    if just_reset.numel():
-        buf[just_reset] = cur[just_reset].unsqueeze(1).repeat(1, total_len, 1)
+    reset_mask = (env.episode_length_buf == 0).view(-1, 1, 1)
+    expanded_cur = cur.unsqueeze(1).expand(-1, total_len, -1)
+    buf = torch.where(reset_mask, expanded_cur, buf)
 
     setattr(env, key, buf)
     return buf[:, latency : latency + history_len].reshape(env.num_envs, -1)
