@@ -708,14 +708,14 @@ def main():
     apply_seed_to_env_cfg(env_cfg, seed)
     set_global_seed(seed)
 
-    print(f"{prefix} seed={seed}")
-    print(f"{prefix} env_cfg.seed={getattr(env_cfg, 'seed', None)}")
-    print(f"{prefix} env_cfg.sim.random_seed={getattr(env_cfg.sim, 'random_seed', None)}")
+    print(f"seed={seed}")
+    print(f"env_cfg.seed={getattr(env_cfg, 'seed', None)}")
+    print(f"env_cfg.sim.random_seed={getattr(env_cfg.sim, 'random_seed', None)}")
 
     terrain_cfg = getattr(env_cfg.scene, "terrain", None)
     terrain_generator_cfg = getattr(terrain_cfg, "terrain_generator", None)
     if terrain_generator_cfg is not None:
-        print(f"{prefix} terrain_generator.seed={getattr(terrain_generator_cfg, 'seed', None)}")
+        print(f"terrain_generator.seed={getattr(terrain_generator_cfg, 'seed', None)}")
 
     # Viewer setup
     env_cfg.viewer.origin_type = "asset_root"
