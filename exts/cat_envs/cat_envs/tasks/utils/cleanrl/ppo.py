@@ -125,17 +125,26 @@ class ActorWithRMS(nn.Module):
 
 def PPO(envs, ppo_cfg, run_path):
     print(f"Env in PPO function:\n{os.environ}")
-    print("env seed in ppo.py=", envs.unwrapped.cfg.seed)
+
+    seed = ppo_cfg.seed
+    env_seed = envs.unwrapped.cfg.seed
+    if env_seed != seed:
+        raise RuntimeError(f"Seed mismatch: ppo_cfg.seed={seed}, env_cfg.seed={env_seed}")
+
+    print("seed in ppo.py=", seed)
+
     import random
-    random.seed(envs.unwrapped.cfg.seed)
-    np.random.seed(envs.unwrapped.cfg.seed)
+    random.seed(seed)
+    np.random.seed(seed)
+
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
     torch.backends.cudnn.deterministic = True
-    torch.use_deterministic_algorithms(True)
     torch.backends.cudnn.benchmark = False
-    torch.manual_seed(envs.unwrapped.cfg.seed)
-    torch.cuda.manual_seed_all(envs.unwrapped.cfg.seed)
+    torch.use_deterministic_algorithms(True)
+
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
     if ppo_cfg.logger == "wandb":
         from rsl_rl.utils.wandb_utils import WandbSummaryWriter
@@ -231,7 +240,7 @@ def PPO(envs, ppo_cfg, run_path):
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
-    next_obs = envs.reset(seed=envs.unwrapped.cfg.seed)[0]["policy"]
+    next_obs = envs.reset(seed=seed)[0]["policy"]
     next_obs = agent.obs_rms(next_obs)
     next_done = torch.zeros(NUM_ENVS, dtype=torch.float).to(device)
     next_true_done = torch.zeros(NUM_ENVS, dtype=torch.float).to(device)

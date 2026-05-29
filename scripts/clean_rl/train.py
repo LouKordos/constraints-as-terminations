@@ -2,11 +2,26 @@ import argparse
 import sys
 import os
 from datetime import datetime
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8") # Determinism
 from isaaclab.app import AppLauncher
 import cli_args  # isort: skip
 from functools import partial
 sys.stdout.reconfigure(line_buffering=True)
 print = partial(print, flush=True) # For cluster runs
+
+def set_global_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True)
+
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
 
 parser = argparse.ArgumentParser(description="Train an RL agent with CleanRL.")
 parser.add_argument(
@@ -29,7 +44,7 @@ parser.add_argument(
 )
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument(
-    "--seed", type=int, default=None, help="Seed used for the environment"
+    "--seed", type=int, default=46, help="Seed used for the environment"
 )
 parser.add_argument(
     "--num_iterations", type=int, default=None, help="RL Policy training iterations."
@@ -59,8 +74,6 @@ from os import environ
 import random
 import numpy as np
 import torch
-
-os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8" # Determinism
 
 from pxr import Usd, UsdGeom, Tf
 import hashlib
@@ -122,19 +135,24 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         else agent_cfg.num_iterations
     )
 
-    # Horrible practice to hard-code this in the env but I spent a week on trying to pass the values via hydra config or changing via train.py but it never worked.
-    # Right now the seed is configured here and then passed to train.py to set all the libraries
-    agent_cfg.seed = env_cfg.seed
-    print(f"agent_cfg and env_cfg seed={agent_cfg.seed}")
-    random.seed(agent_cfg.seed)
-    np.random.seed(agent_cfg.seed)
-    torch.backends.cuda.matmul.allow_tf32 = False
-    torch.backends.cudnn.allow_tf32 = False
-    torch.backends.cudnn.deterministic = True
-    torch.use_deterministic_algorithms(True)
-    torch.backends.cudnn.benchmark = False
-    torch.manual_seed(agent_cfg.seed)
-    torch.cuda.manual_seed_all(agent_cfg.seed)
+    seed = args_cli.seed
+    agent_cfg.seed = seed
+    env_cfg.seed = seed
+    env_cfg.sim.random_seed = seed
+
+    if env_cfg.scene.terrain.terrain_generator is not None:
+        env_cfg.scene.terrain.terrain_generator.seed = seed
+
+    import isaaclab_tasks.manager_based.locomotion.velocity.mdp as velocity_mdp
+    velocity_mdp.terrain_levels_vel.seed = seed
+    set_global_seed(seed)
+
+    print(f"[INFO] Using seed={seed}")
+    print(f"[INFO] agent_cfg.seed={agent_cfg.seed}")
+    print(f"[INFO] env_cfg.seed={env_cfg.seed}")
+    print(f"[INFO] env_cfg.sim.random_seed={env_cfg.sim.random_seed}")
+    if env_cfg.scene.terrain.terrain_generator is not None:
+        print(f"[INFO] terrain_generator.seed={env_cfg.scene.terrain.terrain_generator.seed}")
 
     env_cfg.sim.device = (args_cli.device if args_cli.device is not None else env_cfg.sim.device)
 

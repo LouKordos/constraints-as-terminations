@@ -53,20 +53,6 @@ from cat_envs.assets.odri import SOLO12_MINIMAL_CFG
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 from cat_envs.assets.go2_config import UNITREE_GO2_CFG_TRAIN, UNITREE_GO2_CFG_EVAL  # isort: skip
 import torch
-import numpy as np
-# Horrible practice to hard-code this in the env but I spent a week on trying to pass the values via hydra config or changing via train.py but it never worked.
-# Right now the seed is configured here and then passed to train.py to set all the libraries
-HARDCODED_SEED = 46
-import random
-random.seed(HARDCODED_SEED)
-np.random.seed(HARDCODED_SEED)
-torch.backends.cuda.matmul.allow_tf32 = False
-torch.backends.cudnn.allow_tf32 = False
-torch.backends.cudnn.deterministic = True
-torch.use_deterministic_algorithms(True)
-torch.backends.cudnn.benchmark = False
-torch.manual_seed(HARDCODED_SEED)
-torch.cuda.manual_seed_all(HARDCODED_SEED)
 
 def _get_or_create_noisy_height_markers(env):
     """Create (once) a marker instancer used to visualize noisy ray hit heights."""
@@ -155,9 +141,9 @@ def height_map_grid(env, asset_cfg: SceneEntityCfg):
     return height
 
 from copy import deepcopy
-seeded_rough_cfg = deepcopy(ROUGH_TERRAINS_CFG)
-seeded_rough_cfg.seed = HARDCODED_SEED
-seeded_rough_cfg.use_cache = True
+
+rough_cfg = deepcopy(ROUGH_TERRAINS_CFG)
+rough_cfg.use_cache = True
 patched_sub_terrains = {
     name: sub_cfg.replace(
         flat_patch_sampling={
@@ -168,9 +154,9 @@ patched_sub_terrains = {
             )
         }
     )
-    for name, sub_cfg in seeded_rough_cfg.sub_terrains.items()
+    for name, sub_cfg in rough_cfg.sub_terrains.items()
 }
-seeded_rough_cfg.sub_terrains = patched_sub_terrains
+rough_cfg.sub_terrains = patched_sub_terrains
 
 @configclass
 class MySceneCfg(InteractiveSceneCfg):
@@ -198,7 +184,7 @@ class MySceneCfg(InteractiveSceneCfg):
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",
-        terrain_generator=seeded_rough_cfg,
+        terrain_generator=rough_cfg,
         max_init_terrain_level=1,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -956,23 +942,13 @@ class Go2RoughTerrainEnvCfg(ManagerBasedRLEnvCfg):
         self.scene.ray_caster.update_period = self.sim.dt
         self.scene.ray_caster_height_constraints.update_period = self.sim.dt
 
-        # check if terrain levels curriculum is enabled - if so, enable curriculum for terrain generator
-        # this generates terrains with increasing difficulty and is useful for training
         if getattr(self.curriculum, "terrain_levels", None) is not None:
-            mdp.terrain_levels_vel.seed = HARDCODED_SEED
             if self.scene.terrain.terrain_generator is not None:
                 self.scene.terrain.terrain_generator.curriculum = True
         else:
             if self.scene.terrain.terrain_generator is not None:
                 self.scene.terrain.terrain_generator.curriculum = False
-
-        print("Setting seed to", HARDCODED_SEED)
-        self.sim.random_seed = HARDCODED_SEED
-        self.seed = HARDCODED_SEED
-        if self.scene.terrain.terrain_generator is not None:
-            self.scene.terrain.terrain_generator.seed = HARDCODED_SEED
-            print(f"Terrain generator seed in env post init={self.scene.terrain.terrain_generator.seed}")
-
+        
         self.apply_elevation_map_pose_noise = True
         self.apply_elevation_map_point_noise = False
         

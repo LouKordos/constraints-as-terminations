@@ -5,6 +5,8 @@ import glob
 import json
 import yaml
 import numpy as np
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8" # Determinism
+os.environ["OMNICLIENT_HUB_MODE"] = "disabled"
 import torch
 import time
 import zmq
@@ -26,10 +28,6 @@ import yaml
 import uuid
 from typing import Dict, Tuple, Optional, List, Any
 from metrics_utils import compute_summary_metrics, summarize_metric
-
-os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8" # Determinism
-os.environ["OMNICLIENT_HUB_MODE"] = "disabled"
-
 eval_script_path = os.path.dirname(os.path.abspath(__file__))
 
 UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS: Dict[str, Tuple[Optional[float], Optional[float]]] = {
@@ -39,6 +37,35 @@ UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS: Dict[str, Tuple[Optional[float], Optio
     "action_rate": (-80.0, 80.0),
     "foot_contact_force": (0.0, 300.0),
 }
+
+def set_global_seed(seed: int):
+    import random
+
+    random.seed(seed)
+    np.random.seed(seed)
+
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True)
+
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
+def apply_seed_to_env_cfg(env_cfg, seed: int):
+    env_cfg.seed = seed
+    env_cfg.sim.random_seed = seed
+
+    terrain_cfg = getattr(env_cfg.scene, "terrain", None)
+    terrain_generator_cfg = getattr(terrain_cfg, "terrain_generator", None)
+    if terrain_generator_cfg is not None:
+        terrain_generator_cfg.seed = seed
+
+    import isaaclab_tasks.manager_based.locomotion.velocity.mdp as velocity_mdp
+
+    velocity_mdp.terrain_levels_vel.seed = seed
 
 
 def is_upstream_go2_rough_task(task_name: str) -> bool:
@@ -176,9 +203,8 @@ def parse_arguments():
     parser.add_argument("--delay_action_history", type=int, default=0, help="Latency steps for action history.")
     parser.add_argument("--delay_height_map", type=int, default=0, help="Latency steps for height map.")
     parser.add_argument("--skip_cot_sweep", action="store_true", default=False, help="Turn off 0.2m/s increment forward walking on flat terrain that is used for Cost of Transport estimation")
-    # Good seeds for eval: 44, 46, 49
-    # DEPRECATED: Hardcoded seed in env config is used
-    # parser.add_argument("--seed", type=int, required=False, default=46, help="Seed for numpy, torch, env, terrain, terrain generator etc.. Good seeds for eval are 44, 46, 49")
+    # Note that changing the seed will change terrain config and thus the fixed eval command scenarios, as well as random commands in the beginning!
+    parser.add_argument("--seed", type=int, required=False, default=46, help="Seed for numpy, torch, env, terrain, terrain generator etc.. Good seeds for eval are 44, 46, 49")
 
     sys.path.insert(0, os.path.join(eval_script_path, "clean_rl"))
     import cli_args  # isort: skip
@@ -577,7 +603,9 @@ def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
 
-    # ensure_tex_env()  # Used later for generate_plots.py
+    seed = args.seed
+    set_global_seed(seed)
+    print(f"[INFO] Using eval seed={seed}")
 
     if args.eval_checkpoint is None:
         checkpoint_path = get_latest_checkpoint(args.run_dir)
@@ -677,20 +705,17 @@ def main():
         set_latency("actions", args.delay_action_history)
         set_latency("height_map", args.delay_height_map)
 
-    # Seeding
-    import random
-    if env_cfg.seed is None:
-        env_cfg.seed = 0
-        print("[WARN] env_cfg.seed was None. Setting eval seed to 0.")
-    random.seed(env_cfg.seed)
-    np.random.seed(env_cfg.seed)
-    torch.backends.cuda.matmul.allow_tf32 = False
-    torch.backends.cudnn.allow_tf32 = False
-    torch.backends.cudnn.deterministic = True
-    torch.use_deterministic_algorithms(True)
-    torch.backends.cudnn.benchmark = False
-    torch.manual_seed(env_cfg.seed)
-    torch.cuda.manual_seed_all(env_cfg.seed)
+    apply_seed_to_env_cfg(env_cfg, seed)
+    set_global_seed(seed)
+
+    print(f"{prefix} seed={seed}")
+    print(f"{prefix} env_cfg.seed={getattr(env_cfg, 'seed', None)}")
+    print(f"{prefix} env_cfg.sim.random_seed={getattr(env_cfg.sim, 'random_seed', None)}")
+
+    terrain_cfg = getattr(env_cfg.scene, "terrain", None)
+    terrain_generator_cfg = getattr(terrain_cfg, "terrain_generator", None)
+    if terrain_generator_cfg is not None:
+        print(f"{prefix} terrain_generator.seed={getattr(terrain_generator_cfg, 'seed', None)}")
 
     # Viewer setup
     env_cfg.viewer.origin_type = "asset_root"
@@ -716,7 +741,7 @@ def main():
 
     eval_base_dir = os.path.join(
         str(run_path),
-        f"eval_checkpoint_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}_seed_{env_cfg.seed}"
+        f"eval_checkpoint_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}_seed_{seed}"
     )
     print(f"eval_base_dir={eval_base_dir}, env_name={env_name}, run_name={run_name}, task_name={task_name}")
 
@@ -772,6 +797,12 @@ def main():
     total_sim_steps = args.random_sim_step_length + len(fixed_command_scenarios) * fixed_command_sim_steps
     env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array")
 
+    print(f"[SEED CHECK] runtime env seed={getattr(env.unwrapped.cfg, 'seed', None)}")
+    print(f"[SEED CHECK] runtime sim seed={getattr(env.unwrapped.cfg.sim, 'random_seed', None)}")
+    runtime_terrain_generator = getattr(env.unwrapped.cfg.scene.terrain, "terrain_generator", None)
+    if runtime_terrain_generator is not None:
+        print(f"[SEED CHECK] runtime terrain seed={getattr(runtime_terrain_generator, 'seed', None)}")
+
     def get_render_frames(env):
         if args.enable_cameras is not None and args.enable_cameras == False:
             return []
@@ -810,7 +841,7 @@ def main():
         agent_cfg = load_cfg_from_registry(args.task, args.agent_entry_point)
         agent_cfg.device = args.device
         if hasattr(agent_cfg, "seed"):
-            agent_cfg.seed = env_cfg.seed
+            agent_cfg.seed = seed
 
         rsl_rl_env_for_runner = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
         runner_cfg_dict = build_rsl_rl_runner_cfg_dict(agent_cfg)
@@ -880,7 +911,7 @@ def main():
     automatic_reset_steps = []
     inference_durations = []
 
-    observations, info = env.reset()
+    observations, info = env.reset(seed=seed)
     policy_observation = observations['policy']
     previous_action = None
 
