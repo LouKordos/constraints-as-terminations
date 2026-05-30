@@ -73,10 +73,12 @@ git clone "$USER_REPO_URL" || { echo "[ERROR] Failed to clone user repo."; exit 
 cd "$USER_REPO_DIR" || exit 1
 uv pip install --no-build-isolation --no-deps -e ./exts/cat_envs
 uv pip install -r requirements.txt
-
 cd "$PROJECT_ROOT" || exit 1
+
 SLURM_TEMPLATE="$HOME/local-mamba-test.sbatch"
 SLURM_CONFIG="$PROJECT_ROOT/slurm-config.sbatch"
+SLURM_CONFIG_2080TI="$PROJECT_ROOT/slurm-config-2080ti.sbatch"
+
 if [ ! -f "$SLURM_TEMPLATE" ]; then
     echo "[WARNING] Slurm template '$SLURM_TEMPLATE' does not exist; skipping Slurm configuration."
 else
@@ -86,10 +88,28 @@ else
     echo "[INFO] Applying ENV_NAME to $SLURM_CONFIG..."
     sed -i -E "s|^[[:space:]]*(export[[:space:]]+)?ENV_NAME=.*|export ENV_NAME=${ENV_NAME}|" "$SLURM_CONFIG"
 
-    echo "[INFO] Updating job name to '$ENV_NAME'..."
-    sed -i "s/--job-name=.*/--job-name=$ENV_NAME/" "$SLURM_CONFIG"
+    echo "[INFO] Updating job name in $SLURM_CONFIG to '$ENV_NAME'..."
+    sed -i -E "s|^#SBATCH[[:space:]]+--job-name=.*|#SBATCH --job-name=${ENV_NAME}|" "$SLURM_CONFIG"
 
-    echo "[INFO] Slurm configuration complete."
+    echo "[INFO] Creating 2080Ti Slurm configuration..."
+    cp "$SLURM_CONFIG" "$SLURM_CONFIG_2080TI"
+
+    echo "[INFO] Updating job name in $SLURM_CONFIG_2080TI to '${ENV_NAME}-2080ti'..."
+    sed -i -E "s|^#SBATCH[[:space:]]+--job-name=.*|#SBATCH --job-name=${ENV_NAME}-2080ti|" "$SLURM_CONFIG_2080TI"
+
+    echo "[INFO] Updating partition in $SLURM_CONFIG_2080TI to 'week'..."
+    sed -i -E "s|^#SBATCH[[:space:]]+--partition=.*|#SBATCH --partition=week|" "$SLURM_CONFIG_2080TI"
+
+    echo "[INFO] Updating GPU request in $SLURM_CONFIG_2080TI to 'gpu:2080ti:1'..."
+    sed -i -E "s|^#SBATCH[[:space:]]+--gres=.*|#SBATCH --gres=gpu:2080ti:1|" "$SLURM_CONFIG_2080TI"
+
+    echo "[INFO] Updating array in $SLURM_CONFIG_2080TI to 9 single-run jobs..."
+    sed -i -E "s|^#SBATCH[[:space:]]+--array=.*|#SBATCH --array=0-8%9|" "$SLURM_CONFIG_2080TI"
+
+    echo "[INFO] Updating RUNS_PER_NODE in $SLURM_CONFIG_2080TI to 1..."
+    sed -i -E "s|^RUNS_PER_NODE=.*|RUNS_PER_NODE=1|" "$SLURM_CONFIG_2080TI"
+
+    echo "[INFO] Slurm configurations complete."
 fi
 
 set +x
@@ -97,5 +117,5 @@ echo "-------------------------------------DONE. CHECKLIST:---------------------
 echo "1. source $PROJECT_ROOT/.venv/bin/activate"
 echo "2. vim $SLURM_CONFIG" # Make desired changes (if any)
 echo "3. cd $USER_REPO_DIR"
-echo "4. sbatch $SLURM_CONFIG"
+echo "4. sbatch ../slurm-config.sbatch or ../slurm-config-2080ti.sbatch"
 echo "-----------------------------------------------------------------------------------------------"
