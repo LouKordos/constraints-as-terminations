@@ -129,7 +129,7 @@ def height_map_grid(env, asset_cfg: SceneEntityCfg):
         if env.cfg.apply_elevation_map_point_noise:
             height[outlier_mask] += outlier_values
 
-    if env.unwrapped.num_envs == 1:
+    if env.unwrapped.num_envs == 1 and False:
         noisy_markers = _get_or_create_noisy_height_markers(env)
         if noisy_markers is not None:
             e = 0 # Show only env 0 to avoid rendering exploding if num_envs is large
