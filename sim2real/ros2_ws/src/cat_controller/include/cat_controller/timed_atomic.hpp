@@ -6,6 +6,20 @@ Author: Loukas Kordos
 Disclaimer: This code was proudly written without LLMs :)
 */
 
+/*
+Some caveats:
+- I know that this will not work for extremely high frequency due to OS scheduler frequency often being 1ms, so anything below that is unreliable. But
+for my use cases here (<500Hz), I ran this for a long time without any issues and checked th waiting time using the tracy profiler, it never had any
+issues. If I was to rewrite this, I would just use a wait-free data structure like triple buffering or seqlock to fix this.
+- Even though the try_lock_for will voluntarily yield and thus potentially exceed the deadline slightly, I pinned the thread to a CPU, isolated it
+from the kernel and any other processes, and increased its priority. This mitigated the effect that yielding can have because no scheduling timer is
+running on that thread so the only thing that it has to wait for is the kernel hrtimer.
+- Regarding more complex objects and unbounded execution time due to heap operations: I am aware, and this is why I used atomic shared pointers for
+larger data structures, to avoid exactly this. I am aware that dropping a shared_ptr can trigger a heap deallocation (`delete`) on the consumer thread
+if it holds the last reference, but this data operates at a much lower frequency where the occasional heap overhead is acceptable.. So I only used
+timed_atomic for small to medium data on the stack.
+*/
+
 #include <chrono>
 #include <expected>
 #include <memory>
