@@ -1017,6 +1017,9 @@ class Go2RoughTerrainEnvCfg_PLAY(Go2RoughTerrainEnvCfg):
             mode="reset",
         )
 
+        self.events.push_robot = None
+        self.events.push_base_wrench = None
+
         ENABLE_EXTRA_MASS = False
         if ENABLE_EXTRA_MASS:
             self.events.add_extra_mass = EventTerm(
