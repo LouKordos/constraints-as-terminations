@@ -66,6 +66,14 @@ DEFAULT_SUMMARY_LABEL_MAP = {
     "rms_error_xy_mean": "Mean Base Velocity RMS Error (X,Y)",
 }
 
+SUMMARY_STATISTICS_METRIC_ORDER = [
+    "Curriculum/terrain_levels",
+    "rms_error_xy_mean",
+    "mean_cost_of_transport_range",
+    "violation_torque",
+    "violation_accel",
+]
+
 DEFAULT_STEP_HEIGHT_FLAT_SCENARIO_TAG = "walk_x_flat_terrain_1.0mps"
 DEFAULT_STEP_HEIGHT_UNEVEN_SCENARIO_TAG = "medium_walk_x_uneven_terrain"
 ALL_TIME_PLACEHOLDER = "ALL"
@@ -1089,7 +1097,22 @@ def build_aggregate_summary(
             )
 
     df = pd.DataFrame(rows)
-    df.sort_values(["label", "source", "metric"], inplace=True)
+
+    metric_order = {
+        metric: index
+        for index, metric in enumerate(SUMMARY_STATISTICS_METRIC_ORDER)
+    }
+
+    df["_summary_metric_order"] = df["metric"].map(metric_order).fillna(len(metric_order))
+    df["_original_order"] = np.arange(len(df))
+
+    df.sort_values(
+        ["label", "_summary_metric_order", "_original_order"],
+        inplace=True,
+        kind="mergesort",
+    )
+
+    df.drop(columns=["_summary_metric_order", "_original_order"], inplace=True)
     return df
 
 
