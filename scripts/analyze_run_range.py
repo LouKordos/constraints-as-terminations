@@ -77,6 +77,7 @@ SUMMARY_STATISTICS_METRIC_ORDER = [
 DEFAULT_STEP_HEIGHT_FLAT_SCENARIO_TAG = "walk_x_flat_terrain_1.0mps"
 DEFAULT_STEP_HEIGHT_UNEVEN_SCENARIO_TAG = "medium_walk_x_uneven_terrain"
 ALL_TIME_PLACEHOLDER = "ALL"
+TRUNCATED_WANDB_METRIC_SUFFIX = "__truncated"
 
 PAPER_COLORS = [
     "#0072B2",
@@ -798,15 +799,13 @@ def fetch_wandb_runs(
             )
             continue
 
-        summary: dict[str, Any] = {
-            "run_name": run.name,
-            "wandb_path": wandb_path,
-        }
-
-        for metric in metrics:
-            if metric not in history_df.columns:
-                continue
-            summary[metric] = compute_tail_mean(history_df[metric], summary_tail_points)
+        summary = compute_wandb_metric_summary_from_history(
+            history=history_df,
+            summary_wandb_metrics=metrics,
+            summary_tail_points=summary_tail_points,
+        )
+        summary["run_name"] = run.name
+        summary["wandb_path"] = wandb_path
 
         result[run.name] = {
             "history": history_df,
@@ -905,6 +904,93 @@ def compute_global_shortest_selected_wandb_iteration(series_data: dict[str, Seri
         return None
 
     return min(max_iterations)
+
+
+def make_truncated_wandb_metric_name(metric_name: str) -> str:
+    return f"{metric_name}{TRUNCATED_WANDB_METRIC_SUFFIX}"
+
+def format_iteration_range(
+    min_iteration: Any,
+    max_iteration: Any,
+    unavailable_text: str = "unknown iteration",
+) -> str:
+    if pd.isna(min_iteration) or pd.isna(max_iteration):
+        return unavailable_text
+
+    min_iteration_int = int(min_iteration)
+    max_iteration_int = int(max_iteration)
+
+    if min_iteration_int == max_iteration_int:
+        return f"iteration {min_iteration_int}"
+
+    return f"iterations {min_iteration_int}-{max_iteration_int}"
+
+def format_summary_value(mean: float, ci95: float, n: int) -> str:
+    if n == 0 or pd.isna(mean):
+        return "Not available"
+    if n == 1 or pd.isna(ci95):
+        return f"{mean:.6f} (n=1)"
+    return f"{mean:.6f} ± {ci95:.6f} (95% CI, n={int(n)})"
+
+
+def compute_wandb_metric_summary_from_history(
+    history: pd.DataFrame,
+    summary_wandb_metrics: list[str],
+    summary_tail_points: int,
+) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+
+    max_iteration = get_history_max_iteration(history)
+    summary["wandb_summary_iteration"] = max_iteration
+
+    for metric in summary_wandb_metrics:
+        if metric not in history.columns:
+            continue
+        summary[metric] = compute_tail_mean(history[metric], summary_tail_points)
+
+    return summary
+
+
+def attach_selected_truncated_wandb_summaries(
+    series_data: dict[str, SeriesData],
+    summary_wandb_metrics: list[str],
+    summary_tail_points: int,
+    truncation_iteration: int | None,
+) -> None:
+    if truncation_iteration is None:
+        return
+
+    for data in series_data.values():
+        for run_name in data.selected_wandb_run_names:
+            run_entry = data.wandb_runs.get(run_name)
+            if run_entry is None:
+                continue
+
+            history = run_entry.get("history")
+            if not isinstance(history, pd.DataFrame):
+                continue
+
+            truncated_history = truncate_history_to_max_iteration(
+                history=history,
+                max_iteration=truncation_iteration,
+            )
+
+            truncated_summary = compute_wandb_metric_summary_from_history(
+                history=truncated_history,
+                summary_wandb_metrics=summary_wandb_metrics,
+                summary_tail_points=summary_tail_points,
+            )
+
+            namespaced_truncated_summary: dict[str, Any] = {
+                "wandb_truncated_summary_iteration": truncated_summary.get("wandb_summary_iteration"),
+                "wandb_requested_truncation_iteration": truncation_iteration,
+            }
+
+            for metric in summary_wandb_metrics:
+                if metric in truncated_summary:
+                    namespaced_truncated_summary[make_truncated_wandb_metric_name(metric)] = truncated_summary[metric]
+
+            run_entry["truncated_summary"] = namespaced_truncated_summary
 
 
 def truncate_history_to_max_iteration(history: pd.DataFrame, max_iteration: int | None) -> pd.DataFrame:
@@ -1032,6 +1118,10 @@ def build_per_run_summary(series_data: dict[str, SeriesData]) -> pd.DataFrame:
             if run_name in data.wandb_runs:
                 row.update(data.wandb_runs[run_name]["summary"])
 
+                truncated_summary = data.wandb_runs[run_name].get("truncated_summary")
+                if isinstance(truncated_summary, dict):
+                    row.update(truncated_summary)
+
             if run_name in data.json_runs:
                 row.update(data.json_runs[run_name].summary)
 
@@ -1063,8 +1153,68 @@ def build_aggregate_summary(
         for metric in summary_wandb_metrics:
             if metric not in group.columns:
                 continue
+
             metric_group = group[group["selected_for_wandb"]]
             mean, sem, ci95, n = compute_mean_sem_ci95(metric_group[metric])
+
+            truncated_metric = make_truncated_wandb_metric_name(metric)
+            if truncated_metric in metric_group.columns:
+                truncated_mean, truncated_sem, truncated_ci95, truncated_n = compute_mean_sem_ci95(
+                    metric_group[truncated_metric]
+                )
+            else:
+                truncated_mean, truncated_sem, truncated_ci95, truncated_n = np.nan, np.nan, np.nan, 0
+
+            if "wandb_summary_iteration" in metric_group.columns:
+                final_summary_iterations = pd.to_numeric(
+                    metric_group["wandb_summary_iteration"],
+                    errors="coerce",
+                ).dropna()
+            else:
+                final_summary_iterations = pd.Series(dtype=float)
+
+            if "wandb_requested_truncation_iteration" in metric_group.columns:
+                requested_truncation_iterations = pd.to_numeric(
+                    metric_group["wandb_requested_truncation_iteration"],
+                    errors="coerce",
+                ).dropna()
+            else:
+                requested_truncation_iterations = pd.Series(dtype=float)
+
+            if "wandb_truncated_summary_iteration" in metric_group.columns:
+                actual_truncation_iterations = pd.to_numeric(
+                    metric_group["wandb_truncated_summary_iteration"],
+                    errors="coerce",
+                ).dropna()
+            else:
+                actual_truncation_iterations = pd.Series(dtype=float)
+
+            final_summary_iteration_min = (
+                int(final_summary_iterations.min())
+                if not final_summary_iterations.empty
+                else None
+            )
+            final_summary_iteration_max = (
+                int(final_summary_iterations.max())
+                if not final_summary_iterations.empty
+                else None
+            )
+            requested_truncation_iteration = (
+                int(requested_truncation_iterations.iloc[0])
+                if not requested_truncation_iterations.empty
+                else None
+            )
+            actual_truncation_iteration_min = (
+                int(actual_truncation_iterations.min())
+                if not actual_truncation_iterations.empty
+                else None
+            )
+            actual_truncation_iteration_max = (
+                int(actual_truncation_iterations.max())
+                if not actual_truncation_iterations.empty
+                else None
+            )
+
             rows.append(
                 {
                     "label": label,
@@ -1075,14 +1225,25 @@ def build_aggregate_summary(
                     "sem": sem,
                     "ci95": ci95,
                     "n": n,
+                    "truncated_mean": truncated_mean,
+                    "truncated_sem": truncated_sem,
+                    "truncated_ci95": truncated_ci95,
+                    "truncated_n": truncated_n,
+                    "final_summary_iteration_min": final_summary_iteration_min,
+                    "final_summary_iteration_max": final_summary_iteration_max,
+                    "requested_truncation_iteration": requested_truncation_iteration,
+                    "actual_truncation_iteration_min": actual_truncation_iteration_min,
+                    "actual_truncation_iteration_max": actual_truncation_iteration_max,
                 }
             )
 
         for metric in summary_json_metrics:
             if metric not in group.columns:
                 continue
+
             metric_group = group[group["selected_for_local_json"]]
             mean, sem, ci95, n = compute_mean_sem_ci95(metric_group[metric])
+
             rows.append(
                 {
                     "label": label,
@@ -1093,8 +1254,20 @@ def build_aggregate_summary(
                     "sem": sem,
                     "ci95": ci95,
                     "n": n,
+                    "truncated_mean": np.nan,
+                    "truncated_sem": np.nan,
+                    "truncated_ci95": np.nan,
+                    "truncated_n": 0,
+                    "final_summary_iteration_min": None,
+                    "final_summary_iteration_max": None,
+                    "requested_truncation_iteration": None,
+                    "actual_truncation_iteration_min": None,
+                    "actual_truncation_iteration_max": None,
                 }
             )
+
+    if not rows:
+        return pd.DataFrame()
 
     df = pd.DataFrame(rows)
 
@@ -1114,8 +1287,6 @@ def build_aggregate_summary(
 
     df.drop(columns=["_summary_metric_order", "_original_order"], inplace=True)
     return df
-
-
 def save_text_summary(
     aggregate_df: pd.DataFrame,
     output_dir: Path,
@@ -1147,29 +1318,82 @@ def save_text_summary(
         f"{wandb_timeseries_truncation_iteration if wandb_timeseries_truncation_iteration is not None else 'Not applied'}"
     )
     lines.append("")
+    lines.append(
+        "Note: WandB values are tail means over the last "
+        f"{summary_tail_points} valid logged values, not single point values."
+    )
+    lines.append(
+        "For WandB metrics, 'full-run tail mean' uses each run's complete history. "
+        "'common-horizon tail mean' first truncates each run to the shared cutoff used for the plots."
+    )
+    lines.append(
+        "Local JSON metrics are computed from the selected metrics_summary.json files and are not "
+        "truncated by the WandB time-series cutoff."
+    )
+    lines.append("")
 
     if aggregate_df.empty:
         lines.append("No aggregate statistics available.")
     else:
         for label, group in aggregate_df.groupby("label"):
             lines.append(f"Series: {label}")
+
             for _, row in group.iterrows():
                 display_name = row["display_name"]
                 source = row["source"]
-                if row["n"] == 0 or pd.isna(row["mean"]):
-                    lines.append(f"  [{source}] {display_name}: Not available")
-                elif row["n"] == 1 or pd.isna(row["ci95"]):
-                    lines.append(f"  [{source}] {display_name}: {row['mean']:.6f} (n=1)")
-                else:
-                    lines.append(
-                        f"  [{source}] {display_name}: {row['mean']:.6f} ± {row['ci95']:.6f} "
-                        f"(95% CI, n={int(row['n'])})"
+
+                final_value_text = format_summary_value(
+                    mean=row["mean"],
+                    ci95=row["ci95"],
+                    n=int(row["n"]),
+                )
+
+                if source == "wandb":
+                    final_iteration_text = format_iteration_range(
+                        min_iteration=row.get("final_summary_iteration_min"),
+                        max_iteration=row.get("final_summary_iteration_max"),
+                        unavailable_text="unknown full-run end iteration",
                     )
+
+                    lines.append(f"  [{source}] {display_name}:")
+                    lines.append(f"    full-run tail mean ({final_iteration_text}): {final_value_text}")
+
+                    if "truncated_mean" in row and not pd.isna(row["truncated_mean"]):
+                        truncated_value_text = format_summary_value(
+                            mean=row["truncated_mean"],
+                            ci95=row["truncated_ci95"],
+                            n=int(row["truncated_n"]),
+                        )
+
+                        requested_iteration = row.get("requested_truncation_iteration")
+                        actual_iteration_min = row.get("actual_truncation_iteration_min")
+                        actual_iteration_max = row.get("actual_truncation_iteration_max")
+
+                        actual_iteration_text = format_iteration_range(
+                            min_iteration=actual_iteration_min,
+                            max_iteration=actual_iteration_max,
+                            unavailable_text="unknown common-horizon end iteration",
+                        )
+
+                        if pd.isna(requested_iteration):
+                            lines.append(
+                                f"    common-horizon tail mean ({actual_iteration_text}): "
+                                f"{truncated_value_text}"
+                            )
+                        else:
+                            lines.append(
+                                "    common-horizon tail mean "
+                                f"(requested cutoff iteration {int(requested_iteration)}, "
+                                f"actual end {actual_iteration_text}): "
+                                f"{truncated_value_text}"
+                            )
+                else:
+                    lines.append(f"  [{source}] {display_name}: {final_value_text}")
+
             lines.append("")
 
     with open(output_dir / "summary_statistics.txt", "w", encoding="utf-8") as handle:
         handle.write("\n".join(lines))
-
 
 def plot_timeseries(
     metric_name: str,
@@ -1966,8 +2190,10 @@ def parse_args() -> argparse.Namespace:
         help=(
             "If set, truncate WandB time-series histories used for progression plots and exported "
             "time-series CSVs to the maximum iteration of the globally shortest selected WandB run "
-            "across all specified series. This does not affect final tail-based summary metrics. "
-            "Use --no-truncate_wandb_timeseries_to_shortest_run to disable."
+            "across all specified series. The original final tail-based WandB summary metrics are "
+            "kept unchanged, and an additional truncated/common-horizon WandB summary is printed "
+            "where available. This does not affect local JSON evaluation metrics such as CoT, RMS "
+            "error, or constraint violations. Use --no-truncate_wandb_timeseries_to_shortest_run to disable."
         ),
     )
     parser.add_argument(
@@ -2285,6 +2511,15 @@ def main() -> None:
                 "Truncating WandB time-series data to the shortest selected run: max iteration = %d",
                 wandb_timeseries_truncation_iteration,
             )
+
+        attach_selected_truncated_wandb_summaries(
+            series_data=series_data,
+            summary_wandb_metrics=args.summary_wandb_metrics,
+            summary_tail_points=args.summary_tail_points,
+            truncation_iteration=wandb_timeseries_truncation_iteration
+            if args.truncate_wandb_timeseries_to_shortest_run
+            else None,
+        )
 
     per_run_df = build_per_run_summary(series_data)
     save_dataframe(per_run_df, output_dir / "per_run_summary.csv")
