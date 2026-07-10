@@ -229,6 +229,45 @@ def get_latest_checkpoint(run_directory: str) -> str:
     latest = max(files, key=extract_index)
     return latest
 
+def apply_training_action_scale(env_cfg, params_directory: str):
+    """
+    Load actions.joint_pos.scale from the saved training env config and apply it
+    to the eval env cfg before gym.make() constructs the action manager.
+    """
+    yaml_file = os.path.join(params_directory, "env.yaml")
+    text = open(yaml_file).read()
+    text = re.sub(r"!!python\S*", "", text)
+    cfg = yaml.safe_load(text)
+
+    try:
+        training_action_scale = cfg["actions"]["joint_pos"]["scale"]
+    except KeyError as exception:
+        raise RuntimeError(
+            f"Could not find actions.joint_pos.scale in training env config: {yaml_file}"
+        ) from exception
+
+    if isinstance(training_action_scale, (int, float)):
+        training_action_scale = float(training_action_scale)
+    elif isinstance(training_action_scale, dict):
+        training_action_scale = {
+            str(pattern): float(scale)
+            for pattern, scale in training_action_scale.items()
+        }
+    else:
+        raise TypeError(
+            "Unsupported actions.joint_pos.scale type in training env config. "
+            f"Expected float/int or dict, got {type(training_action_scale)}: {training_action_scale!r}"
+        )
+
+    eval_action_scale_before = env_cfg.actions.joint_pos.scale
+    env_cfg.actions.joint_pos.scale = training_action_scale
+
+    print("[INFO] Loaded action scale from training params/env.yaml")
+    print(f"[INFO] Training actions.joint_pos.scale = {training_action_scale}")
+    print(f"[INFO] Eval actions.joint_pos.scale before override = {eval_action_scale_before}")
+    print(f"[INFO] Eval actions.joint_pos.scale after override = {env_cfg.actions.joint_pos.scale}")
+
+    return training_action_scale, eval_action_scale_before
 
 def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
     """
@@ -675,6 +714,10 @@ def main():
         task_name=args.task,
         enabled=args.downscale_upstream_go2_tracking_rewards,
     )
+    action_scale, eval_action_scale_before_override = apply_training_action_scale(
+        env_cfg=env_cfg,
+        params_directory=os.path.join(args.run_dir, "params"),
+    )
 
     # Inject Latency
     if hasattr(env_cfg.observations, "policy"):
@@ -797,6 +840,7 @@ def main():
     total_sim_steps = args.random_sim_step_length + len(fixed_command_scenarios) * fixed_command_sim_steps
     env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array")
 
+    print(f"[INFO] Runtime env actions.joint_pos.scale = {env.unwrapped.cfg.actions.joint_pos.scale}")
     print(f"[SEED CHECK] runtime env seed={getattr(env.unwrapped.cfg, 'seed', None)}")
     print(f"[SEED CHECK] runtime sim seed={getattr(env.unwrapped.cfg.sim, 'random_seed', None)}")
     runtime_terrain_generator = getattr(env.unwrapped.cfg.scene.terrain, "terrain_generator", None)
@@ -1208,6 +1252,8 @@ def main():
         env_name=env_name,
         run_name=run_name,
         task_name=task_name,
+        action_scale=np.array(action_scale, dtype=object),
+        eval_action_scale_before_override=np.array(eval_action_scale_before_override, dtype=object),
         sim_times=sim_times,
         reset_times=np.array(reset_times),
         manual_reset_times=np.array(manual_reset_times),
@@ -1332,6 +1378,8 @@ def main():
         "random_sim_steps": args.random_sim_step_length,
         "total_sim_steps": total_sim_steps,
         "seed": env_cfg.seed,
+        "action_scale": action_scale,
+        "eval_action_scale_before_override": eval_action_scale_before_override,
         "used_checkpoint_path": checkpoint_path,
         "policy_backend": policy_backend,
         "detected_policy_backend": detected_policy_backend,
