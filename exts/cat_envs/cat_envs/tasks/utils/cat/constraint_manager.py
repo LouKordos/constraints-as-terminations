@@ -157,6 +157,21 @@ class ConstraintManager(ManagerBase):
         for term_name in self._term_names:
             self._episode_sums[term_name] = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
             self._cstr_mean_values[term_name] = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+
+        # Episode diagnostics must use the same embodiment selectors as the
+        # actual constraints. Inferring these from the Gym task name silently
+        # made every non-Go2 robot look like ANYmal.
+        term_cfgs_by_name = dict(zip(self._term_names, self._term_cfgs))
+        required_diagnostic_terms = ("joint_torque", "foot_contact_force")
+        missing_terms = [name for name in required_diagnostic_terms if name not in term_cfgs_by_name]
+        if missing_terms:
+            raise ValueError(
+                "ConstraintManager episode diagnostics require active constraint terms "
+                f"{required_diagnostic_terms}; missing {missing_terms}."
+            )
+        self._diagnostic_joint_names = list(term_cfgs_by_name["joint_torque"].params["names"])
+        self._diagnostic_foot_names = list(term_cfgs_by_name["foot_contact_force"].params["names"])
+
         # create buffer for managing constraint prob per environment
         self._cstr_prob_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
 
@@ -290,13 +305,11 @@ class ConstraintManager(ManagerBase):
         # See constraints.py for where these calculations come from
         robot = self._env.scene["robot"]
         data = robot.data
-        joint_names = [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"] if "Go2" in self._env.spec.id else [".*_HAA", ".*_HFE", ".*_KFE"]
-        foot_names = [".*_foot"] if "Go2" in self._env.spec.id else [".*_FOOT"]
-        joint_ids, _ = robot.find_joints(joint_names, preserve_order=True)
+        joint_ids, _ = robot.find_joints(self._diagnostic_joint_names, preserve_order=True)
 
         # See constraints.py for where these calculations come from
         contact_sensor = self._env.scene["contact_forces"]
-        feet_ids, _ = contact_sensor.find_bodies(foot_names, preserve_order=True)
+        feet_ids, _ = contact_sensor.find_bodies(self._diagnostic_foot_names, preserve_order=True)
         touchdown = contact_sensor.compute_first_contact(self._env.step_dt)[:, feet_ids]
         last_air_time = contact_sensor.data.last_air_time[:, feet_ids] * touchdown.float()
 
