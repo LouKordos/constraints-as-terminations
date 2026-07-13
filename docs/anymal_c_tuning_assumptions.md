@@ -71,3 +71,18 @@ This is the living record for the first ANYmal C transfer. It separates facts ve
 - The exact Git commit, seed, number of environments, energy override, and any configuration deviation.
 
 Continue the long run only when signals remain finite, tracking and episode survival improve, terrain is not pinned at level zero, no single constraint permanently dominates, and energy pressure remains secondary to establishing locomotion. Stop for NaN/Inf, repeated immediate resets, flat tracking with terrain pinned at zero, persistent policy saturation/collapse, pervasive hard-contact/force termination, or a constraint/energy term that blocks tracking progress.
+
+## Validation evidence: 2026-07-13
+
+The following is construction/startup evidence, not a claim that locomotion has converged:
+
+- One-environment train and play configurations each completed reset plus 25 simulation steps with finite observations/rewards, 12 actions, 188 observations, 0.02 s control period, 52.13484 kg runtime mass, 12 correctly ordered joints, and four resolved feet.
+- The play frame transformer resolved `base` as source and `LF_FOOT`, `RF_FOOT`, `LH_FOOT`, `RH_FOOT` as targets. The matched Go2 play smoke retained 12 actions, 188 observations, action scale 0.8, and torque constraint 20 N m.
+- A zero-iteration real `train.py` startup confirmed the CLI energy override is applied before dumping and construction. Its saved YAML contained the requested `0.00115` override and all intended ANYmal bounds/disturbances.
+- A 64-environment, two-iteration PPO startup with seed 46 and the default `0.00230` endpoint completed rollout and policy updates with finite loss/action-standard-deviation scalars and no shape, entity, CUDA, NaN, or Inf failure.
+- At this intentionally random-policy stage, recorded maxima were about 79.0 N m torque, 17.9 rad/s joint velocity, 218.9 s^-1 action rate, and 841.8 N foot force. Violation frequencies were high for action rate (94.6%), acceleration (87.3%), torque (62.1%), and velocity (51.5%), but their mean curriculum-ramped CaT probabilities were only about 0.0303, 0.0162, 0.0229, and 0.0108 respectively.
+- The initial energy curriculum weight was `2.77e-7`, and the energy reward contribution was about `-6.09e-6`, so energy pressure did not dominate this startup. The logged terrain-level mean was about 1.26. Base-contact termination was common for the random initial policy and must be re-evaluated after genuine learning begins.
+
+No starting value was changed from this evidence: two PPO iterations mainly characterize a random policy. The first long run should retain the documented baseline and use the 24-hour gates above before any one-at-a-time relaxation.
+
+The updated evaluator also completed the full 14,500-step legacy Go2 checkpoint-21799 evaluation (seed 46) with exit code zero. Against the supplied pre-branch `metrics_summary.json`, the complete terrain-level summary, mean/final terrain level, cost of transport, x/y/yaw tracking RMS errors, task, action scale, and random/total step counts were exactly equal (absolute numerical difference zero). This validates the Go2-default compatibility path without changing the metric definitions.
