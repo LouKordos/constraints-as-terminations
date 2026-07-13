@@ -26,6 +26,7 @@ import os
 import re
 import yaml
 import uuid
+from dataclasses import dataclass
 from typing import Dict, Tuple, Optional, List, Any
 from metrics_utils import compute_summary_metrics, summarize_metric
 eval_script_path = os.path.dirname(os.path.abspath(__file__))
@@ -37,6 +38,101 @@ UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS: Dict[str, Tuple[Optional[float], Optio
     "action_rate": (-80.0, 80.0),
     "foot_contact_force": (0.0, 300.0),
 }
+
+
+@dataclass(frozen=True)
+class RobotEvalProfile:
+    """The small set of geometry/name facts evaluation cannot infer generically."""
+
+    name: str
+    root_link: str
+    foot_links: tuple[str, str, str, str]
+    spawn_height: float
+    sole_offset: float
+    joint_role_mapping: dict[str, dict[str, str]]
+
+
+ROBOT_EVAL_PROFILES = {
+    "go2": RobotEvalProfile(
+        name="go2",
+        root_link="base",
+        foot_links=("FL_foot", "FR_foot", "RL_foot", "RR_foot"),
+        spawn_height=0.4,
+        sole_offset=0.0228,
+        joint_role_mapping={
+            "hip_joint": {
+                "FL": "FL_hip_joint", "FR": "FR_hip_joint",
+                "RL": "RL_hip_joint", "RR": "RR_hip_joint",
+            },
+            "thigh_joint": {
+                "FL": "FL_thigh_joint", "FR": "FR_thigh_joint",
+                "RL": "RL_thigh_joint", "RR": "RR_thigh_joint",
+            },
+            "calf_joint": {
+                "FL": "FL_calf_joint", "FR": "FR_calf_joint",
+                "RL": "RL_calf_joint", "RR": "RR_calf_joint",
+            },
+        },
+    ),
+    "anymal_c": RobotEvalProfile(
+        name="anymal_c",
+        root_link="base",
+        foot_links=("LF_FOOT", "RF_FOOT", "LH_FOOT", "RH_FOOT"),
+        spawn_height=0.6,
+        sole_offset=0.0,
+        joint_role_mapping={
+            "HAA": {"FL": "LF_HAA", "FR": "RF_HAA", "RL": "LH_HAA", "RR": "RH_HAA"},
+            "HFE": {"FL": "LF_HFE", "FR": "RF_HFE", "RL": "LH_HFE", "RR": "RH_HFE"},
+            "KFE": {"FL": "LF_KFE", "FR": "RF_KFE", "RL": "LH_KFE", "RR": "RH_KFE"},
+        },
+    ),
+    "spot": RobotEvalProfile(
+        name="spot",
+        root_link="body",
+        foot_links=("fl_foot", "fr_foot", "hl_foot", "hr_foot"),
+        spawn_height=0.5,
+        sole_offset=0.0,
+        joint_role_mapping={
+            "hx": {"FL": "fl_hx", "FR": "fr_hx", "RL": "hl_hx", "RR": "hr_hx"},
+            "hy": {"FL": "fl_hy", "FR": "fr_hy", "RL": "hl_hy", "RR": "hr_hy"},
+            "kn": {"FL": "fl_kn", "FR": "fr_kn", "RL": "hl_kn", "RR": "hr_kn"},
+        },
+    ),
+}
+
+
+def resolve_robot_eval_profile(task_name: str) -> RobotEvalProfile:
+    """Resolve explicit new embodiments and default unknown legacy runs to Go2."""
+    task_name_lower = task_name.lower()
+    if "anymal" in task_name_lower:
+        return ROBOT_EVAL_PROFILES["anymal_c"]
+    if "spot" in task_name_lower:
+        return ROBOT_EVAL_PROFILES["spot"]
+    if "go2" in task_name_lower:
+        return ROBOT_EVAL_PROFILES["go2"]
+
+    print(
+        f"[WARN] Task '{task_name}' has no recognized embodiment marker; "
+        "assuming legacy Go2 for backward compatibility."
+    )
+    return ROBOT_EVAL_PROFILES["go2"]
+
+
+def adjust_fixed_command_spawn_heights(fixed_command_scenarios, profile: RobotEvalProfile):
+    """Preserve terrain-relative scenario placement while changing robot height."""
+    if profile.name == "go2":
+        # Preserve the exact legacy tensors and object structure for regression.
+        return fixed_command_scenarios
+
+    height_delta = profile.spawn_height - ROBOT_EVAL_PROFILES["go2"].spawn_height
+    adjusted_scenarios = []
+    for scenario_tag, command, (spawn_position, spawn_orientation) in fixed_command_scenarios:
+        adjusted_position = spawn_position.clone()
+        adjusted_position[2] += height_delta
+        adjusted_scenarios.append(
+            (scenario_tag, command, (adjusted_position, spawn_orientation))
+        )
+    return adjusted_scenarios
 
 def set_global_seed(seed: int):
     import random
@@ -377,9 +473,20 @@ def resolve_constraint_bounds_for_eval(
             if hasattr(env_cfg.constraints, "foot_contact_force") and "foot_contact_force" in constraint_bounds:
                 env_cfg.constraints.foot_contact_force.params["limit"] = constraint_bounds["foot_contact_force"][1]
 
-            if hasattr(env_cfg.constraints, "front_hfe_position") and "RL_thigh_joint" in constraint_bounds:
-                # For runs that do not use style constraints.
-                env_cfg.constraints.front_hfe_position.params["limit"] = constraint_bounds["RL_thigh_joint"][1]
+            if hasattr(env_cfg.constraints, "front_hfe_position"):
+                # This hard term accepts one scalar even though the saved metrics
+                # bounds are expanded per matching joint. Use the least restrictive
+                # matching upper bound so eval never invents a tighter termination.
+                position_term = env_cfg.constraints.front_hfe_position
+                position_patterns = position_term.params.get("names", [])
+                matching_upper_bounds = [
+                    upper_bound
+                    for joint_name, (_, upper_bound) in constraint_bounds.items()
+                    if upper_bound is not None
+                    and any(re.fullmatch(pattern, joint_name) for pattern in position_patterns)
+                ]
+                if matching_upper_bounds:
+                    position_term.params["limit"] = max(matching_upper_bounds)
 
             if constraint_bounds:
                 print("[INFO] Loaded eval constraint bounds from params/env.yaml:")
@@ -394,7 +501,7 @@ def resolve_constraint_bounds_for_eval(
     else:
         print("[INFO] env_cfg has no custom constraints block. Constraint-bound loading skipped.")
 
-    if not constraint_bounds: # and is_upstream_go2_rough_task(task_name):
+    if not constraint_bounds and is_upstream_go2_rough_task(task_name):
         constraint_bounds = get_hardcoded_upstream_go2_constraint_bounds()
         constraint_bounds_source = "hardcoded_upstream_go2_rough_eval_thresholds"
         print("[INFO] Using hardcoded eval constraint bounds for upstream rough Unitree Go2 task:")
@@ -480,7 +587,12 @@ def scene_entity_exists(env, entity_name: str) -> bool:
         return False
 
 
-def add_eval_foot_sensors_to_env_cfg(env_cfg, foot_links: list[str], sim_dt: float):
+def add_eval_foot_sensors_to_env_cfg(
+    env_cfg,
+    foot_links: tuple[str, str, str, str] | list[str],
+    root_link: str,
+    sim_dt: float,
+):
     from isaaclab.sensors.ray_caster import RayCasterCfg, patterns
     from isaaclab.sensors.frame_transformer import FrameTransformerCfg
 
@@ -503,7 +615,7 @@ def add_eval_foot_sensors_to_env_cfg(env_cfg, foot_links: list[str], sim_dt: flo
 
     if not hasattr(env_cfg.scene, "foot_frame_transformer"):
         env_cfg.scene.foot_frame_transformer = FrameTransformerCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/base",
+            prim_path=f"{{ENV_REGEX_NS}}/Robot/{root_link}",
             target_frames=[
                 FrameTransformerCfg.FrameCfg(prim_path=f"{{ENV_REGEX_NS}}/Robot/{link_name}")
                 for link_name in foot_links
@@ -641,6 +753,7 @@ def get_current_terrain_level(env) -> float:
 def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
+    robot_profile = resolve_robot_eval_profile(args.task)
 
     seed = args.seed
     set_global_seed(seed)
@@ -664,13 +777,17 @@ def main():
     if policy_backend == "clean_rl":
         model_state = extract_cleanrl_state_dict(checkpoint_object)
         observation_dim = infer_checkpoint_input_dimensions(model_state)
-        if observation_dim == 236:
-            args.task = "CaT-Go2-Rough-Terrain-Joint-State-History-Play-v0"
-        elif observation_dim == 558:
-            args.task = "CaT-Go2-Rough-Terrain-Full-State-History-Play-v0"
+        if robot_profile.name == "go2":
+            if observation_dim == 236:
+                args.task = "CaT-Go2-Rough-Terrain-Joint-State-History-Play-v0"
+            elif observation_dim == 558:
+                args.task = "CaT-Go2-Rough-Terrain-Full-State-History-Play-v0"
         print(f"Observation dimension={observation_dim}, selected task={args.task}")
     else:
         print(f"[INFO] RSL-RL checkpoint selected, using task={args.task}")
+
+    robot_profile = resolve_robot_eval_profile(args.task)
+    print(f"[INFO] Resolved evaluation robot profile={robot_profile.name}")
 
     if not "play" in args.task.lower():
         input("\n\n-------------------------------------------------------------------\nKeyword 'Play' not found in task name, are you sure you are using the correct task/environment?\n-------------------------------------------------------------------\n\n")
@@ -701,7 +818,7 @@ def main():
         matching_registered_tasks = sorted(
             task_id
             for task_id in gym.envs.registry.keys()
-            if "cat-go2" in task_id.lower() or "unitree-go2" in task_id.lower()
+            if any(name in task_id.lower() for name in ("cat-go2", "unitree-go2", "anymal", "spot"))
         )
         raise RuntimeError(
             f"Task '{args.task}' is not registered after importing the custom CaT task package. "
@@ -773,9 +890,14 @@ def main():
     env_cfg.viewer.resolution = (frame_width, frame_height)
     device = torch.device(args.device)
 
-    foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] if "go2" in args.task.lower() else ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
+    foot_links = list(robot_profile.foot_links)
     foot_labels = ['front left', 'front right', 'rear left', 'rear right']
-    add_eval_foot_sensors_to_env_cfg(env_cfg, foot_links=foot_links, sim_dt=env_cfg.sim.dt)
+    add_eval_foot_sensors_to_env_cfg(
+        env_cfg,
+        foot_links=robot_profile.foot_links,
+        root_link=robot_profile.root_link,
+        sim_dt=env_cfg.sim.dt,
+    )
 
     run_path = Path(args.run_dir).resolve()
     run_name = run_path.name
@@ -822,6 +944,11 @@ def main():
         ])
     else:
         print("Skipping Cost of Transport sweep scenarios")
+
+    fixed_command_scenarios = adjust_fixed_command_spawn_heights(
+        fixed_command_scenarios,
+        robot_profile,
+    )
 
     # See main training loop for detailed explanation, but in summary, hard constraints terminate the environment or at least return terminated = 1
     # which results in zero reward and can't be recovered by rescaling. Thus, we update the constraint limits based on the loaded values from
@@ -1156,7 +1283,9 @@ def main():
         foot_positions_body_frame_buffer.append(foot_positions_body)
 
         # Calculate foot height above ground using raycaster sensor in each foot (sole/contact frame)
-        foot_com_toe_tip_offset = 0.0228  # This makes swing height more intuitive, without the offset, standing still reports a positive stance height
+        # Apply a robot-specific sole offset only when it has been audited.
+        # Unknown offsets remain zero instead of inheriting Go2 geometry.
+        foot_com_toe_tip_offset = robot_profile.sole_offset
         terrain_offset_feet = np.array([
             [
                 0,
@@ -1252,6 +1381,7 @@ def main():
         env_name=env_name,
         run_name=run_name,
         task_name=task_name,
+        robot_profile=robot_profile.name,
         action_scale=np.array(action_scale, dtype=object),
         eval_action_scale_before_override=np.array(eval_action_scale_before_override, dtype=object),
         sim_times=sim_times,
@@ -1333,6 +1463,7 @@ def main():
         "foot_labels": foot_labels,
         "constraint_bounds": constraint_bounds,
         "total_robot_mass": total_robot_mass,
+        "joint_role_mapping": robot_profile.joint_role_mapping,
     }
 
     # --- masks ---
@@ -1373,6 +1504,7 @@ def main():
         "env_name": env_name,
         "run_name": run_name,
         "task_name": task_name,
+        "robot_profile": robot_profile.name,
         "run_dir": str(run_path),
         "eval_base_dir": eval_base_dir,
         "random_sim_steps": args.random_sim_step_length,

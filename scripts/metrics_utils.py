@@ -17,6 +17,22 @@ __all__ = [
 ]
 
 
+DEFAULT_GO2_JOINT_ROLE_MAPPING = {
+    "hip_joint": {
+        "FL": "FL_hip_joint", "FR": "FR_hip_joint",
+        "RL": "RL_hip_joint", "RR": "RR_hip_joint",
+    },
+    "thigh_joint": {
+        "FL": "FL_thigh_joint", "FR": "FR_thigh_joint",
+        "RL": "RL_thigh_joint", "RR": "RR_thigh_joint",
+    },
+    "calf_joint": {
+        "FL": "FL_calf_joint", "FR": "FR_calf_joint",
+        "RL": "RL_calf_joint", "RR": "RR_calf_joint",
+    },
+}
+
+
 def compute_histogram(arr: np.ndarray, bin_edges: np.ndarray) -> np.ndarray:
     """
     Given a 1D numpy array `arr` and a shared 1D array of bin_edges of length B+1,
@@ -313,15 +329,22 @@ def compute_summary_metrics(
 
     # ---------- symmetry TVD ---------------------------------------------
     joint_mapping = {jn: i for i, jn in enumerate(joint_names)}
-    dofs = ["hip_joint", "thigh_joint", "calf_joint"]
+    joint_role_mapping = constants.get("joint_role_mapping", DEFAULT_GO2_JOINT_ROLE_MAPPING)
+    dofs = list(joint_role_mapping.keys())
     gait_symmetry_summary_per_dof = {d: {} for d in dofs}
 
     for dof in dofs:
-        concatenated_joint_positions = np.concatenate([joint_positions[:, joint_mapping[f"{sr}_{dof}"]] for sr in ("FL", "FR", "RL", "RR")])
+        role_names = joint_role_mapping[dof]
+        concatenated_joint_positions = np.concatenate(
+            [joint_positions[:, joint_mapping[role_names[leg]]] for leg in ("FL", "FR", "RL", "RR")]
+        )
         optimal_num_bin_edges = optimal_bin_edges(concatenated_joint_positions, rule="fd")
 
-        def pmf(sr):  # probability mass function
-            return compute_histogram(joint_positions[:, joint_mapping[f"{sr}_{dof}"]], optimal_num_bin_edges)
+        def pmf(leg):  # probability mass function
+            return compute_histogram(
+                joint_positions[:, joint_mapping[role_names[leg]]],
+                optimal_num_bin_edges,
+            )
 
         gait_symmetry_summary_per_dof[dof]["front_left_front_right"] = total_variation_distance(pmf("FL"), pmf("FR"))
         gait_symmetry_summary_per_dof[dof]["rear_left_rear_right"] = total_variation_distance(pmf("RL"), pmf("RR"))
