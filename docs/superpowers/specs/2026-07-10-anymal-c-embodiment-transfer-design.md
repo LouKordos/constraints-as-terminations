@@ -6,7 +6,7 @@
 
 ## Objective
 
-Demonstrate that the existing Constraints as Terminations locomotion method is not specific to the Unitree Go2 by training and evaluating an ANYbotics ANYmal C policy on the same rough-terrain problem. Preserve the Go2 path closely enough that the existing Go2 evaluation remains a valid regression reference. Prepare `scripts/eval.py` to evaluate Go2, ANYmal C, and Boston Dynamics Spot policies, while deferring a CaT Spot training environment to later work.
+Demonstrate that the existing Constraints as Terminations locomotion method is not specific to the Unitree Go2 by training and evaluating an ANYbotics ANYmal C policy on the same rough-terrain problem. Preserve the Go2 path closely enough that the existing Go2 evaluation remains a valid regression reference. Prepare `scripts/eval.py` to evaluate Go2, ANYmal C, and Boston Dynamics Spot policies, while deferring a CaT Spot training environment to later work. ANYmal C construction, learning, and evaluation are the priority; Spot support must not delay getting ANYmal locomotion working.
 
 The comparison focuses on:
 
@@ -108,17 +108,20 @@ The first implementation uses these audited defaults:
 | Quantity | Go2 | ANYmal C initial | Rationale |
 |---|---:|---:|---|
 | action scale | 0.8 rad | 0.5 rad | installed upstream ANYmal locomotion setting |
-| joint torque constraint | 20 N m | 70 N m | preserves constraint-to-body-weight ratio and remains below the 80 N m continuous actuator limit |
-| joint velocity constraint | 25 rad/s | 7.5 rad/s | installed ANYdrive no-load velocity limit |
-| joint acceleration constraint | 800 rad/s^2 | 200 rad/s^2 | Go2 bound scaled by the actuator velocity ratio, 7.5/30 |
+| joint torque constraint | 20 N m | 60 N m | deliberately below the 80 N m continuous limit, but with learning margin before later 50/40 N m trials |
+| joint velocity constraint | 25 rad/s | 7.0 rad/s | below the 7.5 rad/s ANYdrive limit, but looser than strict proportional scaling during initial learning |
+| joint acceleration constraint | 800 rad/s^2 | 300 rad/s^2 | conservative learning-first value; 200 rad/s^2 is the strict actuator-speed-ratio candidate |
 | normalized action-rate constraint | 80 s^-1 | 80 s^-1 | operates on normalized policy actions, not physical target velocity |
 | foot contact-force constraint | 300 N | 1000 N | approximately preserves the bound-to-body-weight ratio |
-| standstill joint-speed constraint | 4 rad/s | 1 rad/s | Go2 bound scaled by the actuator velocity ratio |
+| standstill joint-speed constraint | 4 rad/s | 2 rad/s | relaxed initial value; 1 rad/s is the strict actuator-speed-ratio candidate |
 | added base mass | +/-1.5 kg | +/-5 kg | approximately preserves fraction of total mass and agrees with the upstream ANYmal scale |
-| external force | +/-10 N | +/-35 N | mass-scaled disturbance acceleration |
-| external torque | +/-0.5 N m | +/-1.75 N m | conservative mass-scaled initial value |
+| direct velocity push | +/-0.5 m/s | +/-0.25 m/s | reduced during initial learning |
+| external force | +/-10 N | +/-10 N | retaining the Go2 absolute value makes the acceleration disturbance much weaker on ANYmal |
+| external torque | +/-0.5 N m | +/-0.5 N m | retaining the Go2 absolute value makes the angular disturbance much weaker on ANYmal |
 
-The 1.5 rad absolute HFE bound, 0.3 rad relative HAA bound, base-orientation bound, direct velocity push, friction ranges, and 3 cm COM displacement remain unchanged initially because they are angular, normalized, or already plausible at both scales. The values above are hypotheses to validate during simulator construction and short training, not tuned final results. Any adjustment and its rationale are recorded with the experiment results.
+The 1.5 rad absolute HFE bound, 0.3 rad relative HAA bound, base-orientation bound, friction ranges, and 3 cm COM displacement remain unchanged initially because they are angular, normalized, or already plausible at both scales. The values above are hypotheses to validate during simulator construction and short training, not tuned final results. Any adjustment and its rationale are recorded with the experiment results.
+
+A living `docs/anymal_c_tuning_assumptions.md` document separates verified robot facts from starting assumptions. For every tunable bound, reward weight, action scale, disturbance, reset choice, and geometry offset, it records the initial value, rationale, expected failure signal, and next candidate. It is updated whenever smoke tests or early training evidence change a value.
 
 The play config uses the same ANYmal asset and naming overrides, disables training disturbances and the energy reward as the Go2 play config does, and creates foot ray casters and the frame transformer using ANYmal links. It must not inherit the Go2-only reset-pose function without replacing it.
 
@@ -164,6 +167,8 @@ The installed Spot task's cobblestone terrain-level values are explicitly marked
 The existing uncommitted action-scale restoration in `eval.py` is preserved. Training action scale is loaded from `params/env.yaml` before `gym.make()` and recorded in `sim_data.npz` and `metrics_summary.json`.
 
 CleanRL history-task inference remains Go2-specific unless an equivalent ANYmal history task is added. The normal 188-dimensional ANYmal policy relies on the explicitly supplied ANYmal play task. Evaluation must not infer an embodiment solely from checkpoint input dimension because all three quadrupeds can have twelve actions and overlapping observation dimensions.
+
+Backward compatibility takes precedence for old runs: when no new embodiment metadata or recognized non-Go2 task is present, evaluation assumes Go2 and retains the existing Go2 task/history inference. ANYmal and Spot require an explicit recognized task or saved embodiment metadata; an old Go2 run must never start failing merely because it lacks fields introduced on `cross-embodiment`.
 
 Upstream hardcoded Go2 constraint thresholds are used only for upstream Go2 tasks. Custom CaT Go2 and ANYmal tasks load bounds from their saved `params/env.yaml`. Spot does not silently receive Go2 bounds.
 
@@ -257,6 +262,8 @@ Verification consists of:
 - evaluation of an ANYmal trial checkpoint through the new play task;
 - Spot environment/evaluation construction against the installed upstream Spot task and an available compatible checkpoint, if one exists;
 - the matched Go2 evaluation against the user-provided July 3 baseline.
+
+Implementation is split into small, reviewable commits. Focused syntax/config checks run after each logical change, and simulator construction/reset/step smoke tests run after the ANYmal environment and evaluation integrations rather than only at the end.
 
 A missing compatible Spot checkpoint limits Spot verification to environment construction and metric-path validation. Lack of convergence time limits the strength of the transfer claim but does not excuse configuration or smoke-run failures.
 
