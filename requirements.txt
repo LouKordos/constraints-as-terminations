@@ -2,11 +2,11 @@ wandb
 toml
 rich
 memory-profiler
-zarr
 PyQt5
 tensorboard
 pandas
-numpy
+numpy==1.26.0
+zarr==3.1.n
 scipy
 scikit-learn
 statsmodels
