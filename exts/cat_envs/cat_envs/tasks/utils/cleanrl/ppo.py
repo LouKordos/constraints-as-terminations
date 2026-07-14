@@ -154,25 +154,29 @@ def PPO(envs, ppo_cfg, run_path):
             ppo_cfg.wandb_project = ppo_cfg.experiment_name
             writer = WandbSummaryWriter(log_dir=run_path, flush_secs=10, cfg=ppo_cfg.to_dict())
 
-        except ModuleNotFoundError:
-            pass
-        try:
-            from rsl_rl.utils.wandb_log_writer import WandbLogWriter
-
-            ppo_cfg.wandb_project = ppo_cfg.experiment_name
-            writer = WandbLogWriter(log_dir=run_path, project_name=ppo_cfg.wandb_project)
-
-            if hasattr(writer, "store_config"):
-                writer.store_config(
-                    env_cfg=envs.unwrapped.cfg,
-                    train_cfg=ppo_cfg.to_dict(),
-                )
         except ModuleNotFoundError as exception:
-            raise ModuleNotFoundError(
-                "Could not import either old RSL-RL WandbSummaryWriter "
-                "or new RSL-RL WandbLogWriter. Install wandb/RSL-RL correctly "
-                "or run with '--logger tensorboard'."
-            ) from exception
+            if exception.name != "rsl_rl.utils.wandb_utils":
+                raise
+            print("from rsl_rl.utils.wandb_utils import WandbSummaryWriter failed, trying from rsl_rl.utils.wandb_log_writer import WandbLogWriter next")
+            try:
+                from rsl_rl.utils.wandb_log_writer import WandbLogWriter
+
+                ppo_cfg.wandb_project = ppo_cfg.experiment_name
+                writer = WandbLogWriter(log_dir=run_path, project_name=ppo_cfg.wandb_project)
+
+                if hasattr(writer, "store_config"):
+                    writer.store_config(
+                        env_cfg=envs.unwrapped.cfg,
+                        train_cfg=ppo_cfg.to_dict(),
+                    )
+            except ModuleNotFoundError as exception:
+                if exception.name != "rsl_rl.utils.wandb_log_writer":
+                    raise
+                raise ModuleNotFoundError(
+                    "Could not import either old RSL-RL WandbSummaryWriter "
+                    "or new RSL-RL WandbLogWriter. Install wandb/RSL-RL correctly "
+                    "or run with '--logger tensorboard'."
+                ) from exception
         if writer is None:
             raise Exception("Failed to create wandb writer")
 
