@@ -81,9 +81,9 @@ class AnymalCRoughTerrainEnvCfg(Go2RoughTerrainEnvCfg):
 
         for term_name in ("joint_torque", "joint_velocity", "joint_acceleration", "action_rate"):
             getattr(self.constraints, term_name).params["names"] = list(ANYMAL_C_JOINT_PATTERNS)
-        self.constraints.joint_torque.params["limit"] = 60.0
-        self.constraints.joint_velocity.params["limit"] = 7.0
-        self.constraints.joint_acceleration.params["limit"] = 300.0
+        self.constraints.joint_torque.params["limit"] = 80.0
+        self.constraints.joint_velocity.params["limit"] = 12.0
+        self.constraints.joint_acceleration.params["limit"] = 600.0
         self.constraints.action_rate.params["limit"] = 80.0
 
         self.constraints.contact.params["names"] = ["base", ".*_THIGH"]
