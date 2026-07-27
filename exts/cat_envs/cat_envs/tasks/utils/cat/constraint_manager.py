@@ -249,10 +249,18 @@ class ConstraintManager(ManagerBase):
             env_ids = slice(None)
         # store information
         extras = {}
+        # The initial Gym reset occurs before any environment step. Treat that
+        # zero-length diagnostic window as zero rather than logging 0 / 0 = NaN.
+        episode_lengths = self._env.episode_length_buf[env_ids].clamp_min(1)
         for key in self._episode_sums.keys():
             # store information
-            extras["Episode_Constraint_violation/" + key] = (torch.mean(self._episode_sums[key][env_ids] / self._env.episode_length_buf[env_ids], dim=0,) * 100)
-            extras["Episode_Constraint_probability/" + key] = torch.mean(self._cstr_mean_values[key][env_ids] / self._env.episode_length_buf[env_ids], dim=0,)
+            extras["Episode_Constraint_violation/" + key] = (
+                torch.mean(self._episode_sums[key][env_ids] / episode_lengths, dim=0) * 100
+            )
+            extras["Episode_Constraint_probability/" + key] = torch.mean(
+                self._cstr_mean_values[key][env_ids] / episode_lengths,
+                dim=0,
+            )
             
             # reset episodic sum
             self._episode_sums[key][env_ids] = 0.0
