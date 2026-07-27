@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-27
 **Branch:** `cross-embodiment`
-**Status:** Approved design; implementation not started
+**Status:** Implemented and bounded-startup validated; substantive training pending
 
 ## Objective
 
