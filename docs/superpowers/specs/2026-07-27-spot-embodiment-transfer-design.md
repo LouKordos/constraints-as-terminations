@@ -1,7 +1,7 @@
 # Boston Dynamics Spot Embodiment Transfer Design
 
-**Date:** 2026-07-27  
-**Branch:** `cross-embodiment`  
+**Date:** 2026-07-27
+**Branch:** `cross-embodiment`
 **Status:** Approved design; implementation not started
 
 ## Objective

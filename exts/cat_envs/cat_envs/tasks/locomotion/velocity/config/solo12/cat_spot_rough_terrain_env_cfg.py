@@ -44,12 +44,14 @@ class _DeterministicCircularBuffer(CircularBuffer):
         # Isaac Lab 2.3.1 uses advanced indexed assignment here. PyTorch expands
         # that assignment incorrectly on CUDA when deterministic algorithms are
         # enabled, so initialize reset batches with an elementwise mask instead.
-        first_push_mask = (self._num_pushes == 0).reshape(
-            1,
-            self.batch_size,
-            *([1] * (data.ndim - 1)),
-        )
-        self._buffer = torch.where(first_push_mask, data.unsqueeze(0), self._buffer)
+        is_first_push = self._num_pushes == 0
+        if torch.any(is_first_push):
+            first_push_mask = is_first_push.reshape(
+                1,
+                self.batch_size,
+                *([1] * (data.ndim - 1)),
+            )
+            self._buffer = torch.where(first_push_mask, data.unsqueeze(0), self._buffer)
         self._num_pushes += 1
 
 
