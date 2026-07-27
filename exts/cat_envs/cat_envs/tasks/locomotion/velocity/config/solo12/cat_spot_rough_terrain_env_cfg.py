@@ -5,15 +5,87 @@
 
 """CaT rough-terrain configurations for Boston Dynamics Spot."""
 
+import torch
+
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
+from isaaclab.actuators import DelayedPDActuator, RemotizedPDActuator
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors.frame_transformer import FrameTransformerCfg
 from isaaclab.sensors.ray_caster import RayCasterCfg, patterns
 from isaaclab.utils import configclass
+from isaaclab.utils.buffers import CircularBuffer, DelayBuffer
 from isaaclab_assets.robots.spot import SPOT_CFG
 
 from .cat_go2_rough_terrain_env_cfg import Go2RoughTerrainEnvCfg, force_hard_terrain
+
+
+class _DeterministicCircularBuffer(CircularBuffer):
+    """Isaac Lab 2.3.1 circular buffer compatible with deterministic CUDA."""
+
+    def append(self, data: torch.Tensor):
+        if data.shape[0] != self.batch_size:
+            raise ValueError(
+                f"The input data has '{data.shape[0]}' batch size while expecting '{self.batch_size}'"
+            )
+
+        data = data.to(self._device)
+        if self._buffer is None:
+            self._pointer = -1
+            self._buffer = torch.empty(
+                (self.max_length, *data.shape),
+                dtype=data.dtype,
+                device=self._device,
+            )
+
+        self._pointer = (self._pointer + 1) % self.max_length
+        self._buffer[self._pointer] = data
+
+        # Isaac Lab 2.3.1 uses advanced indexed assignment here. PyTorch expands
+        # that assignment incorrectly on CUDA when deterministic algorithms are
+        # enabled, so initialize reset batches with an elementwise mask instead.
+        first_push_mask = (self._num_pushes == 0).reshape(
+            1,
+            self.batch_size,
+            *([1] * (data.ndim - 1)),
+        )
+        self._buffer = torch.where(first_push_mask, data.unsqueeze(0), self._buffer)
+        self._num_pushes += 1
+
+
+def _replace_delay_buffers(actuator: DelayedPDActuator):
+    """Retain the installed delay model while replacing only its broken storage."""
+    batch_size = actuator.positions_delay_buffer.batch_size
+    device = actuator.positions_delay_buffer.device
+
+    for attribute_name in (
+        "positions_delay_buffer",
+        "velocities_delay_buffer",
+        "efforts_delay_buffer",
+    ):
+        delay_buffer = DelayBuffer(actuator.cfg.max_delay, batch_size, device)
+        delay_buffer._circular_buffer = _DeterministicCircularBuffer(
+            actuator.cfg.max_delay + 1,
+            batch_size,
+            device,
+        )
+        setattr(actuator, attribute_name, delay_buffer)
+
+
+class DeterministicDelayedPDActuator(DelayedPDActuator):
+    """Installed delayed PD model with deterministic-compatible buffer storage."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _replace_delay_buffers(self)
+
+
+class DeterministicRemotizedPDActuator(RemotizedPDActuator):
+    """Installed remotized PD model with deterministic-compatible buffer storage."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _replace_delay_buffers(self)
 
 
 # Keep actions and proprioceptive observations in the articulation's runtime order.
@@ -55,7 +127,17 @@ class SpotRoughTerrainEnvCfg(Go2RoughTerrainEnvCfg):
     def __post_init__(self):
         super().__post_init__()
 
-        self.scene.robot = SPOT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+        self.scene.robot = SPOT_CFG.replace(
+            prim_path="{ENV_REGEX_NS}/Robot",
+            actuators={
+                "spot_hip": SPOT_CFG.actuators["spot_hip"].replace(
+                    class_type=DeterministicDelayedPDActuator
+                ),
+                "spot_knee": SPOT_CFG.actuators["spot_knee"].replace(
+                    class_type=DeterministicRemotizedPDActuator
+                ),
+            },
+        )
 
         self.actions.joint_pos.joint_names = list(SPOT_JOINT_NAMES)
         self.actions.joint_pos.scale = 0.2
