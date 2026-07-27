@@ -584,9 +584,9 @@ _leg_prefixes = [
 
 # -- accepted substrings for each joint "column" --------
 JOINT_TYPE_SYNONYMS = {
-    0: ("hip",  "haa"),      	# 0th column  = hip  / HAA  (ab-ad)
-    1: ("thigh","hfe"),      	# 1st column  = thigh/ HFE  (flex-ext)
-    2: ("calf", "kfe"),      	# 2nd column  = calf / KFE  (knee flex-ext)
+    0: ("hip",  "haa", "hx"),      	# 0th column  = hip  / HAA  (ab-ad)
+    1: ("thigh","hfe", "hy"),      	# 1st column  = thigh/ HFE  (flex-ext)
+    2: ("calf", "kfe", "kn"),      	# 2nd column  = calf / KFE  (knee flex-ext)
 }
 
 def _column_from_name(jname: str) -> int | None:

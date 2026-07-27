@@ -34,3 +34,13 @@ def test_build_joint_layout_supports_anymal_mapping():
     ]
 
     _assert_complete_joint_layout(joint_names, [0, 2, 1, 3] * 3)
+
+
+def test_build_joint_layout_supports_spot_mapping():
+    joint_names = [
+        "fl_hx", "fr_hx", "hl_hx", "hr_hx",
+        "fl_hy", "fr_hy", "hl_hy", "hr_hy",
+        "fl_kn", "fr_kn", "hl_kn", "hr_kn",
+    ]
+
+    _assert_complete_joint_layout(joint_names, [0, 1, 2, 3] * 3)
