@@ -15,20 +15,20 @@ This is the living record for the first ANYmal C transfer. It separates facts ve
 | Joint order | `LF_HAA`, `LH_HAA`, `RF_HAA`, `RH_HAA`, `LF_HFE`, `LH_HFE`, `RF_HFE`, `RH_HFE`, `LF_KFE`, `LH_KFE`, `RF_KFE`, `RH_KFE` | Runtime articulation order; actions and proprioceptive observations use this exact order. |
 | Default joint pose | HAA 0; front HFE +0.4; hind HFE -0.4; front KFE -0.8; hind KFE +0.8 rad | Installed asset initial state. |
 | Default spawn height | 0.6 m | Installed asset initial state. |
-| Continuous actuator effort | 80 N m | Installed ANYdrive actuator configuration. This is not used as the CaT constraint. |
+| Continuous actuator effort | 80 N m | Installed ANYdrive actuator configuration. The successful 80 N m CaT constraint now matches this value, but remains a method constraint rather than an actuator setting. |
 | Saturation effort | 120 N m | Installed ANYdrive actuator configuration. This is not used as the CaT constraint. |
-| No-load actuator speed | 7.5 rad/s | Installed ANYdrive actuator configuration. The initial constraint is lower. |
+| No-load actuator speed | 7.5 rad/s | Installed ANYdrive actuator configuration. The initial 7.0 rad/s constraint was lower; the successful learning-first constraint is 12 rad/s. |
 | Policy dimensions | 12 actions, 188 normal observations | Must be reconfirmed by the construction smoke test. The 188 terms match Go2 semantically. |
 | Control period | 0.02 s | Shared 0.005 s simulation step and decimation 4. |
 
 ## Starting assumptions
 
-| Category | Parameter | Go2/reference | ANYmal C initial | Why this is the initial value | Early failure signal | Next evidence-driven candidate |
+| Category | Parameter | Go2/reference | ANYmal C initial -> successful | Rationale/evidence | Early failure signal | Next evidence-driven candidate |
 |---|---|---:|---:|---|---|---|
 | Action | position-target scale | 0.8 rad | 0.5 rad | Installed upstream ANYmal locomotion scale; preserves the same normalized-action interface. | Policy saturates actions without tracking, or cannot generate sufficient foot motion. | Inspect target/joint range before trying 0.4 or 0.6. |
-| Soft constraint | torque | 20 N m | 60 N m | Below 80 N m continuous effort, with learning margin; roughly reflects the larger robot without using actuator maximum. | Torque probability dominates before tracking improves, or applied torque sits at the constraint continuously. | Relax only if construction/runtime disproves it; after locomotion exists, tighten to 50 then 40 N m. |
-| Soft constraint | joint velocity | 25 rad/s | 7.0 rad/s | Below the 7.5 rad/s no-load speed, but not the strictest proportional bound during initial learning. | Persistent velocity violations with otherwise useful motion, or actuator network saturation. | About 6.25 rad/s after stable locomotion. |
-| Soft constraint | joint acceleration | 800 rad/s^2 | 300 rad/s^2 | Learning-first margin while still much lower than Go2. | Acceleration probability dominates from policy noise and prevents longer episodes. | 200 rad/s^2 after stable locomotion. |
+| Soft constraint | torque | 20 N m | 60 -> 80 N m | The initial 60 N m bound was too restrictive; commit `3ec95de` raised it to the installed 80 N m continuous limit and the user reported that this configuration learned successfully. | Applied torque/constraint probability dominates before tracking improves. | Retain 80 N m unless a controlled post-convergence tightening experiment is needed. |
+| Soft constraint | joint velocity | 25 rad/s | 7.0 -> 12 rad/s | The installed 7.5 rad/s nominal speed was not a usable learning bound for this actuator-network simulation; commit `3ec95de` raised it to 12 rad/s. | Persistent velocity pressure prevents tracking/terrain progress. | Retain 12 rad/s for the demonstrated configuration. |
+| Soft constraint | joint acceleration | 800 rad/s^2 | 300 -> 600 rad/s^2 | The initial value was too restrictive during exploration; commit `3ec95de` raised it to 600 rad/s^2. | Acceleration probability dominates policy updates. | Retain 600 rad/s^2 for the demonstrated configuration. |
 | Soft constraint | normalized action rate | 80 s^-1 | 80 s^-1 | Defined on normalized actions per control second, so it is not scaled by robot joint speed. | Chattering and high energy without violations, or constant action-rate violations. | Reassess normalization and measured distribution before changing. |
 | Hard constraint | foot contact force | 300 N | 1000 N | Approximately preserves bound/body-weight scale. | Normal stance/landing contacts terminate most episodes, or damaging impacts are never caught. | Inspect per-foot distribution; adjust by measured quantiles, not actuator effort. |
 | Hard constraint | absolute HFE position | 1.5 rad | 1.5 rad | Angular geometry check remains plausible, but MUST be validated against ANYmal pose/sign convention. | Resets at nominal or ordinary swing poses. | Derive a per-joint bound from safe joint geometry. |
@@ -86,3 +86,7 @@ The following is construction/startup evidence, not a claim that locomotion has 
 No starting value was changed from this evidence: two PPO iterations mainly characterize a random policy. The first long run should retain the documented baseline and use the 24-hour gates above before any one-at-a-time relaxation.
 
 The updated evaluator also completed the full 14,500-step legacy Go2 checkpoint-21799 evaluation (seed 46) with exit code zero. Against the supplied pre-branch `metrics_summary.json`, the complete terrain-level summary, mean/final terrain level, cost of transport, x/y/yaw tracking RMS errors, task, action scale, and random/total step counts were exactly equal (absolute numerical difference zero). This validates the Go2-default compatibility path without changing the metric definitions.
+
+## Successful training update: 2026-07-27
+
+The user reported that the ANYmal C configuration learned successfully after commit `3ec95de` changed torque, velocity, and acceleration constraints from `60/7/300` to `80/12/600`. No other embodiment values changed in that commit. This updates the authoritative successful configuration but does not invent unreported convergence metrics.

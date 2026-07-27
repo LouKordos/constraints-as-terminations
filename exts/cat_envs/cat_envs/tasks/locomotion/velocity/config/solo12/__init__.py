@@ -54,6 +54,16 @@ gym.register(
 )
 
 gym.register(
+    id="CaT-Spot-Rough-Terrain-v0",
+    entry_point=CaTEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.cat_spot_rough_terrain_env_cfg:SpotRoughTerrainEnvCfg",
+        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
+    },
+)
+
+gym.register(
     id="CaT-Go2-Rough-Terrain-Joint-State-History-v0",
     entry_point=CaTEnv,
     disable_env_checker=True,
@@ -109,6 +119,16 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{__name__}.cat_anymal_c_rough_terrain_env_cfg:AnymalCRoughTerrainEnvCfg_PLAY",
+        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="CaT-Spot-Rough-Terrain-Play-v0",
+    entry_point=CaTEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.cat_spot_rough_terrain_env_cfg:SpotRoughTerrainEnvCfg_PLAY",
         "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
     },
 )
