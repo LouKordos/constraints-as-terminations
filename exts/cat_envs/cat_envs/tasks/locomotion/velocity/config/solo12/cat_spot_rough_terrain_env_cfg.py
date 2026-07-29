@@ -185,7 +185,7 @@ class SpotRoughTerrainEnvCfg(Go2RoughTerrainEnvCfg):
         self.terminations.base_contact.params["sensor_cfg"] = SceneEntityCfg(
             "contact_forces", body_names=["body", ".*_uleg"]
         )
-        self.curriculum.power.params["end_weight"] = 0.00380
+        self.curriculum.power.params["end_weight"] = 0.00320
 
         # Preserve Spot's installed 0--8 ms actuator delay while retaining 50 Hz control.
         self.sim.dt = 0.002
