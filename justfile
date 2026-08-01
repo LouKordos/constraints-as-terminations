@@ -10,8 +10,40 @@ train num_envs="7500" task="CaT-Go2-Rough-Terrain-v0" seed="46":
     echo "TMPDIR=$tmpdir"; \
     TMPDIR="$tmpdir" python scripts/clean_rl/train.py --task={{task}} --seed={{seed}} --headless --num_envs={{num_envs}} 2>&1 | tee "./logs/clean_rl/train-$(date +'%Y-%m-%d-%H:%M:%S').log"
 
+_train-rsl-baseline task num_envs seed max_iterations *flags:
+    tmpdir="${SLURM_TMPDIR:-$(pwd)/logs/tmp}"; \
+    mkdir -p ./logs/rsl_rl "$tmpdir" "$tmpdir/isaaclab/logs"; \
+    echo "TMPDIR=$tmpdir"; \
+    TMPDIR="$tmpdir" python scripts/train_rsl_rl.py \
+        --task={{task}} \
+        --seed={{seed}} \
+        --headless \
+        --num_envs={{num_envs}} \
+        --max_iterations={{max_iterations}} \
+        scene.terrain.terrain_generator.seed={{seed}} \
+        sim.random_seed={{seed}} \
+        {{flags}}
+
+train-baseline-go2 num_envs="7500" seed="46" max_iterations="1500" *flags:
+    just _train-rsl-baseline Baseline-Go2-Rough-Terrain-v0 {{num_envs}} {{seed}} {{max_iterations}} {{flags}}
+
+train-baseline-anymal-c num_envs="7500" seed="46" max_iterations="1500" *flags:
+    just _train-rsl-baseline Baseline-Anymal-C-Rough-Terrain-v0 {{num_envs}} {{seed}} {{max_iterations}} {{flags}}
+
+train-baseline-spot num_envs="7500" seed="46" max_iterations="20000" *flags:
+    just _train-rsl-baseline Baseline-Spot-Rough-Terrain-v0 {{num_envs}} {{seed}} {{max_iterations}} {{flags}}
+
 eval run_dir *flags:
     systemd-run --scope --user -p MemoryMax=45G time python scripts/eval.py --headless --run_dir={{run_dir}} {{flags}}
+
+eval-baseline-go2 run_dir *flags:
+    just eval {{run_dir}} --task=Baseline-Go2-Rough-Terrain-Play-v0 --policy_backend=rsl_rl {{flags}}
+
+eval-baseline-anymal-c run_dir *flags:
+    just eval {{run_dir}} --task=Baseline-Anymal-C-Rough-Terrain-Play-v0 --policy_backend=rsl_rl {{flags}}
+
+eval-baseline-spot run_dir *flags:
+    just eval {{run_dir}} --task=Baseline-Spot-Rough-Terrain-Play-v0 --policy_backend=rsl_rl {{flags}}
 
 eval-all logs_root_dir num_parallel_jobs *flags:
     @# Check for GNU parallel

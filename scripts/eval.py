@@ -39,6 +39,35 @@ UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS: Dict[str, Tuple[Optional[float], Optio
     "foot_contact_force": (0.0, 300.0),
 }
 
+MATCHED_BASELINE_CONSTRAINT_BOUNDS: Dict[
+    str, Dict[str, Tuple[Optional[float], Optional[float]]]
+] = {
+    "go2": dict(UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS),
+    "anymal_c": {
+        "joint_torque": (-80.0, 80.0),
+        "joint_velocity": (-12.0, 12.0),
+        "joint_acceleration": (-600.0, 600.0),
+        "action_rate": (-80.0, 80.0),
+        "foot_contact_force": (0.0, 1000.0),
+    },
+    "spot": {
+        "joint_torque": (-80.0, 80.0),
+        "joint_velocity": (-20.0, 20.0),
+        "joint_acceleration": (-800.0, 800.0),
+        "action_rate": (-80.0, 80.0),
+        "foot_contact_force": (0.0, 800.0),
+    },
+}
+
+MATCHED_BASELINE_TASK_IDS = {
+    "baseline-go2-rough-terrain-v0",
+    "baseline-go2-rough-terrain-play-v0",
+    "baseline-anymal-c-rough-terrain-v0",
+    "baseline-anymal-c-rough-terrain-play-v0",
+    "baseline-spot-rough-terrain-v0",
+    "baseline-spot-rough-terrain-play-v0",
+}
+
 
 @dataclass(frozen=True)
 class RobotEvalProfile:
@@ -181,6 +210,21 @@ def is_upstream_go2_rough_task(task_name: str) -> bool:
     mentions_unitree_go2 = "unitree-go2" in task_name_lower or "unitree_go2" in task_name_lower
 
     return mentions_rough and mentions_unitree_go2
+
+
+def is_matched_baseline_task(task_name: str) -> bool:
+    """Return whether ``task_name`` is one of this repository's matched baselines."""
+    return task_name.lower() in MATCHED_BASELINE_TASK_IDS
+
+
+def get_matched_baseline_constraint_bounds(
+    profile_name: str,
+) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
+    """Return CaT-equivalent thresholds used only to summarize baseline rollouts."""
+    try:
+        return dict(MATCHED_BASELINE_CONSTRAINT_BOUNDS[profile_name])
+    except KeyError as exception:
+        raise ValueError(f"No matched-baseline constraint bounds for profile '{profile_name}'") from exception
 
 
 def get_hardcoded_upstream_go2_constraint_bounds() -> Dict[str, Tuple[Optional[float], Optional[float]]]:
@@ -453,10 +497,12 @@ def resolve_constraint_bounds_for_eval(
     Priority:
     1. Custom CaT-style envs with env_cfg.constraints:
        load the saved training/eval bounds from params/env.yaml.
-    2. Upstream rough Unitree Go2 envs without custom constraints:
+    2. Repository matched baselines without custom constraints:
+       use embodiment-specific CaT thresholds for reporting only.
+    3. Upstream rough Unitree Go2 envs without custom constraints:
        use hardcoded eval-only bounds so their metrics_summary.json contains
        comparable constraint_violations_percent entries.
-    3. Everything else:
+    4. Everything else:
        return an empty bounds dict.
 
     This function deliberately does not modify metrics_utils.py. It only supplies
@@ -501,7 +547,16 @@ def resolve_constraint_bounds_for_eval(
     else:
         print("[INFO] env_cfg has no custom constraints block. Constraint-bound loading skipped.")
 
-    if not constraint_bounds and is_upstream_go2_rough_task(task_name):
+    if not constraint_bounds and is_matched_baseline_task(task_name):
+        profile = resolve_robot_eval_profile(task_name)
+        constraint_bounds = get_matched_baseline_constraint_bounds(profile.name)
+        constraint_bounds_source = f"hardcoded_matched_baseline_{profile.name}_eval_thresholds"
+        print(
+            "[INFO] Using CaT-equivalent eval-only constraint bounds for "
+            f"matched {profile.name} baseline reporting:"
+        )
+        print(format_constraint_bounds_for_logging(constraint_bounds))
+    elif not constraint_bounds and is_upstream_go2_rough_task(task_name):
         constraint_bounds = get_hardcoded_upstream_go2_constraint_bounds()
         constraint_bounds_source = "hardcoded_upstream_go2_rough_eval_thresholds"
         print("[INFO] Using hardcoded eval constraint bounds for upstream rough Unitree Go2 task:")
@@ -726,13 +781,18 @@ def add_eval_only_metrics_to_summary(
     return enriched_metrics
 
 
-def apply_common_eval_reward_scale_if_needed(env_cfg, task_name: str, enabled: bool):
+def apply_common_eval_reward_scale_if_needed(env_cfg, task_name: str, enabled: bool) -> bool:
     if not enabled:
-        return
+        return False
+
+    # Matched baselines must retain the exact upstream training reward stack.
+    # Their comparable tracking metrics are computed separately from raw state.
+    if is_matched_baseline_task(task_name):
+        return False
 
     task_name_lower = task_name.lower()
     if "isaac-velocity-rough-unitree-go2" not in task_name_lower:
-        return
+        return False
 
     if hasattr(env_cfg, "rewards") and hasattr(env_cfg.rewards, "track_lin_vel_xy_exp"):
         env_cfg.rewards.track_lin_vel_xy_exp.weight = 1.0
@@ -741,6 +801,7 @@ def apply_common_eval_reward_scale_if_needed(env_cfg, task_name: str, enabled: b
         env_cfg.rewards.track_ang_vel_z_exp.weight = 0.5
 
     print("[INFO] Applied common eval reward scale for upstream Go2: track_lin_vel_xy_exp=1.0, track_ang_vel_z_exp=0.5")
+    return True
 
 
 def get_current_terrain_level(env) -> float:
@@ -826,7 +887,7 @@ def main():
         )
 
     env_cfg = parse_env_cfg(args.task, device=args.device, num_envs=args.num_envs, use_fabric=not args.disable_fabric)
-    apply_common_eval_reward_scale_if_needed(
+    eval_reward_scale_override_applied = apply_common_eval_reward_scale_if_needed(
         env_cfg=env_cfg,
         task_name=args.task,
         enabled=args.downscale_upstream_go2_tracking_rewards,
@@ -1524,11 +1585,20 @@ def main():
         "hardcoded_upstream_go2_constraint_bounds_used": (
             constraint_bounds_source == "hardcoded_upstream_go2_rough_eval_thresholds"
         ),
+        "matched_baseline_constraint_bounds": MATCHED_BASELINE_CONSTRAINT_BOUNDS,
+        "matched_baseline_constraint_bounds_used": constraint_bounds_source.startswith(
+            "hardcoded_matched_baseline_"
+        ),
         "eval_tracking_reward_common_scale": {
             "track_lin_vel_xy_exp_weight": 1.0,
             "track_ang_vel_z_exp_weight": 0.5,
             "std_squared": 0.25,
-            "note": "Common eval tracking scale matching the custom env. Upstream Go2 training uses 1.5 and 0.75, so this records downscaled fair-comparison tracking rewards.",
+            "environment_reward_weights_modified": eval_reward_scale_override_applied,
+            "note": (
+                "These common tracking metrics are computed separately from raw command/state data. "
+                "Matched baseline environment reward weights remain upstream and unchanged; only the "
+                "legacy upstream Go2 task may be reweighted when its compatibility flag is enabled."
+            ),
         },
         "downscale_upstream_go2_tracking_rewards": args.downscale_upstream_go2_tracking_rewards,
     })
