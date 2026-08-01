@@ -1,4 +1,5 @@
 import argparse
+import atexit
 import os
 import inspect
 import glob
@@ -330,6 +331,15 @@ def parse_arguments():
     parser.add_argument("--run_dir", type=str, required=True, help="ABSOLUTE path to directory containing model checkpoints and params.")
     parser.add_argument("--eval_checkpoint", type=str, default=None, help="Optionally specify the model save checkpoint number instead of automatically using the last saved one.")
     parser.add_argument("--random_sim_step_length", type=int, default=4000, help="Number of steps to run with random commands and spawn points. Standardized tests like standing and walking forward will always run.")
+    parser.add_argument(
+        "--fixed_command_sim_steps",
+        type=int,
+        default=500,
+        help=(
+            "Steps per standardized fixed-command scenario. Keep the default for reported metrics; "
+            "shorter values are intended only for evaluation-pipeline smoke tests."
+        ),
+    )
     parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate. If you change this, hell will break loose")
     parser.add_argument("--task", type=str, default="Isaac-Velocity-Rough-Unitree-Go2-Play-v0", help="Name of the task/environment.")
     parser.add_argument("--policy_backend", choices=["auto", "clean_rl", "rsl_rl"], default="auto", help="Policy checkpoint backend. Use auto unless debugging.")
@@ -351,6 +361,10 @@ def parse_arguments():
     cli_args.add_clean_rl_args(parser)
     AppLauncher.add_app_launcher_args(parser)
     arguments = parser.parse_args()
+    if arguments.random_sim_step_length < 0:
+        parser.error("--random_sim_step_length must be non-negative")
+    if arguments.fixed_command_sim_steps <= 0:
+        parser.error("--fixed_command_sim_steps must be positive")
     arguments.enable_cameras = True  # Video
     return arguments
 
@@ -860,6 +874,42 @@ def main():
         sys.argv.append("--/rtx/verifyDriverVersion/enabled=false")
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
+    env = None
+    ffmpeg_process = None
+    cleanup_complete = False
+
+    def cleanup_runtime_resources():
+        """Release evaluator subprocess, environment, and Kit even after exceptions."""
+        nonlocal cleanup_complete
+        if cleanup_complete:
+            return
+        cleanup_complete = True
+
+        if ffmpeg_process is not None and ffmpeg_process.poll() is None:
+            try:
+                if ffmpeg_process.stdin is not None and not ffmpeg_process.stdin.closed:
+                    ffmpeg_process.stdin.close()
+                ffmpeg_process.wait(timeout=5)
+            except (BrokenPipeError, OSError, subprocess.TimeoutExpired):
+                ffmpeg_process.terminate()
+                try:
+                    ffmpeg_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    ffmpeg_process.kill()
+                    ffmpeg_process.wait()
+
+        if env is not None:
+            try:
+                env.close()
+            except Exception as exception:
+                print(f"[WARN] Failed to close evaluation environment: {exception}")
+
+        try:
+            simulation_app.close()
+        except Exception as exception:
+            print(f"[WARN] Failed to close Isaac Sim application: {exception}")
+
+    atexit.register(cleanup_runtime_resources)
     from isaaclab_tasks.utils import parse_env_cfg
     from isaaclab_tasks.utils.parse_cfg import load_cfg_from_registry
     from isaaclab.managers import EventTermCfg
@@ -975,7 +1025,9 @@ def main():
     plots_directory = os.path.join(eval_base_dir, "plots")
     os.makedirs(plots_directory, exist_ok=True)
 
-    fixed_command_sim_steps = 500  # If you want to increase this you also need to increase episode length otherwise env will reset mid-way
+    # The 500-step default exactly fills one 10 s episode. The CLI override is
+    # diagnostic-only and lets checkpoint/eval integration be tested quickly.
+    fixed_command_sim_steps = args.fixed_command_sim_steps
     fixed_command_scenarios = [  # Scenario positions depend on seed!
         ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_stairs_up", torch.tensor([1, 0.0, 0.0], device=device), (torch.tensor([-8, 16, -0.1], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
@@ -1543,11 +1595,23 @@ def main():
         np.ones(T, bool),
         eval_only_arrays,
     )
-    random_metrics = add_eval_only_metrics_to_summary(
-        compute_summary_metrics(random_timestep_mask, manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict),
-        random_timestep_mask,
-        eval_only_arrays,
-    )
+    if args.random_sim_step_length > 0:
+        random_metrics = add_eval_only_metrics_to_summary(
+            compute_summary_metrics(
+                random_timestep_mask,
+                manual_reset_steps,
+                automatic_reset_steps,
+                arrays_dict,
+                constants_dict,
+            ),
+            random_timestep_mask,
+            eval_only_arrays,
+        )
+    else:
+        # A zero-length random segment is the supported fast-evaluation mode.
+        # metrics_utils intentionally expects a non-empty mask, so do not call
+        # it for data that was never collected.
+        random_metrics = {}
     scenario_metrics = {
         tag: add_eval_only_metrics_to_summary(
             compute_summary_metrics(msk, manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict),
@@ -1569,6 +1633,7 @@ def main():
         "run_dir": str(run_path),
         "eval_base_dir": eval_base_dir,
         "random_sim_steps": args.random_sim_step_length,
+        "fixed_command_sim_steps": fixed_command_sim_steps,
         "total_sim_steps": total_sim_steps,
         "seed": env_cfg.seed,
         "action_scale": action_scale,
@@ -1621,7 +1686,8 @@ def main():
         subdir = f"scenario_{scenario_tag}"
         plot_jobs.append({"start_step": start, "end_step": end, "subdir": subdir})
 
-    plot_jobs.append({"start_step": 0, "end_step": args.random_sim_step_length, "subdir": "random_simulation_steps"})
+    if args.random_sim_step_length > 0:
+        plot_jobs.append({"start_step": 0, "end_step": args.random_sim_step_length, "subdir": "random_simulation_steps"})
     plot_jobs.append({"start_step": 0, "end_step": total_sim_steps, "subdir": "overall"})
 
     run_generate_plots_parallel(
@@ -1633,8 +1699,8 @@ def main():
         stagger_delay=args.plot_job_stagger_delay
     )
 
-    env.close()
-    simulation_app.close()
+    cleanup_runtime_resources()
+    atexit.unregister(cleanup_runtime_resources)
 
 
 if __name__ == "__main__":

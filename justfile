@@ -20,8 +20,8 @@ _train-rsl-baseline task num_envs seed max_iterations *flags:
         --headless \
         --num_envs={{num_envs}} \
         --max_iterations={{max_iterations}} \
-        scene.terrain.terrain_generator.seed={{seed}} \
-        sim.random_seed={{seed}} \
+        env.scene.terrain.terrain_generator.seed={{seed}} \
+        env.sim.random_seed={{seed}} \
         {{flags}}
 
 train-baseline-go2 num_envs="7500" seed="46" max_iterations="1500" *flags:
