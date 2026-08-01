@@ -10,7 +10,7 @@ train num_envs="7500" task="CaT-Go2-Rough-Terrain-v0" seed="46":
     echo "TMPDIR=$tmpdir"; \
     TMPDIR="$tmpdir" python scripts/clean_rl/train.py --task={{task}} --seed={{seed}} --headless --num_envs={{num_envs}} 2>&1 | tee "./logs/clean_rl/train-$(date +'%Y-%m-%d-%H:%M:%S').log"
 
-_train-rsl-baseline task num_envs seed max_iterations *flags:
+_train-rsl-baseline task num_envs seed max_iterations wandb_project *flags:
     tmpdir="${SLURM_TMPDIR:-$(pwd)/logs/tmp}"; \
     mkdir -p ./logs/rsl_rl "$tmpdir" "$tmpdir/isaaclab/logs"; \
     echo "TMPDIR=$tmpdir"; \
@@ -20,18 +20,20 @@ _train-rsl-baseline task num_envs seed max_iterations *flags:
         --headless \
         --num_envs={{num_envs}} \
         --max_iterations={{max_iterations}} \
+        --logger=wandb \
+        --log_project_name={{wandb_project}} \
         env.scene.terrain.terrain_generator.seed={{seed}} \
         env.sim.random_seed={{seed}} \
         {{flags}}
 
-train-baseline-go2 num_envs="7500" seed="46" max_iterations="1500" *flags:
-    just _train-rsl-baseline Baseline-Go2-Rough-Terrain-v0 {{num_envs}} {{seed}} {{max_iterations}} {{flags}}
+train-baseline-go2 num_envs="7500" seed="46" max_iterations="1500" wandb_project="baseline_go2" *flags:
+    just _train-rsl-baseline Baseline-Go2-Rough-Terrain-v0 {{num_envs}} {{seed}} {{max_iterations}} {{wandb_project}} {{flags}}
 
-train-baseline-anymal-c num_envs="7500" seed="46" max_iterations="1500" *flags:
-    just _train-rsl-baseline Baseline-Anymal-C-Rough-Terrain-v0 {{num_envs}} {{seed}} {{max_iterations}} {{flags}}
+train-baseline-anymal-c num_envs="7500" seed="46" max_iterations="1500" wandb_project="baseline_anymal_c" *flags:
+    just _train-rsl-baseline Baseline-Anymal-C-Rough-Terrain-v0 {{num_envs}} {{seed}} {{max_iterations}} {{wandb_project}} {{flags}}
 
-train-baseline-spot num_envs="7500" seed="46" max_iterations="20000" *flags:
-    just _train-rsl-baseline Baseline-Spot-Rough-Terrain-v0 {{num_envs}} {{seed}} {{max_iterations}} {{flags}}
+train-baseline-spot num_envs="7500" seed="46" max_iterations="20000" wandb_project="baseline_spot" *flags:
+    just _train-rsl-baseline Baseline-Spot-Rough-Terrain-v0 {{num_envs}} {{seed}} {{max_iterations}} {{wandb_project}} {{flags}}
 
 eval run_dir *flags:
     systemd-run --scope --user -p MemoryMax=45G time python scripts/eval.py --headless --run_dir={{run_dir}} {{flags}}
