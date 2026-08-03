@@ -27,6 +27,12 @@ _SPOT_RSL_RL_CFG = (
     "isaaclab_tasks.manager_based.locomotion.velocity.config.spot.agents."
     "rsl_rl_ppo_cfg:SpotFlatPPORunnerCfg"
 )
+_GO2_ANYMAL_C_TUNING_RSL_RL_CFG = (
+    f"{agents.__name__}.rsl_rl_ppo_cfg:Go2AnymalCTuningPPORunnerCfg"
+)
+_ANYMAL_C_GO2_TUNING_RSL_RL_CFG = (
+    f"{agents.__name__}.rsl_rl_ppo_cfg:AnymalCGo2TuningPPORunnerCfg"
+)
 
 
 gym.register(
@@ -70,6 +76,58 @@ gym.register(
             f"{__name__}.baseline_anymal_c_rough_env_cfg:BaselineAnymalCRoughEnvCfg_PLAY"
         ),
         "rsl_rl_cfg_entry_point": _ANYMAL_C_RSL_RL_CFG,
+    },
+)
+
+gym.register(
+    id="Baseline-Go2-Anymal-C-Tuning-Rough-Terrain-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": (
+            f"{__name__}.baseline_cross_tuning_env_cfg:"
+            "BaselineGo2AnymalCTuningRoughEnvCfg"
+        ),
+        "rsl_rl_cfg_entry_point": _GO2_ANYMAL_C_TUNING_RSL_RL_CFG,
+    },
+)
+
+gym.register(
+    id="Baseline-Go2-Anymal-C-Tuning-Rough-Terrain-Play-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": (
+            f"{__name__}.baseline_cross_tuning_env_cfg:"
+            "BaselineGo2AnymalCTuningRoughEnvCfg_PLAY"
+        ),
+        "rsl_rl_cfg_entry_point": _GO2_ANYMAL_C_TUNING_RSL_RL_CFG,
+    },
+)
+
+gym.register(
+    id="Baseline-Anymal-C-Go2-Tuning-Rough-Terrain-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": (
+            f"{__name__}.baseline_cross_tuning_env_cfg:"
+            "BaselineAnymalCGo2TuningRoughEnvCfg"
+        ),
+        "rsl_rl_cfg_entry_point": _ANYMAL_C_GO2_TUNING_RSL_RL_CFG,
+    },
+)
+
+gym.register(
+    id="Baseline-Anymal-C-Go2-Tuning-Rough-Terrain-Play-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": (
+            f"{__name__}.baseline_cross_tuning_env_cfg:"
+            "BaselineAnymalCGo2TuningRoughEnvCfg_PLAY"
+        ),
+        "rsl_rl_cfg_entry_point": _ANYMAL_C_GO2_TUNING_RSL_RL_CFG,
     },
 )
 

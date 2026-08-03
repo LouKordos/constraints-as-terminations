@@ -8,6 +8,16 @@ from isaaclab.app import AppLauncher
 
 _APP_LAUNCHER = AppLauncher(headless=True)
 
+import gymnasium as gym
+import cat_envs.tasks  # noqa: F401
+from isaaclab_tasks.manager_based.locomotion.velocity.config.anymal_c.agents.rsl_rl_ppo_cfg import (
+    AnymalCRoughPPORunnerCfg,
+)
+from isaaclab_tasks.manager_based.locomotion.velocity.config.go2.agents.rsl_rl_ppo_cfg import (
+    UnitreeGo2RoughPPORunnerCfg,
+)
+from isaaclab_tasks.utils.parse_cfg import load_cfg_from_registry
+
 from cat_envs.tasks.locomotion.velocity.config.solo12.baseline_anymal_c_rough_env_cfg import (
     BaselineAnymalCRoughEnvCfg,
     BaselineAnymalCRoughEnvCfg_PLAY,
@@ -50,6 +60,33 @@ EXPECTED_GO2_WEIGHTS = {
     "feet_air_time": 0.01,
     "flat_orientation_l2": 0.0,
     "dof_pos_limits": 0.0,
+}
+
+CROSS_TASKS = {
+    "Baseline-Go2-Anymal-C-Tuning-Rough-Terrain-v0": (
+        BaselineGo2AnymalCTuningRoughEnvCfg,
+        AnymalCRoughPPORunnerCfg,
+        "go2_anymal_c_tuning_rough",
+        0.005,
+    ),
+    "Baseline-Go2-Anymal-C-Tuning-Rough-Terrain-Play-v0": (
+        BaselineGo2AnymalCTuningRoughEnvCfg_PLAY,
+        AnymalCRoughPPORunnerCfg,
+        "go2_anymal_c_tuning_rough",
+        0.005,
+    ),
+    "Baseline-Anymal-C-Go2-Tuning-Rough-Terrain-v0": (
+        BaselineAnymalCGo2TuningRoughEnvCfg,
+        UnitreeGo2RoughPPORunnerCfg,
+        "anymal_c_go2_tuning_rough",
+        0.01,
+    ),
+    "Baseline-Anymal-C-Go2-Tuning-Rough-Terrain-Play-v0": (
+        BaselineAnymalCGo2TuningRoughEnvCfg_PLAY,
+        UnitreeGo2RoughPPORunnerCfg,
+        "anymal_c_go2_tuning_rough",
+        0.01,
+    ),
 }
 
 
@@ -106,3 +143,22 @@ def test_anymal_receives_go2_weights_and_action_scale(crossed_cls, receiver_cls)
     assert cfg.rewards.undesired_contacts.params["sensor_cfg"].body_names == ".*THIGH"
     assert cfg.rewards.feet_air_time.params["sensor_cfg"].body_names == ".*FOOT"
     assert _without_transferred_fields(cfg, receiver) == receiver.to_dict()
+
+
+@pytest.mark.parametrize("task_id,contract", CROSS_TASKS.items())
+def test_cross_task_registration_and_donor_ppo(task_id, contract):
+    env_cls, donor_cls, experiment_name, entropy_coef = contract
+    spec = gym.spec(task_id)
+    env_cfg = load_cfg_from_registry(task_id, "env_cfg_entry_point")
+    runner_cfg = load_cfg_from_registry(task_id, "rsl_rl_cfg_entry_point")
+    donor_cfg = donor_cls()
+
+    assert isinstance(env_cfg, env_cls)
+    assert spec.kwargs["env_cfg_entry_point"].endswith(f":{env_cls.__name__}")
+    assert runner_cfg.algorithm.entropy_coef == entropy_coef
+    assert runner_cfg.experiment_name == experiment_name
+
+    actual_runner = runner_cfg.to_dict()
+    donor_runner = donor_cfg.to_dict()
+    donor_runner["experiment_name"] = experiment_name
+    assert actual_runner == donor_runner
