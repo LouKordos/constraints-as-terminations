@@ -32,6 +32,12 @@ train-baseline-go2 num_envs="7500" seed="46" max_iterations="30000" wandb_projec
 train-baseline-anymal-c num_envs="7500" seed="46" max_iterations="30000" wandb_project="baseline_anymal_c" *flags:
     just _train-rsl-baseline Baseline-Anymal-C-Rough-Terrain-v0 {{num_envs}} {{seed}} {{max_iterations}} {{wandb_project}} {{flags}}
 
+train-baseline-go2-anymal-c-tuning num_envs="7500" seed="46" max_iterations="30000" wandb_project="baseline_go2_anymal_c_rewards_action_scale_ppo" *flags:
+    just _train-rsl-baseline Baseline-Go2-Anymal-C-Tuning-Rough-Terrain-v0 {{num_envs}} {{seed}} {{max_iterations}} {{wandb_project}} {{flags}}
+
+train-baseline-anymal-c-go2-tuning num_envs="7500" seed="46" max_iterations="30000" wandb_project="baseline_anymal_c_go2_rewards_action_scale_ppo" *flags:
+    just _train-rsl-baseline Baseline-Anymal-C-Go2-Tuning-Rough-Terrain-v0 {{num_envs}} {{seed}} {{max_iterations}} {{wandb_project}} {{flags}}
+
 train-baseline-spot num_envs="7500" seed="46" max_iterations="30000" wandb_project="baseline_spot" *flags:
     just _train-rsl-baseline Baseline-Spot-Rough-Terrain-v0 {{num_envs}} {{seed}} {{max_iterations}} {{wandb_project}} {{flags}}
 
