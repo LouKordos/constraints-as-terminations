@@ -17,4 +17,4 @@ SciencePlots
 zmq
 rosbags
 tensordict
-rsl-rl-lib
+rsl-rl-lib==3.1.2
