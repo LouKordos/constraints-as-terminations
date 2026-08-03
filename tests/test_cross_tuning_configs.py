@@ -29,6 +29,7 @@ from cat_envs.tasks.locomotion.velocity.config.solo12.baseline_cross_tuning_env_
     BaselineAnymalCGo2TuningRoughEnvCfg_PLAY,
     BaselineGo2AnymalCTuningRoughEnvCfg,
     BaselineGo2AnymalCTuningRoughEnvCfg_PLAY,
+    _apply_go2_tuning_to_anymal_c,
 )
 from cat_envs.tasks.locomotion.velocity.config.solo12.baseline_go2_rough_env_cfg import (
     BaselineGo2RoughEnvCfg,
@@ -139,6 +140,14 @@ def test_anymal_receives_go2_weights_and_action_scale(crossed_cls, receiver_cls)
     assert cfg.rewards.undesired_contacts.params["sensor_cfg"].body_names == ".*THIGH"
     assert cfg.rewards.feet_air_time.params["sensor_cfg"].body_names == ".*FOOT"
     assert _without_transferred_fields(cfg, receiver) == receiver.to_dict()
+
+
+def test_anymal_transfer_rejects_changed_contact_selector():
+    cfg = BaselineAnymalCRoughEnvCfg()
+    cfg.rewards.undesired_contacts.params["sensor_cfg"].body_names = ".*WRONG"
+
+    with pytest.raises(ValueError, match=".*THIGH"):
+        _apply_go2_tuning_to_anymal_c(cfg)
 
 
 @pytest.mark.parametrize("task_id,contract", CROSS_TASKS.items())

@@ -63,6 +63,8 @@ def _apply_go2_tuning_to_anymal_c(cfg) -> None:
     contact_term = cfg.rewards.undesired_contacts
     if contact_term is None or contact_term.weight != -1.0:
         raise ValueError("Crossed ANYmal C must retain undesired_contacts at weight -1.0")
+    if contact_term.params["sensor_cfg"].body_names != ".*THIGH":
+        raise ValueError("Crossed ANYmal C must retain the .*THIGH undesired-contact selector")
     _set_reward_weights(cfg.rewards, GO2_REWARD_WEIGHTS)
     cfg.actions.joint_pos.scale = 0.25
 
