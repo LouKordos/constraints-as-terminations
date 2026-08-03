@@ -90,10 +90,6 @@ CROSS_TASKS = {
 }
 
 
-def teardown_module():
-    _APP_LAUNCHER.app.close()
-
-
 def _reward_weights(cfg) -> dict[str, float]:
     return {name: getattr(cfg.rewards, name).weight for name in EXPECTED_ANYMAL_C_WEIGHTS}
 
