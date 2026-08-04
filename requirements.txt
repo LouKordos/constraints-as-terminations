@@ -17,6 +17,6 @@ SciencePlots
 zmq
 rosbags
 tensordict
-rsl-rl-lib=5.4.2
+rsl-rl-lib==5.4.2
 # Use the below for older baseline runs, or in case any errors related to rsl-rl-lib come up
 #rsl-rl-lib==3.1.2
