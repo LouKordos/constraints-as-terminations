@@ -962,10 +962,10 @@ def main():
     video_output_path = os.path.join(eval_base_dir, f"{os.path.basename(eval_base_dir)}_run_{os.path.basename(args.run_dir)}.mp4")
     frame_storage_interval = 1
     ffmpeg_cmd = [
-        "ffmpeg", "-y", "-hwaccel", "cuda",
+        "ffmpeg", "-y",
         "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{frame_width}x{frame_height}", "-framerate", str(frame_rate),
         "-i", "pipe:0",
-        "-c:v", "hevc_nvenc", "-pix_fmt", "yuv420p", "-preset", "slow",
+        "-c:v", "libx265", "-pix_fmt", "yuv420p", "-preset", "slow",
         "-movflags", "+use_metadata_tags", "-metadata", f"env_name={env_name}",
         video_output_path
     ]
