@@ -9,8 +9,90 @@ from isaaclab.managers.manager_base import ManagerTermBase
 from isaaclab.managers.manager_term_cfg import RewardTermCfg
 from isaaclab.sensors import ContactSensor, RayCaster
 
+import cat_envs.tasks.utils.cat.constraints as constraints
+
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
+
+
+def _normalized_constraint_penalty(
+    env: ManagerBasedRLEnv,
+    constraint_violation: torch.Tensor,
+    limit: float,
+    curriculum_steps: int,
+) -> torch.Tensor:
+    """Convert signed constraint violations into a scheduled normalized penalty."""
+    if limit <= 0.0:
+        raise ValueError(f"limit must be positive, got {limit}")
+    if curriculum_steps <= 0:
+        raise ValueError(f"curriculum_steps must be positive, got {curriculum_steps}")
+    if constraint_violation.ndim not in (1, 2):
+        raise ValueError(
+            "constraint_violation must have shape (num_envs,) or (num_envs, num_components), "
+            f"got {tuple(constraint_violation.shape)}"
+        )
+
+    normalized_excess = torch.clamp_min(constraint_violation, 0.0) / limit
+    if normalized_excess.ndim == 2:
+        normalized_excess = normalized_excess.max(dim=1).values
+
+    curriculum_progress = min(max(env.common_step_counter / curriculum_steps, 0.0), 1.0)
+    return -normalized_excess * curriculum_progress
+
+
+def joint_torque_limit_penalty(
+    env: ManagerBasedRLEnv,
+    limit: float,
+    names: list[str],
+    curriculum_steps: int,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    violation = constraints.joint_torque(env, limit=limit, names=names, asset_cfg=asset_cfg)
+    return _normalized_constraint_penalty(env, violation, limit, curriculum_steps)
+
+
+def joint_velocity_limit_penalty(
+    env: ManagerBasedRLEnv,
+    limit: float,
+    names: list[str],
+    curriculum_steps: int,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    violation = constraints.joint_velocity(env, limit=limit, names=names, asset_cfg=asset_cfg)
+    return _normalized_constraint_penalty(env, violation, limit, curriculum_steps)
+
+
+def joint_acceleration_limit_penalty(
+    env: ManagerBasedRLEnv,
+    limit: float,
+    names: list[str],
+    curriculum_steps: int,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    violation = constraints.joint_acceleration(env, limit=limit, names=names, asset_cfg=asset_cfg)
+    return _normalized_constraint_penalty(env, violation, limit, curriculum_steps)
+
+
+def action_rate_limit_penalty(
+    env: ManagerBasedRLEnv,
+    limit: float,
+    names: list[str],
+    curriculum_steps: int,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    violation = constraints.action_rate(env, limit=limit, names=names, asset_cfg=asset_cfg)
+    return _normalized_constraint_penalty(env, violation, limit, curriculum_steps)
+
+
+def base_orientation_limit_penalty(
+    env: ManagerBasedRLEnv,
+    limit: float,
+    curriculum_steps: int,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    violation = constraints.base_orientation(env, limit=limit, asset_cfg=asset_cfg)
+    return _normalized_constraint_penalty(env, violation, limit, curriculum_steps)
+
 
 def joint_power(env: ManagerBasedRLEnv, scaling_factor, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     robot = env.scene[asset_cfg.name]
