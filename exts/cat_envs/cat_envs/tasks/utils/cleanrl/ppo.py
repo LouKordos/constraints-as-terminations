@@ -8,6 +8,86 @@ from torch.distributions.normal import Normal
 from functools import partial
 print = partial(print, flush=True) # For cluster runs
 
+SOFT_CONSTRAINT_REWARD_TERM_NAMES = (
+    "joint_torque",
+    "joint_velocity",
+    "joint_acceleration",
+    "action_rate",
+    "base_orientation",
+)
+
+
+def _get_soft_constraint_reward_curriculum_state(env):
+    """Return the live effective weights for the reward-encoded soft limits."""
+    if not set(SOFT_CONSTRAINT_REWARD_TERM_NAMES).issubset(
+        env.reward_manager.active_terms
+    ):
+        return None
+
+    term_cfgs = {
+        name: env.reward_manager.get_term_cfg(name)
+        for name in SOFT_CONSTRAINT_REWARD_TERM_NAMES
+    }
+    curriculum_steps = {
+        int(term_cfg.params["curriculum_steps"])
+        for term_cfg in term_cfgs.values()
+    }
+    if len(curriculum_steps) != 1:
+        raise ValueError(
+            "soft constraint reward terms must share one curriculum_steps value"
+        )
+    curriculum_steps = curriculum_steps.pop()
+    if curriculum_steps <= 0:
+        raise ValueError("soft constraint reward curriculum_steps must be positive")
+
+    common_step_counter = int(env.common_step_counter)
+    progress = min(max(common_step_counter / curriculum_steps, 0.0), 1.0)
+    return {
+        "common_step_counter": float(common_step_counter),
+        "progress": progress,
+        "effective_weights": {
+            name: float(term_cfg.weight) * progress
+            for name, term_cfg in term_cfgs.items()
+        },
+    }
+
+
+def _log_soft_constraint_reward_curriculum(writer, env, iteration):
+    """Log the reward-constraint ramp without mutating its training state."""
+    state = _get_soft_constraint_reward_curriculum_state(env)
+    if state is None:
+        return
+
+    writer.add_scalar(
+        "Curriculum/soft_constraint_common_step_counter",
+        state["common_step_counter"],
+        iteration,
+    )
+    writer.add_scalar(
+        "Curriculum/soft_constraint_progress",
+        state["progress"],
+        iteration,
+    )
+    for term_name, effective_weight in state["effective_weights"].items():
+        writer.add_scalar(
+            f"Curriculum/{term_name}_effective_weight",
+            effective_weight,
+            iteration,
+        )
+
+    effective_weights_text = " ".join(
+        f"{term_name}={effective_weight:.6f}"
+        for term_name, effective_weight in state["effective_weights"].items()
+    )
+    print(
+        "[INFO][SoftConstraintRewardCurriculum] "
+        f"iteration={iteration} "
+        f"common_step_counter={int(state['common_step_counter'])} "
+        f"progress={state['progress']:.6f} "
+        f"{effective_weights_text}"
+    )
+
+
 class RunningMeanStd(nn.Module):
     def __init__(self, shape=(), epsilon=1e-08):
         super(RunningMeanStd, self).__init__()
@@ -361,6 +441,12 @@ def PPO(envs, ppo_cfg, run_path):
                 if info["time_outs"].any():
                     print("time outs", info["time_outs"].sum())
                     exit(0)
+
+        _log_soft_constraint_reward_curriculum(
+            writer,
+            envs.unwrapped,
+            iteration,
+        )
 
         # Keep in mind that the raw reward functions are multiplied by dt as well as max episode lenght, then scaled by reward weight!
         # Even though the Episode_Reward key is returned every time step, it only contains the envs that reset at this specific time step.

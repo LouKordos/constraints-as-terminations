@@ -17,12 +17,130 @@ import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 REWARDS_PATH = REPOSITORY_ROOT / "exts/cat_envs/cat_envs/tasks/utils/mdp/rewards.py"
+PPO_PATH = REPOSITORY_ROOT / "exts/cat_envs/cat_envs/tasks/utils/cleanrl/ppo.py"
 EVAL_PATH = REPOSITORY_ROOT / "scripts/eval.py"
 
 
 class FakeEnv:
     def __init__(self, common_step_counter: int):
         self.common_step_counter = common_step_counter
+
+
+@pytest.fixture(scope="module")
+def ppo_module():
+    spec = importlib.util.spec_from_file_location("reward_curriculum_test_ppo", PPO_PATH)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _soft_constraint_reward_env(common_step_counter: int, weight: float = 0.1):
+    term_names = (
+        "joint_torque",
+        "joint_velocity",
+        "joint_acceleration",
+        "action_rate",
+        "base_orientation",
+    )
+    term_cfgs = {
+        name: types.SimpleNamespace(
+            weight=weight,
+            params={"curriculum_steps": 19_200},
+        )
+        for name in term_names
+    }
+
+    class FakeRewardManager:
+        active_terms = list(term_names)
+
+        def get_term_cfg(self, term_name):
+            return term_cfgs[term_name]
+
+    return types.SimpleNamespace(
+        common_step_counter=common_step_counter,
+        reward_manager=FakeRewardManager(),
+    )
+
+
+def test_soft_constraint_reward_curriculum_state_reports_effective_weights(ppo_module):
+    halfway_state = ppo_module._get_soft_constraint_reward_curriculum_state(
+        _soft_constraint_reward_env(common_step_counter=9_600)
+    )
+    saturated_state = ppo_module._get_soft_constraint_reward_curriculum_state(
+        _soft_constraint_reward_env(common_step_counter=25_000)
+    )
+
+    assert halfway_state == {
+        "common_step_counter": 9_600.0,
+        "progress": 0.5,
+        "effective_weights": {
+            "joint_torque": 0.05,
+            "joint_velocity": 0.05,
+            "joint_acceleration": 0.05,
+            "action_rate": 0.05,
+            "base_orientation": 0.05,
+        },
+    }
+    assert saturated_state["progress"] == 1.0
+    assert set(saturated_state["effective_weights"].values()) == {0.1}
+
+
+def test_soft_constraint_reward_curriculum_logs_to_writer_and_stdout(
+    ppo_module,
+    capsys,
+):
+    class FakeWriter:
+        def __init__(self):
+            self.scalars = {}
+
+        def add_scalar(self, tag, value, iteration):
+            self.scalars[tag] = (value, iteration)
+
+    writer = FakeWriter()
+    ppo_module._log_soft_constraint_reward_curriculum(
+        writer,
+        _soft_constraint_reward_env(common_step_counter=9_600),
+        iteration=400,
+    )
+
+    assert writer.scalars == {
+        "Curriculum/soft_constraint_common_step_counter": (9_600.0, 400),
+        "Curriculum/soft_constraint_progress": (0.5, 400),
+        "Curriculum/joint_torque_effective_weight": (0.05, 400),
+        "Curriculum/joint_velocity_effective_weight": (0.05, 400),
+        "Curriculum/joint_acceleration_effective_weight": (0.05, 400),
+        "Curriculum/action_rate_effective_weight": (0.05, 400),
+        "Curriculum/base_orientation_effective_weight": (0.05, 400),
+    }
+    stdout = capsys.readouterr().out
+    assert "[INFO][SoftConstraintRewardCurriculum]" in stdout
+    assert "iteration=400" in stdout
+    assert "common_step_counter=9600" in stdout
+    assert "progress=0.500000" in stdout
+    for term_name in (
+        "joint_torque",
+        "joint_velocity",
+        "joint_acceleration",
+        "action_rate",
+        "base_orientation",
+    ):
+        assert f"{term_name}=0.050000" in stdout
+
+
+def test_soft_constraint_reward_curriculum_is_silent_for_other_tasks(
+    ppo_module,
+    capsys,
+):
+    writer = types.SimpleNamespace(add_scalar=lambda *args, **kwargs: pytest.fail("unexpected log"))
+    env = types.SimpleNamespace(
+        common_step_counter=9_600,
+        reward_manager=types.SimpleNamespace(active_terms=["joint_torque"]),
+    )
+
+    ppo_module._log_soft_constraint_reward_curriculum(writer, env, iteration=400)
+
+    assert capsys.readouterr().out == ""
 
 
 def _load_function_from_source(path: Path, function_name: str):
