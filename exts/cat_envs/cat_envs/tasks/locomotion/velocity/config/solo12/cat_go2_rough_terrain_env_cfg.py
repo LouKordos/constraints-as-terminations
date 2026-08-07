@@ -613,6 +613,16 @@ class EventCfg:
     )
     
 
+SOFT_CONSTRAINT_REWARD_END_WEIGHT_LOW = 0.1
+SOFT_CONSTRAINT_REWARD_END_WEIGHT_HIGH = 10.0
+
+# Change only this assignment when switching between the two rebuttal runs.
+SOFT_CONSTRAINT_REWARD_END_WEIGHT = SOFT_CONSTRAINT_REWARD_END_WEIGHT_LOW
+
+# CleanRL collects 24 environment steps for every training iteration logged to W&B.
+SOFT_CONSTRAINT_REWARD_CURRICULUM_STEPS = 24 * 800
+
+
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
@@ -627,6 +637,54 @@ class RewardsCfg:
         func=mdp.track_ang_vel_z_exp,
         weight=0.5,
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
+    )
+
+    # Reward-based approximations of the five paper-defined operational constraints.
+    # Each function returns the negative worst-component normalized threshold excess
+    # and ramps internally using env.common_step_counter.
+    joint_torque = RewTerm(
+        func=rewards.joint_torque_limit_penalty,
+        weight=SOFT_CONSTRAINT_REWARD_END_WEIGHT,
+        params={
+            "limit": 20.0,
+            "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
+            "curriculum_steps": SOFT_CONSTRAINT_REWARD_CURRICULUM_STEPS,
+        },
+    )
+    joint_velocity = RewTerm(
+        func=rewards.joint_velocity_limit_penalty,
+        weight=SOFT_CONSTRAINT_REWARD_END_WEIGHT,
+        params={
+            "limit": 25.0,
+            "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
+            "curriculum_steps": SOFT_CONSTRAINT_REWARD_CURRICULUM_STEPS,
+        },
+    )
+    joint_acceleration = RewTerm(
+        func=rewards.joint_acceleration_limit_penalty,
+        weight=SOFT_CONSTRAINT_REWARD_END_WEIGHT,
+        params={
+            "limit": 800.0,
+            "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
+            "curriculum_steps": SOFT_CONSTRAINT_REWARD_CURRICULUM_STEPS,
+        },
+    )
+    action_rate = RewTerm(
+        func=rewards.action_rate_limit_penalty,
+        weight=SOFT_CONSTRAINT_REWARD_END_WEIGHT,
+        params={
+            "limit": 80.0,
+            "names": [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
+            "curriculum_steps": SOFT_CONSTRAINT_REWARD_CURRICULUM_STEPS,
+        },
+    )
+    base_orientation = RewTerm(
+        func=rewards.base_orientation_limit_penalty,
+        weight=SOFT_CONSTRAINT_REWARD_END_WEIGHT,
+        params={
+            "limit": 0.1,
+            "curriculum_steps": SOFT_CONSTRAINT_REWARD_CURRICULUM_STEPS,
+        },
     )
 
     # DO NOT RENAME; USE THIS TERM FOR ALL ENERGY MINIMIZATION RELATED TASKS
@@ -644,7 +702,10 @@ class RewardsCfg:
 # constraints, the values defined here are used.
 @configclass
 class ConstraintsCfg:
-    # Safety Soft constraints
+    # Safety soft constraints are replaced by the normalized reward terms in
+    # RewardsCfg for the rebuttal experiment. Keep the original definitions here
+    # as comments to make the one-to-one transfer auditable.
+    '''
     joint_torque = ConstraintTerm(
         func=constraints.joint_torque,
         max_p=0.25, # Overwritten by curriculum!
@@ -670,6 +731,7 @@ class ConstraintsCfg:
         max_p=0.25, 
         params={"limit": 0.1}
     )
+    '''
 
     # Safety Hard constraints. Note that these are equivalent to episode reset / termination, so they should ideally be formulated as reset events
     contact = ConstraintTerm(
@@ -692,12 +754,14 @@ class ConstraintsCfg:
         max_p=1.0, 
         params={"limit": 0.0}
     )
-    # NOT needed after adding energy minimization, only kept for backwards compat in code
+    # Legacy soft term excluded from the five operational limits in the paper.
+    '''
     hip_position = ConstraintTerm(
         func=constraints.relative_joint_position_upper_and_lower_bound_when_moving_forward,
         max_p=0.25, # Overwritten by curriculum!
         params={"limit": 0.3, "names": [".*_hip_joint"], "velocity_deadzone": 0.1},
     )
+    '''
     
     # Never forget to also add a curriculum term for each added constraint
     # min_relative_base_height = ConstraintTerm(func=constraints.min_base_height_relative_to_ground, max_p=0.25, params={"limit": 0.2})
@@ -715,6 +779,7 @@ class ConstraintsCfg:
     '''
 
     # Irrelevant for gait, just added for troubleshooting on real robot when standing
+    '''
     no_move = ConstraintTerm(
         func=constraints.no_move,
         max_p=0.1, # Overwritten by curriculum!
@@ -724,6 +789,7 @@ class ConstraintsCfg:
             "joint_vel_limit": 4.0,
         },
     )
+    '''
     
     '''
     two_foot_contact = ConstraintTerm(
@@ -771,7 +837,10 @@ MAX_CURRICULUM_ITERATIONS = 5000
 
 @configclass
 class CurriculumCfg:
-    # Safety Soft constraints
+    # CaT curricula for the transferred soft operational constraints are disabled.
+    # The replacement reward functions use common_step_counter directly, avoiding
+    # the shared, reset-driven CaT curriculum counter.
+    '''
     joint_torque = CurrTerm(
         func=curriculums.modify_constraint_p,
         params={
@@ -804,8 +873,10 @@ class CurriculumCfg:
             "init_max_p": 0.25,
         },
     )
+    '''
 
-    # Style constraints
+    # Legacy hip-position and transferred base-orientation CaT curricula.
+    '''
     hip_position = CurrTerm(
         func=curriculums.modify_constraint_p,
         params={
@@ -822,6 +893,7 @@ class CurriculumCfg:
             "init_max_p": 0.25,
         },
     )
+    '''
     # min_relative_base_height = CurrTerm(func=curriculums.modify_constraint_p, params={"term_name": "min_relative_base_height", "num_steps": 24 * MAX_CURRICULUM_ITERATIONS, "init_max_p": 0.25})
     '''
     air_time_lower_bound = CurrTerm(

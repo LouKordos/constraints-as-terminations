@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import importlib
 import sys
 import types
 from pathlib import Path
@@ -227,3 +228,118 @@ def test_limit_penalty_uses_matching_constraint_quantity_and_parameters(
         assert "names" not in received["kwargs"]
     else:
         assert received["kwargs"]["names"] == names
+
+
+@pytest.fixture(scope="session")
+def isaaclab_app():
+    from isaaclab.app import AppLauncher
+
+    launcher = AppLauncher(headless=True)
+    try:
+        yield launcher.app
+    finally:
+        launcher.app.close()
+
+
+@pytest.fixture(scope="session")
+def go2_config_module(isaaclab_app):
+    del isaaclab_app
+    return importlib.import_module(
+        "cat_envs.tasks.locomotion.velocity.config.solo12.cat_go2_rough_terrain_env_cfg"
+    )
+
+
+@pytest.fixture(scope="session")
+def go2_env_cfg(go2_config_module):
+    return go2_config_module.Go2RoughTerrainEnvCfg()
+
+
+def _active_term_names(config_group, term_type):
+    return {
+        name
+        for name, value in vars(config_group).items()
+        if isinstance(value, term_type)
+    }
+
+
+def test_go2_config_uses_selected_low_reward_profile(go2_config_module, go2_env_cfg):
+    assert go2_config_module.SOFT_CONSTRAINT_REWARD_END_WEIGHT_LOW == 0.1
+    assert go2_config_module.SOFT_CONSTRAINT_REWARD_END_WEIGHT_HIGH == 10.0
+    assert (
+        go2_config_module.SOFT_CONSTRAINT_REWARD_END_WEIGHT
+        == go2_config_module.SOFT_CONSTRAINT_REWARD_END_WEIGHT_LOW
+    )
+    assert go2_config_module.SOFT_CONSTRAINT_REWARD_CURRICULUM_STEPS == 19_200
+
+    expected_terms = {
+        "joint_torque": (
+            go2_config_module.rewards.joint_torque_limit_penalty,
+            20.0,
+            [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
+        ),
+        "joint_velocity": (
+            go2_config_module.rewards.joint_velocity_limit_penalty,
+            25.0,
+            [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
+        ),
+        "joint_acceleration": (
+            go2_config_module.rewards.joint_acceleration_limit_penalty,
+            800.0,
+            [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
+        ),
+        "action_rate": (
+            go2_config_module.rewards.action_rate_limit_penalty,
+            80.0,
+            [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
+        ),
+        "base_orientation": (
+            go2_config_module.rewards.base_orientation_limit_penalty,
+            0.1,
+            None,
+        ),
+    }
+
+    for term_name, (expected_func, expected_limit, expected_names) in expected_terms.items():
+        term = getattr(go2_env_cfg.rewards, term_name)
+        assert term.func is expected_func
+        assert term.weight == 0.1
+        assert term.params["limit"] == expected_limit
+        assert term.params["curriculum_steps"] == 19_200
+        if expected_names is None:
+            assert "names" not in term.params
+        else:
+            assert term.params["names"] == expected_names
+
+
+def test_go2_config_retains_only_hard_cat_constraints(go2_config_module, go2_env_cfg):
+    assert _active_term_names(go2_env_cfg.constraints, go2_config_module.ConstraintTerm) == {
+        "contact",
+        "foot_contact_force",
+        "front_hfe_position",
+        "upsidedown",
+    }
+    assert go2_env_cfg.constraints.contact.max_p == 1.0
+    assert go2_env_cfg.constraints.foot_contact_force.max_p == 1.0
+    assert go2_env_cfg.constraints.front_hfe_position.max_p == 1.0
+    assert go2_env_cfg.constraints.upsidedown.max_p == 1.0
+
+
+def test_go2_config_removes_soft_cat_curricula(go2_config_module, go2_env_cfg):
+    assert _active_term_names(go2_env_cfg.curriculum, go2_config_module.CurrTerm) == {
+        "power",
+        "terrain_levels",
+    }
+
+
+def test_go2_config_preserves_unrelated_lep_settings(go2_env_cfg):
+    assert go2_env_cfg.actions.joint_pos.scale == 0.8
+    assert go2_env_cfg.rewards.track_lin_vel_xy_exp.weight == 1.0
+    assert go2_env_cfg.rewards.track_ang_vel_z_exp.weight == 0.5
+    assert go2_env_cfg.rewards.minimize_power.weight == 0.0
+    assert go2_env_cfg.curriculum.power.params == {
+        "term_name": "minimize_power",
+        "num_steps_from_start_step": 300_000,
+        "start_at_step": 0,
+        "start_weight": 0.0,
+        "end_weight": 0.008,
+    }
