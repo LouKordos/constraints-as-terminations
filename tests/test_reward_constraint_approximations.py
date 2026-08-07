@@ -1,22 +1,104 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
 import importlib
+import os
+import re
 import sys
 import types
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import pytest
 import torch
+import yaml
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 REWARDS_PATH = REPOSITORY_ROOT / "exts/cat_envs/cat_envs/tasks/utils/mdp/rewards.py"
+EVAL_PATH = REPOSITORY_ROOT / "scripts/eval.py"
 
 
 class FakeEnv:
     def __init__(self, common_step_counter: int):
         self.common_step_counter = common_step_counter
+
+
+def _load_function_from_source(path: Path, function_name: str):
+    """Load one function without executing eval.py's simulator startup code."""
+    syntax_tree = ast.parse(path.read_text())
+    function_node = next(
+        node
+        for node in syntax_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == function_name
+    )
+    function_module = ast.Module(body=[function_node], type_ignores=[])
+    namespace = {
+        "Dict": Dict,
+        "List": List,
+        "Optional": Optional,
+        "Tuple": Tuple,
+        "os": os,
+        "re": re,
+        "yaml": yaml,
+    }
+    exec(compile(function_module, str(path), "exec"), namespace)
+    return namespace[function_name]
+
+
+def test_evaluator_loads_operational_bounds_from_constraints_and_rewards(tmp_path):
+    params_directory = tmp_path / "params"
+    params_directory.mkdir()
+    config = {
+        "actions": {
+            "joint_pos": {
+                "joint_names": ["FL_hip_joint", "FL_thigh_joint"],
+            },
+        },
+        "scene": {
+            "robot": {
+                "init_state": {
+                    "joint_pos": {".*": 0.0},
+                },
+            },
+        },
+        "constraints": {
+            "foot_contact_force": {
+                "func": "cat_envs.tasks.utils.cat.constraints.contact_force",
+                "params": {"limit": 300.0, "names": [".*_foot"]},
+            },
+        },
+        "rewards": {
+            "joint_torque": {
+                "func": "cat_envs.tasks.utils.mdp.rewards.joint_torque_limit_penalty",
+                "weight": 0.1,
+                "params": {
+                    "limit": 20.0,
+                    "names": [".*_joint"],
+                    "curriculum_steps": 19_200,
+                },
+            },
+            "base_orientation": {
+                "func": "cat_envs.tasks.utils.mdp.rewards.base_orientation_limit_penalty",
+                "weight": 0.1,
+                "params": {
+                    "limit": 0.1,
+                    "curriculum_steps": 19_200,
+                },
+            },
+        },
+    }
+    (params_directory / "env.yaml").write_text(yaml.safe_dump(config))
+
+    load_constraint_bounds = _load_function_from_source(EVAL_PATH, "load_constraint_bounds")
+    bounds = load_constraint_bounds(str(params_directory))
+
+    assert bounds == {
+        "foot_contact_force": (0.0, 300.0),
+        "joint_torque": (-20.0, 20.0),
+        "base_orientation": (-0.1, 0.1),
+    }
 
 
 @pytest.fixture

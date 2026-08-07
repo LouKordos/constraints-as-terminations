@@ -271,8 +271,10 @@ def apply_training_action_scale(env_cfg, params_directory: str):
 
 def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
     """
-    Returns a dict mapping each constraint key (either a global term
+    Returns a dict mapping each operational-limit key (either a global term
     like 'joint_torque' or an individual joint name) to a (lb, ub) tuple.
+    Limits may be encoded in either the constraints or rewards section of the
+    saved environment config.
     - joint_position    -> (None, limit)
     - joint_position_when_moving_forward -> (default-limit, default+limit)
     - foot_contact_force -> (0, limit)
@@ -296,11 +298,15 @@ def load_constraint_bounds(params_directory: str) -> Dict[str, Tuple[Optional[fl
             if regex.match(jn):
                 default_pos[jn] = float(default)
 
-    # 3) walk through constraints
-    raw_constraints = cfg.get('constraints', {})
+    # 3) walk through both CaT constraints and reward-encoded limits
+    raw_limit_terms = {}
+    for section_name in ('constraints', 'rewards'):
+        section_terms = cfg.get(section_name, {})
+        if isinstance(section_terms, dict):
+            raw_limit_terms.update(section_terms)
     bounds: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
 
-    for term, term_cfg in raw_constraints.items():
+    for term, term_cfg in raw_limit_terms.items():
         if not isinstance(term_cfg, dict):
             continue
         func = term_cfg.get('func', '')
