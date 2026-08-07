@@ -38,6 +38,69 @@ UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS: Dict[str, Tuple[Optional[float], Optio
     "foot_contact_force": (0.0, 300.0),
 }
 
+
+def apply_policy_action_delay(
+    policy_action: torch.Tensor,
+    queued_action: Optional[tuple[torch.Tensor, ...]],
+    delay_steps: int,
+) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor, ...]]]:
+    """Return the action to apply now and the action queued for the next policy step."""
+    if delay_steps == 0:
+        return policy_action, None
+    if delay_steps not in (1, 2):
+        raise ValueError(f"Only zero-, one-, or two-step action delay is supported, got {delay_steps}.")
+
+    action_queue = list(queued_action or ())
+    action_queue.append(policy_action.clone())
+    if len(action_queue) <= delay_steps:
+        applied_action = torch.zeros_like(policy_action)
+    else:
+        applied_action = action_queue.pop(0)
+    return applied_action, tuple(action_queue)
+
+
+def select_fixed_command_scenarios(
+    scenarios: list[tuple], selected_scenario: Optional[str]
+) -> list[tuple]:
+    """Optionally restrict evaluation to one named fixed-command scenario."""
+    if selected_scenario is None:
+        return scenarios
+
+    selected = [scenario for scenario in scenarios if scenario[0] == selected_scenario]
+    if not selected:
+        raise ValueError(f"Unknown fixed scenario: {selected_scenario}")
+    return selected
+
+
+def compute_action_rate(
+    applied_action: np.ndarray,
+    previous_applied_action: Optional[np.ndarray],
+    step_dt: float,
+) -> np.ndarray:
+    """Compute absolute applied-action change per second."""
+    if previous_applied_action is None:
+        return np.zeros_like(applied_action)
+    return np.abs(applied_action - previous_applied_action) / step_dt
+
+
+def compute_scenario_completion(
+    scenarios: list[tuple],
+    random_sim_steps: int,
+    fixed_scenario_steps: int,
+    automatic_reset_steps: list[int],
+) -> dict[str, bool]:
+    """Report whether each scenario reached its final step without an earlier reset."""
+    completion = {}
+    for index, (scenario_tag, *_) in enumerate(scenarios):
+        start = random_sim_steps + index * fixed_scenario_steps
+        expected_timeout_step = start + fixed_scenario_steps - 1
+        completion[scenario_tag] = not any(
+            start <= reset_step < expected_timeout_step
+            for reset_step in automatic_reset_steps
+        )
+    return completion
+
+
 def set_global_seed(seed: int):
     import random
 
@@ -202,6 +265,8 @@ def parse_arguments():
     parser.add_argument("--delay_imu", type=int, default=0, help="Latency steps for IMU (ang vel/gravity).")
     parser.add_argument("--delay_action_history", type=int, default=0, help="Latency steps for action history.")
     parser.add_argument("--delay_height_map", type=int, default=0, help="Latency steps for height map.")
+    parser.add_argument("--delay_actions", type=int, choices=(0, 1, 2), default=0, help="Policy steps by which execution of actions is delayed.")
+    parser.add_argument("--fixed_scenario", type=str, default=None, help="Run only the named fixed-command scenario.")
     parser.add_argument("--skip_cot_sweep", action="store_true", default=False, help="Turn off 0.2m/s increment forward walking on flat terrain that is used for Cost of Transport estimation")
     # Note that changing the seed will change terrain config and thus the fixed eval command scenarios, as well as random commands in the beginning!
     parser.add_argument("--seed", type=int, required=False, default=46, help="Seed for numpy, torch, env, terrain, terrain generator etc.. Good seeds for eval are 44, 46, 49")
@@ -782,9 +847,12 @@ def main():
     env_name = run_path.parent.name
     task_name = args.task
 
+    eval_condition_suffix = f"action_delay_{args.delay_actions}"
+    if args.fixed_scenario is not None:
+        eval_condition_suffix += f"_scenario_{args.fixed_scenario}"
     eval_base_dir = os.path.join(
         str(run_path),
-        f"eval_checkpoint_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}_seed_{seed}"
+        f"eval_checkpoint_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}_seed_{seed}_{eval_condition_suffix}"
     )
     print(f"eval_base_dir={eval_base_dir}, env_name={env_name}, run_name={run_name}, task_name={task_name}")
 
@@ -822,6 +890,10 @@ def main():
         ])
     else:
         print("Skipping Cost of Transport sweep scenarios")
+
+    fixed_command_scenarios = select_fixed_command_scenarios(
+        fixed_command_scenarios, args.fixed_scenario
+    )
 
     # See main training loop for detailed explanation, but in summary, hard constraints terminate the environment or at least return terminated = 1
     # which results in zero reward and can't be recovered by rescaling. Thus, we update the constraint limits based on the loaded values from
@@ -957,7 +1029,8 @@ def main():
 
     observations, info = env.reset(seed=seed)
     policy_observation = observations['policy']
-    previous_action = None
+    queued_action = None
+    previous_applied_action = None
 
     video_output_path = os.path.join(eval_base_dir, f"{os.path.basename(eval_base_dir)}_run_{os.path.basename(args.run_dir)}.mp4")
     frame_storage_interval = 1
@@ -993,6 +1066,8 @@ def main():
             teleport_robot(spawn_point_pos, spawn_point_quat)
             set_fixed_velocity_command(fixed_command)
             policy_observation = obs["policy"]
+            queued_action = None
+            previous_applied_action = None
 
         # Distance must be estimated from the pre-step state because Isaac Lab resets terminated envs
         # inside env.step(). That means post-step state buffers are contaminated on reset steps.
@@ -1026,7 +1101,10 @@ def main():
             inference_durations.append(inference_duration_us)
             # print(f"Inference took {inference_duration_us:.4f}us")
 
-        step_tuple = env.step(action)
+        applied_action, queued_action = apply_policy_action_delay(
+            action, queued_action, args.delay_actions
+        )
+        step_tuple = env.step(applied_action)
         # print(step_tuple)
         next_observation, reward, terminated, truncated, info = step_tuple
 
@@ -1045,8 +1123,10 @@ def main():
         reward = maybe_unscale_cat_reward(reward, terminated, policy_backend)
 
         # Because of CaT, terminated is actually a nonzero probability instead of a boolean, so we have to check for resets this way
-        if env.unwrapped.episode_length_buf[0].item() == 0 and t > 0:
+        reset_this_step = env.unwrapped.episode_length_buf[0].item() == 0
+        if reset_this_step:
             automatic_reset_steps.append(t)
+            queued_action = None
             # continue  # Skip reset iteration because it's just wrong
 
         if t % frame_storage_interval == 0:
@@ -1076,13 +1156,12 @@ def main():
         accelerations = scene_robot_data.joint_acc[0].cpu().numpy()
         joint_accelerations_buffer.append(accelerations)
 
-        action_np = action.cpu().numpy()
-        if previous_action is None:
-            action_rate = np.zeros_like(action_np)
-        else:
-            action_rate = np.abs(action_np - previous_action)
+        applied_action_np = applied_action.detach().cpu().numpy().copy()
+        action_rate = compute_action_rate(
+            applied_action_np, previous_applied_action, step_dt
+        )
         action_rate_buffer.append(action_rate)
-        previous_action = action_np
+        previous_applied_action = None if reset_this_step else applied_action_np
 
         base_world_position = scene_robot_data.root_link_pos_w[0].cpu().numpy()  # world-frame for env 0
         # origin = env.unwrapped.scene.terrain.env_origins[0].cpu().numpy()  # terrain origin for env 0
@@ -1293,6 +1372,8 @@ def main():
         total_robot_mass=total_robot_mass,
         constraint_bounds=np.array(constraint_bounds, dtype=object),
         constraint_bounds_source=np.array(constraint_bounds_source),
+        action_delay_steps=args.delay_actions,
+        selected_fixed_scenario=np.array(args.fixed_scenario, dtype=object),
     )
 
     arrays_dict = {
@@ -1351,11 +1432,13 @@ def main():
         np.ones(T, bool),
         eval_only_arrays,
     )
-    random_metrics = add_eval_only_metrics_to_summary(
-        compute_summary_metrics(random_timestep_mask, manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict),
-        random_timestep_mask,
-        eval_only_arrays,
-    )
+    random_metrics = None
+    if random_timestep_mask.any():
+        random_metrics = add_eval_only_metrics_to_summary(
+            compute_summary_metrics(random_timestep_mask, manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict),
+            random_timestep_mask,
+            eval_only_arrays,
+        )
     scenario_metrics = {
         tag: add_eval_only_metrics_to_summary(
             compute_summary_metrics(msk, manual_reset_steps, automatic_reset_steps, arrays_dict, constants_dict),
@@ -1364,6 +1447,12 @@ def main():
         )
         for tag, msk in scenario_masks.items()
     }
+    scenario_completion = compute_scenario_completion(
+        scenarios=fixed_command_scenarios,
+        random_sim_steps=args.random_sim_step_length,
+        fixed_scenario_steps=fixed_command_sim_steps,
+        automatic_reset_steps=automatic_reset_steps,
+    )
 
     summary_metrics = dict(overall_metrics)  # start with overall block
     # metrics per segment / fixed command scenario
@@ -1384,8 +1473,11 @@ def main():
         "policy_backend": policy_backend,
         "detected_policy_backend": detected_policy_backend,
         "fixed_command_scenarios": fixed_command_scenarios,
+        "fixed_command_scenario_completion": scenario_completion,
         "manual_reset_steps": manual_reset_steps,
         "automatic_reset_steps": automatic_reset_steps,
+        "action_delay_steps": args.delay_actions,
+        "selected_fixed_scenario": args.fixed_scenario,
         "constraint_bounds": constraint_bounds,
         "constraint_bounds_source": constraint_bounds_source,
         "hardcoded_upstream_go2_constraint_bounds": UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS,
@@ -1419,7 +1511,8 @@ def main():
         subdir = f"scenario_{scenario_tag}"
         plot_jobs.append({"start_step": start, "end_step": end, "subdir": subdir})
 
-    plot_jobs.append({"start_step": 0, "end_step": args.random_sim_step_length, "subdir": "random_simulation_steps"})
+    if args.random_sim_step_length > 0:
+        plot_jobs.append({"start_step": 0, "end_step": args.random_sim_step_length, "subdir": "random_simulation_steps"})
     plot_jobs.append({"start_step": 0, "end_step": total_sim_steps, "subdir": "overall"})
 
     run_generate_plots_parallel(
