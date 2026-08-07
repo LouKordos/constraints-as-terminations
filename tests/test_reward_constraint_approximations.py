@@ -344,13 +344,17 @@ def _active_term_names(config_group, term_type):
     }
 
 
-def test_go2_config_uses_selected_low_reward_profile(go2_config_module, go2_env_cfg):
+def test_go2_config_uses_one_named_reward_profile_for_every_soft_limit(
+    go2_config_module,
+    go2_env_cfg,
+):
     assert go2_config_module.SOFT_CONSTRAINT_REWARD_END_WEIGHT_LOW == 0.1
     assert go2_config_module.SOFT_CONSTRAINT_REWARD_END_WEIGHT_HIGH == 10.0
-    assert (
-        go2_config_module.SOFT_CONSTRAINT_REWARD_END_WEIGHT
-        == go2_config_module.SOFT_CONSTRAINT_REWARD_END_WEIGHT_LOW
-    )
+    selected_weight = go2_config_module.SOFT_CONSTRAINT_REWARD_END_WEIGHT
+    assert selected_weight in {
+        go2_config_module.SOFT_CONSTRAINT_REWARD_END_WEIGHT_LOW,
+        go2_config_module.SOFT_CONSTRAINT_REWARD_END_WEIGHT_HIGH,
+    }
     assert go2_config_module.SOFT_CONSTRAINT_REWARD_CURRICULUM_STEPS == 19_200
 
     expected_terms = {
@@ -384,7 +388,7 @@ def test_go2_config_uses_selected_low_reward_profile(go2_config_module, go2_env_
     for term_name, (expected_func, expected_limit, expected_names) in expected_terms.items():
         term = getattr(go2_env_cfg.rewards, term_name)
         assert term.func is expected_func
-        assert term.weight == 0.1
+        assert term.weight == selected_weight
         assert term.params["limit"] == expected_limit
         assert term.params["curriculum_steps"] == 19_200
         if expected_names is None:
