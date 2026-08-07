@@ -86,7 +86,7 @@ def test_soft_constraint_reward_curriculum_state_reports_effective_weights(ppo_m
     assert set(saturated_state["effective_weights"].values()) == {0.1}
 
 
-def test_soft_constraint_reward_curriculum_logs_to_writer_and_stdout(
+def test_soft_constraint_reward_curriculum_logs_to_writer_without_stdout(
     ppo_module,
     capsys,
 ):
@@ -113,19 +113,7 @@ def test_soft_constraint_reward_curriculum_logs_to_writer_and_stdout(
         "Curriculum/action_rate_effective_weight": (0.05, 400),
         "Curriculum/base_orientation_effective_weight": (0.05, 400),
     }
-    stdout = capsys.readouterr().out
-    assert "[INFO][SoftConstraintRewardCurriculum]" in stdout
-    assert "iteration=400" in stdout
-    assert "common_step_counter=9600" in stdout
-    assert "progress=0.500000" in stdout
-    for term_name in (
-        "joint_torque",
-        "joint_velocity",
-        "joint_acceleration",
-        "action_rate",
-        "base_orientation",
-    ):
-        assert f"{term_name}=0.050000" in stdout
+    assert capsys.readouterr().out == ""
 
 
 def test_soft_constraint_reward_curriculum_is_silent_for_other_tasks(

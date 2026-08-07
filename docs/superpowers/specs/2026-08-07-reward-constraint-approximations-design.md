@@ -176,13 +176,11 @@ where `K` comes from each term's serialized `curriculum_steps` parameter. It log
 - `Curriculum/action_rate_effective_weight`;
 - `Curriculum/base_orientation_effective_weight`.
 
-The same values are printed in one flushed stdout line per PPO iteration. The line
-contains the PPO iteration, common step counter, shared progress, and all five
-effective weights. This permits cluster logs and W&B to be checked independently.
-For the low profile, the rollout-end effective weights must be `0.05` at iteration
-400 and `0.1` at iteration 800; for the high profile they must be `5.0` and `10.0`.
-The diagnostic performs no manager mutation and does not affect rewards, rollouts,
-optimizer state, or scheduling.
+The diagnostic does not print per-iteration values to stdout, avoiding unnecessary
+cluster-log traffic. For the low profile, the rollout-end effective weights must be
+`0.05` at iteration 400 and `0.1` at iteration 800; for the high profile they must
+be `5.0` and `10.0`. The diagnostic performs no manager mutation and does not affect
+rewards, rollouts, optimizer state, or scheduling.
 
 ## Run Procedure
 

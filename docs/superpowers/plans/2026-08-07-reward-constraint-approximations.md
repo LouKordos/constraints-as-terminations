@@ -547,8 +547,8 @@ Use distinct `ENV_NAME` values and verify each saved `env.yaml` before launching
 - Consumes: `env.common_step_counter`, the five active reward term configurations,
   their final `weight` values, and their `params["curriculum_steps"]` values.
 - Produces: `_get_soft_constraint_reward_curriculum_state(env)`,
-  `_log_soft_constraint_reward_curriculum(writer, env, iteration)`, one stdout line
-  per PPO iteration, and seven `Curriculum/...` writer scalars.
+  `_log_soft_constraint_reward_curriculum(writer, env, iteration)` and seven
+  `Curriculum/...` writer scalars without per-iteration stdout output.
 
 - [ ] **Step 1: Add failing state and logging tests**
 
@@ -573,10 +573,9 @@ iteration `400` produces exactly these tags:
 }
 ```
 
-Assert every writer call uses step `400`, and use `capsys` to assert stdout
-contains the iteration, common step counter, progress, and all five term names.
-Also assert an environment without all five transferred terms writes and prints
-nothing, preserving other tasks' behavior.
+Assert every writer call uses step `400`, and use `capsys` to assert the helper
+does not print to stdout. Also assert an environment without all five transferred
+terms writes nothing, preserving other tasks' behavior.
 
 - [ ] **Step 2: Run the diagnostic tests and observe the missing-helper failure**
 
@@ -639,8 +638,8 @@ def _get_soft_constraint_reward_curriculum_state(env):
 
 Add `_log_soft_constraint_reward_curriculum(writer, env, iteration)`. It returns
 without output when the state is `None`; otherwise it writes the common counter,
-progress, and five effective weights using the exact tags from Step 1, then prints
-one flushed `[INFO][SoftConstraintRewardCurriculum]` line containing the same data.
+progress, and five effective weights using the exact tags from Step 1. It does not
+print these values to stdout.
 
 Call the logger once immediately after each 24-step rollout and before PPO update
 logic, using `envs.unwrapped` and the current one-based `iteration`.
@@ -661,8 +660,8 @@ Expected:  all tests PASS and both static checks exit zero.
 - [ ] **Step 5: Run the real two-iteration logging smoke test**
 
 Run the existing 64-environment, two-iteration TensorBoard smoke job with a new
-`ENV_NAME`. Assert stdout contains two curriculum lines. Read its TensorBoard event
-file and assert all seven tags contain steps `[1, 2]`; specifically, progress is
+`ENV_NAME`. Assert stdout contains no `[SoftConstraintRewardCurriculum]` lines. Read
+its TensorBoard event file and assert all seven tags contain steps `[1, 2]`; specifically, progress is
 `0.00125` at iteration 1 and `0.0025` at iteration 2, while the low-profile effective
 weights are `0.000125` and `0.00025`.
 

@@ -75,18 +75,6 @@ def _log_soft_constraint_reward_curriculum(writer, env, iteration):
             iteration,
         )
 
-    effective_weights_text = " ".join(
-        f"{term_name}={effective_weight:.6f}"
-        for term_name, effective_weight in state["effective_weights"].items()
-    )
-    print(
-        "[INFO][SoftConstraintRewardCurriculum] "
-        f"iteration={iteration} "
-        f"common_step_counter={int(state['common_step_counter'])} "
-        f"progress={state['progress']:.6f} "
-        f"{effective_weights_text}"
-    )
-
 
 class RunningMeanStd(nn.Module):
     def __init__(self, shape=(), epsilon=1e-08):
