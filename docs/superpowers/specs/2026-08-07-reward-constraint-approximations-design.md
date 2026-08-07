@@ -149,6 +149,41 @@ The helper will reject nonpositive thresholds and nonpositive curriculum duratio
 
 A small Isaac Lab smoke run will instantiate the existing task, inspect active manager terms, and run a short PPO training job. The smoke run must show five normalized reward penalties, four retained hard constraints, no soft CaT terms, and successful reward/curriculum execution.
 
+## Curriculum Diagnostics
+
+The configured reward weight in `params/env.yaml` is the final profile weight, while
+the realized `Episode_Reward/*` values mix violation magnitude, curriculum progress,
+reward weight, and reward time-step scaling. Neither is sufficient to directly audit
+the 800-iteration ramp. The CleanRL loop will therefore emit curriculum diagnostics
+once after every 24-step PPO rollout, using the same training-iteration index passed
+to the W&B/TensorBoard writer.
+
+The logger is guarded by the presence of the five transferred reward terms, so other
+tasks retain their existing output. For the reward-approximation task it reads each
+live reward-term configuration and `env.common_step_counter`, computes
+
+\[
+p(k)=\min(k/K,1), \qquad w_i^{\mathrm{effective}}=w_i^{\mathrm{configured}}p(k),
+\]
+
+where `K` comes from each term's serialized `curriculum_steps` parameter. It logs:
+
+- `Curriculum/soft_constraint_common_step_counter`;
+- `Curriculum/soft_constraint_progress`;
+- `Curriculum/joint_torque_effective_weight`;
+- `Curriculum/joint_velocity_effective_weight`;
+- `Curriculum/joint_acceleration_effective_weight`;
+- `Curriculum/action_rate_effective_weight`;
+- `Curriculum/base_orientation_effective_weight`.
+
+The same values are printed in one flushed stdout line per PPO iteration. The line
+contains the PPO iteration, common step counter, shared progress, and all five
+effective weights. This permits cluster logs and W&B to be checked independently.
+For the low profile, the rollout-end effective weights must be `0.05` at iteration
+400 and `0.1` at iteration 800; for the high profile they must be `5.0` and `10.0`.
+The diagnostic performs no manager mutation and does not affect rewards, rollouts,
+optimizer state, or scheduling.
+
 ## Run Procedure
 
 For the low experiment:
@@ -169,5 +204,5 @@ The code changes themselves do not launch the full multi-seed experiments. Full 
 - Changing hard-CaT behavior.
 - Correcting discrepancies in the paper's description of hard resets.
 - Adding another Gym task or generalized experiment framework.
-- Changing PPO, action scaling, power minimization, perception, terrain, commands, randomization, or training budget.
+- Changing PPO optimization/update behavior, action scaling, power minimization, perception, terrain, commands, randomization, or training budget.
 - Claiming experimental success from a startup smoke test alone.
