@@ -534,3 +534,142 @@ SOFT_CONSTRAINT_REWARD_END_WEIGHT = SOFT_CONSTRAINT_REWARD_END_WEIGHT_HIGH
 ```
 
 Use distinct `ENV_NAME` values and verify each saved `env.yaml` before launching full multi-seed jobs.
+
+---
+
+### Task 5: Log the Effective Reward-Constraint Curriculum
+
+**Files:**
+- Modify: `exts/cat_envs/cat_envs/tasks/utils/cleanrl/ppo.py`
+- Modify: `tests/test_reward_constraint_approximations.py`
+
+**Interfaces:**
+- Consumes: `env.common_step_counter`, the five active reward term configurations,
+  their final `weight` values, and their `params["curriculum_steps"]` values.
+- Produces: `_get_soft_constraint_reward_curriculum_state(env)`,
+  `_log_soft_constraint_reward_curriculum(writer, env, iteration)`, one stdout line
+  per PPO iteration, and seven `Curriculum/...` writer scalars.
+
+- [ ] **Step 1: Add failing state and logging tests**
+
+Load `exts/cat_envs/cat_envs/tasks/utils/cleanrl/ppo.py` directly with
+`importlib.util`. Build a fake reward manager whose five terms all have weight
+`0.1` and `curriculum_steps=19_200`. Assert the state helper returns progress
+`0.5` and five effective weights of `0.05` at common step `9_600`, and returns
+progress `1.0` and effective weights `0.1` after saturation.
+
+Call the logging helper with a writer that records `add_scalar` calls and assert
+iteration `400` produces exactly these tags:
+
+```python
+{
+    "Curriculum/soft_constraint_common_step_counter": 9_600.0,
+    "Curriculum/soft_constraint_progress": 0.5,
+    "Curriculum/joint_torque_effective_weight": 0.05,
+    "Curriculum/joint_velocity_effective_weight": 0.05,
+    "Curriculum/joint_acceleration_effective_weight": 0.05,
+    "Curriculum/action_rate_effective_weight": 0.05,
+    "Curriculum/base_orientation_effective_weight": 0.05,
+}
+```
+
+Assert every writer call uses step `400`, and use `capsys` to assert stdout
+contains the iteration, common step counter, progress, and all five term names.
+Also assert an environment without all five transferred terms writes and prints
+nothing, preserving other tasks' behavior.
+
+- [ ] **Step 2: Run the diagnostic tests and observe the missing-helper failure**
+
+Run:
+
+```bash
+/home/kordoslo/mamba_env_data/env_new_isaac_lab/.venv/bin/python -m pytest -q \
+  tests/test_reward_constraint_approximations.py -k soft_constraint_reward_curriculum
+```
+
+Expected: FAIL because the state and logging helpers do not yet exist.
+
+- [ ] **Step 3: Implement the guarded state helper and logger**
+
+In `ppo.py`, define the exact transferred term tuple and add:
+
+```python
+SOFT_CONSTRAINT_REWARD_TERM_NAMES = (
+    "joint_torque",
+    "joint_velocity",
+    "joint_acceleration",
+    "action_rate",
+    "base_orientation",
+)
+
+
+def _get_soft_constraint_reward_curriculum_state(env):
+    if not set(SOFT_CONSTRAINT_REWARD_TERM_NAMES).issubset(
+        env.reward_manager.active_terms
+    ):
+        return None
+
+    term_cfgs = {
+        name: env.reward_manager.get_term_cfg(name)
+        for name in SOFT_CONSTRAINT_REWARD_TERM_NAMES
+    }
+    curriculum_steps = {
+        int(term_cfg.params["curriculum_steps"])
+        for term_cfg in term_cfgs.values()
+    }
+    if len(curriculum_steps) != 1:
+        raise ValueError(
+            "soft constraint reward terms must share one curriculum_steps value"
+        )
+    curriculum_steps = curriculum_steps.pop()
+    if curriculum_steps <= 0:
+        raise ValueError("soft constraint reward curriculum_steps must be positive")
+
+    common_step_counter = int(env.common_step_counter)
+    progress = min(max(common_step_counter / curriculum_steps, 0.0), 1.0)
+    return {
+        "common_step_counter": float(common_step_counter),
+        "progress": progress,
+        "effective_weights": {
+            name: float(term_cfg.weight) * progress
+            for name, term_cfg in term_cfgs.items()
+        },
+    }
+```
+
+Add `_log_soft_constraint_reward_curriculum(writer, env, iteration)`. It returns
+without output when the state is `None`; otherwise it writes the common counter,
+progress, and five effective weights using the exact tags from Step 1, then prints
+one flushed `[INFO][SoftConstraintRewardCurriculum]` line containing the same data.
+
+Call the logger once immediately after each 24-step rollout and before PPO update
+logic, using `envs.unwrapped` and the current one-based `iteration`.
+
+- [ ] **Step 4: Run focused tests and static checks**
+
+Run:
+
+```bash
+/home/kordoslo/mamba_env_data/env_new_isaac_lab/.venv/bin/python -m pytest -q tests
+/home/kordoslo/mamba_env_data/env_new_isaac_lab/.venv/bin/python -m compileall -q \
+  exts/cat_envs/cat_envs/tasks/utils/cleanrl/ppo.py tests
+git diff --check
+```
+
+Expected:  all tests PASS and both static checks exit zero.
+
+- [ ] **Step 5: Run the real two-iteration logging smoke test**
+
+Run the existing 64-environment, two-iteration TensorBoard smoke job with a new
+`ENV_NAME`. Assert stdout contains two curriculum lines. Read its TensorBoard event
+file and assert all seven tags contain steps `[1, 2]`; specifically, progress is
+`0.00125` at iteration 1 and `0.0025` at iteration 2, while the low-profile effective
+weights are `0.000125` and `0.00025`.
+
+- [ ] **Step 6: Commit the diagnostic implementation**
+
+```bash
+git add exts/cat_envs/cat_envs/tasks/utils/cleanrl/ppo.py \
+  tests/test_reward_constraint_approximations.py
+git commit -m "Log reward constraint curriculum weights"
+```
