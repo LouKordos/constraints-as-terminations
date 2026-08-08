@@ -24,6 +24,12 @@ except ImportError:
 
 import wandb
 
+from gait_dynamics_aggregate import (
+    build_rebuttal_per_run_dataframe,
+    discover_rebuttal_gait_dynamics_files,
+    filter_rebuttal_runs_for_series,
+    write_rebuttal_aggregate_outputs,
+)
 from metrics_utils import compute_swing_heights, summarize_metric
 
 
@@ -351,7 +357,7 @@ def log_runtime_context(args: argparse.Namespace, output_dir: Path) -> None:
     rerun_command_from_original_cwd = f"cd {shlex.quote(str(original_cwd))} && {rerun_command}"
 
     args_dict = vars(args).copy()
-    args_dict["metrics_summary_root_dir"] = str(args.metrics_summary_root_dir)
+    args_dict["metrics_summary_root_dir"] = [str(path) for path in args.metrics_summary_root_dir]
 
     invocation = {
         "timestamp": datetime.now().isoformat(),
@@ -661,7 +667,7 @@ def parse_json_summary(
 
 
 def discover_metrics_summary_files(
-    root_dir: Path,
+    root_dir: Path | list[Path],
     cot_scenario_pattern: str,
     cot_velocity_range: tuple[float, float],
 ) -> tuple[dict[tuple[str, str], JsonRunData], pd.DataFrame]:
@@ -669,9 +675,17 @@ def discover_metrics_summary_files(
     candidates: dict[tuple[str, str], list[JsonRunData]] = {}
     manifest_rows: list[dict[str, Any]] = []
 
-    logging.info("Recursively discovering metrics_summary.json under: %s", root_dir)
+    root_dirs = [root_dir] if isinstance(root_dir, Path) else list(root_dir)
+    logging.info("Recursively discovering metrics_summary.json under: %s", root_dirs)
+    json_paths = sorted(
+        {
+            json_path.resolve()
+            for current_root in root_dirs
+            for json_path in current_root.rglob("metrics_summary.json")
+        }
+    )
 
-    for json_path in sorted(root_dir.rglob("metrics_summary.json")):
+    for json_path in json_paths:
         logging.info("  Found metrics_summary.json: %s", json_path)
         with open(json_path, "r", encoding="utf-8") as handle:
             metrics_summary = json.load(handle)
@@ -856,9 +870,13 @@ def resolve_selected_run_names(
     wandb_runs: dict[str, dict[str, Any]],
     json_runs: dict[str, JsonRunData],
     match_mode: str,
+    skip_wandb: bool = False,
 ) -> tuple[list[str], list[str]]:
     wandb_names = sorted(wandb_runs.keys())
     json_names = sorted(json_runs.keys())
+
+    if skip_wandb:
+        return [], json_names
 
     if match_mode == "independent":
         return wandb_names, json_names
@@ -2153,8 +2171,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--metrics_summary_root_dir",
         type=Path,
+        action="append",
         required=True,
-        help="Root directory that will be searched recursively for metrics_summary.json files.",
+        help=(
+            "Root directory searched recursively for metrics_summary.json files. Repeat this "
+            "option to analyze multiple exact roots without scanning their common parent."
+        ),
+    )
+    parser.add_argument(
+        "--skip_wandb",
+        action="store_true",
+        help=(
+            "Analyze local evaluation summaries without accessing WandB. Local JSON runs are "
+            "selected independently when this flag is set."
+        ),
     )
 
     parser.add_argument(
@@ -2342,8 +2372,9 @@ def main() -> None:
     args = parse_args()
     apply_global_figure_size_override(args)
 
-    if not args.metrics_summary_root_dir.is_dir():
-        raise FileNotFoundError(f"metrics_summary_root_dir does not exist: {args.metrics_summary_root_dir}")
+    missing_roots = [path for path in args.metrics_summary_root_dir if not path.is_dir()]
+    if missing_roots:
+        raise FileNotFoundError(f"metrics_summary_root_dir does not exist: {missing_roots}")
     if args.summary_tail_points <= 0:
         raise ValueError("--summary_tail_points must be positive")
     if args.plot_skip_initial_iterations < 0:
@@ -2414,22 +2445,36 @@ def main() -> None:
     )
     save_dataframe(discovered_json_manifest, output_dir / "discovered_metrics_summary_files.csv")
 
-    all_wandb_metrics = sorted(set(args.wandb_metrics).union(args.summary_wandb_metrics))
+    rebuttal_json_index, rebuttal_manifest = discover_rebuttal_gait_dynamics_files(
+        args.metrics_summary_root_dir
+    )
+    save_dataframe(
+        rebuttal_manifest,
+        output_dir / "discovered_rebuttal_gait_dynamics_files.csv",
+    )
+
+    all_wandb_metrics = (
+        [] if args.skip_wandb else sorted(set(args.wandb_metrics).union(args.summary_wandb_metrics))
+    )
     series_data: dict[str, SeriesData] = {}
+    selected_rebuttal_series_runs: dict[str, dict[str, Any]] = {}
     selection_rows: list[dict[str, Any]] = []
 
     for index, spec in enumerate(series_specs, start=1):
         logging.info("%s", "=" * 100)
         logging.info("Processing series %d/%d: %s", index, len(series_specs), spec.label)
 
-        wandb_runs = fetch_wandb_runs(
-            wandb_path=spec.wandb_path,
-            start_dt=spec.start_dt,
-            end_dt=spec.end_dt,
-            metrics=all_wandb_metrics,
-            min_iterations=args.min_iterations,
-            summary_tail_points=args.summary_tail_points,
-        )
+        if args.skip_wandb:
+            wandb_runs = {}
+        else:
+            wandb_runs = fetch_wandb_runs(
+                wandb_path=spec.wandb_path,
+                start_dt=spec.start_dt,
+                end_dt=spec.end_dt,
+                metrics=all_wandb_metrics,
+                min_iterations=args.min_iterations,
+                summary_tail_points=args.summary_tail_points,
+            )
 
         json_runs = filter_json_runs_for_series(
             json_index=json_index,
@@ -2440,7 +2485,24 @@ def main() -> None:
             wandb_runs=wandb_runs,
             json_runs=json_runs,
             match_mode=args.match_mode,
+            skip_wandb=args.skip_wandb,
         )
+
+        rebuttal_runs = filter_rebuttal_runs_for_series(
+            index=rebuttal_json_index,
+            env_name=spec.env_name,
+            start_dt=spec.start_dt,
+            end_dt=spec.end_dt,
+            parse_run_datetime=parse_run_name_to_datetime,
+            is_within_range=is_within_time_range,
+        )
+        if args.skip_wandb or args.match_mode == "independent":
+            selected_rebuttal_names = sorted(rebuttal_runs)
+        else:
+            selected_rebuttal_names = sorted(set(rebuttal_runs).intersection(wandb_runs))
+        selected_rebuttal_series_runs[spec.label] = {
+            run_name: rebuttal_runs[run_name] for run_name in selected_rebuttal_names
+        }
 
         missing_local = sorted(set(wandb_runs.keys()) - set(json_runs.keys()))
         missing_wandb = sorted(set(json_runs.keys()) - set(wandb_runs.keys()))
@@ -2456,11 +2518,15 @@ def main() -> None:
 
         if missing_local:
             logging.warning("  Runs present in WandB but missing local JSON for '%s': %s", spec.label, missing_local)
-        if missing_wandb:
+        if missing_wandb and not args.skip_wandb:
             logging.warning("  Runs present in local JSON but missing WandB for '%s': %s", spec.label, missing_wandb)
 
-        for run_name in sorted(set(wandb_runs.keys()).union(json_runs.keys())):
+        all_series_run_names = sorted(
+            set(wandb_runs).union(json_runs).union(rebuttal_runs)
+        )
+        for run_name in all_series_run_names:
             json_run = json_runs.get(run_name)
+            rebuttal_run = rebuttal_runs.get(run_name)
             wandb_run = wandb_runs.get(run_name)
             wandb_max_iteration = None
             if wandb_run is not None:
@@ -2478,8 +2544,12 @@ def main() -> None:
                     "has_local_json": run_name in json_runs,
                     "selected_for_wandb": run_name in selected_wandb_run_names,
                     "selected_for_local_json": run_name in selected_json_run_names,
+                    "has_rebuttal_gait_dynamics": run_name in rebuttal_runs,
+                    "selected_for_rebuttal_gait_dynamics": run_name in selected_rebuttal_names,
                     "json_path": str(json_run.json_path) if json_run else None,
                     "checkpoint": json_run.checkpoint if json_run else None,
+                    "rebuttal_gait_json_path": str(rebuttal_run.json_path) if rebuttal_run else None,
+                    "rebuttal_gait_checkpoint": rebuttal_run.checkpoint if rebuttal_run else None,
                     "wandb_max_iteration": wandb_max_iteration,
                 }
             )
@@ -2500,7 +2570,7 @@ def main() -> None:
     save_dataframe(selection_df, output_dir / "selected_runs.csv")
 
     wandb_timeseries_truncation_iteration: int | None = None
-    if args.truncate_wandb_timeseries_to_shortest_run:
+    if args.truncate_wandb_timeseries_to_shortest_run and not args.skip_wandb:
         wandb_timeseries_truncation_iteration = compute_global_shortest_selected_wandb_iteration(series_data)
         if wandb_timeseries_truncation_iteration is None:
             logging.warning(
@@ -2551,7 +2621,7 @@ def main() -> None:
         plot_style=args.plot_style,
     )
 
-    for metric_name in args.wandb_metrics:
+    for metric_name in ([] if args.skip_wandb else args.wandb_metrics):
         plot_series: list[dict[str, Any]] = []
         metric_stats_tables: list[pd.DataFrame] = []
 
@@ -2722,6 +2792,26 @@ def main() -> None:
         grid_alpha=args.grid_alpha,
         plot_style=args.plot_style,
     )
+
+    rebuttal_per_run_df = build_rebuttal_per_run_dataframe(selected_rebuttal_series_runs)
+    if rebuttal_per_run_df.empty:
+        logging.info("No selected rebuttal gait-dynamics evaluations were found; skipping optional aggregate outputs.")
+    else:
+        rebuttal_paths = write_rebuttal_aggregate_outputs(
+            per_run_df=rebuttal_per_run_df,
+            output_dir=output_dir,
+            export_formats=args.export_formats,
+            figure_width=args.figure_width,
+            figure_height=max(args.timeseries_figure_height, 2.6),
+            ci_alpha=args.ci_alpha,
+            grid_alpha=args.grid_alpha,
+            plot_style=args.plot_style,
+        )
+        logging.info(
+            "Wrote aggregate rebuttal gait-dynamics outputs for %d run-scenario rows (%d artifacts).",
+            len(rebuttal_per_run_df),
+            len(rebuttal_paths),
+        )
 
     logging.info("Finished. Outputs written to: %s", output_dir)
 

@@ -13,6 +13,12 @@ __all__ = [
     "compute_swing_durations",
     "compute_swing_heights",
     "compute_swing_lengths",
+    "summarize_dynamics",
+    "build_scenario_analysis_mask",
+    "compute_support_dynamics",
+    "compute_vertical_grf_arrays",
+    "compute_vertical_grf_dynamics",
+    "compute_gait_dynamics_metrics",
     "compute_summary_metrics"
 ]
 
@@ -123,6 +129,291 @@ def summarize_metric(values: list[float]) -> dict[str, float]:
         "90th_percentile": float(np.percentile(arr, 90)),
         "99th_percentile": float(np.percentile(arr, 99)),
         "stddev": float(arr.std()),
+    }
+
+
+def summarize_dynamics(values: np.ndarray) -> dict[str, float | int | None]:
+    """Return finite-only dynamics statistics without fabricating values for empty data."""
+    arr = np.asarray(values, dtype=np.float64).reshape(-1)
+    finite = arr[np.isfinite(arr)]
+    if finite.size == 0:
+        return {
+            "count": 0,
+            "mean": None,
+            "stddev": None,
+            "rms": None,
+            "mean_abs": None,
+            "min": None,
+            "max": None,
+            "median": None,
+            "abs_p90": None,
+            "abs_p95": None,
+            "abs_p99": None,
+        }
+
+    absolute = np.abs(finite)
+    return {
+        "count": int(finite.size),
+        "mean": float(finite.mean()),
+        "stddev": float(finite.std()),
+        "rms": float(np.sqrt(np.mean(np.square(finite)))),
+        "mean_abs": float(absolute.mean()),
+        "min": float(finite.min()),
+        "max": float(finite.max()),
+        "median": float(np.median(finite)),
+        "abs_p90": float(np.percentile(absolute, 90)),
+        "abs_p95": float(np.percentile(absolute, 95)),
+        "abs_p99": float(np.percentile(absolute, 99)),
+    }
+
+
+def build_scenario_analysis_mask(
+    total_steps: int,
+    scenario_start: int,
+    scenario_end: int,
+    warmup_steps: int,
+    automatic_reset_steps: list[int],
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Build a warm-up-trimmed ``[start, end)`` mask ending before the first reset."""
+    if total_steps < 0:
+        raise ValueError(f"total_steps must be non-negative, got {total_steps}.")
+    if not 0 <= scenario_start <= scenario_end <= total_steps:
+        raise ValueError(
+            "Scenario bounds must satisfy "
+            f"0 <= start <= end <= total_steps, got {scenario_start}, {scenario_end}, {total_steps}."
+        )
+    if warmup_steps < 0:
+        raise ValueError(f"warmup_steps must be non-negative, got {warmup_steps}.")
+
+    resets_in_scenario = sorted(
+        int(step) for step in automatic_reset_steps if scenario_start <= int(step) < scenario_end
+    )
+    expected_timeout_step = scenario_end - 1 if scenario_end > scenario_start else None
+    timeout_reset_step = (
+        expected_timeout_step if expected_timeout_step is not None and expected_timeout_step in resets_in_scenario else None
+    )
+    premature_resets = [
+        step for step in resets_in_scenario if expected_timeout_step is None or step < expected_timeout_step
+    ]
+    premature_reset_step = premature_resets[0] if premature_resets else None
+
+    analysis_start = min(scenario_start + warmup_steps, scenario_end)
+    if premature_reset_step is not None:
+        analysis_end = premature_reset_step
+    elif timeout_reset_step is not None:
+        analysis_end = timeout_reset_step
+    else:
+        analysis_end = scenario_end
+    analysis_end = max(analysis_start, analysis_end)
+
+    mask = np.zeros(total_steps, dtype=bool)
+    mask[analysis_start:analysis_end] = True
+    metadata = {
+        "scenario_start_step": int(scenario_start),
+        "scenario_end_step": int(scenario_end),
+        "analysis_start_step": int(analysis_start),
+        "analysis_end_step": int(analysis_end),
+        "sample_count": int(mask.sum()),
+        "completed": premature_reset_step is None,
+        "premature_reset_step": premature_reset_step,
+        "timeout_reset_step": timeout_reset_step,
+    }
+    return mask, metadata
+
+
+def compute_support_dynamics(
+    contact_state: np.ndarray,
+    step_dt: float,
+    foot_labels: list[str],
+) -> dict[str, Any]:
+    """Summarize support topology, duty factors, and aerial durations."""
+    contacts = np.asarray(contact_state, dtype=bool)
+    if contacts.ndim != 2:
+        raise ValueError(f"contact_state must have shape (T, F), got {contacts.shape}.")
+    if contacts.shape[1] != len(foot_labels):
+        raise ValueError(
+            f"contact_state has {contacts.shape[1]} feet but {len(foot_labels)} labels were provided."
+        )
+    if step_dt <= 0.0:
+        raise ValueError(f"step_dt must be positive, got {step_dt}.")
+
+    num_steps = contacts.shape[0]
+    support_count = contacts.sum(axis=1)
+    if num_steps == 0:
+        support_fraction = {str(count): None for count in range(len(foot_labels) + 1)}
+        duty_factor_per_foot = {label: None for label in foot_labels}
+        aerial_fraction = None
+        low_support_fraction = None
+        mean_duty_factor = None
+        transition_rate = None
+        aerial_durations: list[float] = []
+    else:
+        support_fraction = {
+            str(count): float(np.mean(support_count == count)) for count in range(len(foot_labels) + 1)
+        }
+        duty_values = contacts.mean(axis=0)
+        duty_factor_per_foot = {
+            label: float(duty_values[index]) for index, label in enumerate(foot_labels)
+        }
+        aerial_fraction = float(np.mean(support_count == 0))
+        low_support_fraction = float(np.mean(support_count <= 1))
+        mean_duty_factor = float(duty_values.mean())
+        transition_count = int(np.count_nonzero(np.diff(contacts.astype(np.int8), axis=0)))
+        transition_rate = float(transition_count / (num_steps * step_dt))
+        aerial_durations = [
+            float((end - start) * step_dt)
+            for start, end in compute_stance_segments(support_count == 0)
+        ]
+
+    return {
+        "sample_count": int(num_steps),
+        "aerial_phase_fraction": aerial_fraction,
+        "low_support_fraction": low_support_fraction,
+        "support_count_fraction": support_fraction,
+        "duty_factor_per_foot": duty_factor_per_foot,
+        "mean_duty_factor": mean_duty_factor,
+        "contact_transitions_per_second": transition_rate,
+        "aerial_duration_seconds": summarize_dynamics(np.asarray(aerial_durations, dtype=np.float64)),
+    }
+
+
+def compute_vertical_grf_arrays(
+    force_history_w: np.ndarray,
+    robot_mass: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return peak-within-control-step total and per-foot positive vertical GRF in body weights."""
+    forces = np.asarray(force_history_w, dtype=np.float64)
+    if forces.ndim != 4 or forces.shape[-1] != 3:
+        raise ValueError(f"force_history_w must have shape (T, H, F, 3), got {forces.shape}.")
+    if forces.shape[1] == 0:
+        raise ValueError("force_history_w must contain at least one history sample per control step.")
+    if robot_mass <= 0.0:
+        raise ValueError(f"robot_mass must be positive, got {robot_mass}.")
+
+    body_weight = robot_mass * 9.81
+    positive_vertical = np.clip(forces[..., 2], 0.0, None)
+    total_vertical_by_history = positive_vertical.sum(axis=2)
+    total_vertical_per_control_step = total_vertical_by_history.max(axis=1) / body_weight
+    per_foot_peak_per_control_step = positive_vertical.max(axis=1) / body_weight
+    return total_vertical_per_control_step, per_foot_peak_per_control_step
+
+
+def compute_vertical_grf_dynamics(
+    force_history_w: np.ndarray,
+    contact_state: np.ndarray,
+    robot_mass: float,
+    foot_labels: list[str],
+) -> dict[str, Any]:
+    """Summarize synchronized vertical loading and false-to-true touchdown peaks."""
+    contacts = np.asarray(contact_state, dtype=bool)
+    total_grf_bw, per_foot_peak_bw = compute_vertical_grf_arrays(force_history_w, robot_mass)
+    if contacts.ndim != 2 or contacts.shape != per_foot_peak_bw.shape:
+        raise ValueError(
+            "contact_state must match force-history time and foot dimensions, got "
+            f"{contacts.shape} and {per_foot_peak_bw.shape}."
+        )
+    if contacts.shape[1] != len(foot_labels):
+        raise ValueError(
+            f"contact_state has {contacts.shape[1]} feet but {len(foot_labels)} labels were provided."
+        )
+
+    touchdown = np.zeros_like(contacts, dtype=bool)
+    if contacts.shape[0] > 1:
+        touchdown[1:] = (~contacts[:-1]) & contacts[1:]
+
+    touchdown_summaries = {}
+    touchdown_counts = {}
+    for foot_index, label in enumerate(foot_labels):
+        values = per_foot_peak_bw[touchdown[:, foot_index], foot_index]
+        touchdown_summaries[label] = summarize_dynamics(values)
+        touchdown_counts[label] = int(values.size)
+
+    return {
+        "total_vertical_grf_body_weight": summarize_dynamics(total_grf_bw),
+        "touchdown_peak_vertical_grf_body_weight_per_foot": touchdown_summaries,
+        "touchdown_count_per_foot": touchdown_counts,
+    }
+
+
+def _summarize_vector_axes(values: np.ndarray) -> dict[str, dict[str, float | int | None]]:
+    array = np.asarray(values, dtype=np.float64)
+    if array.ndim != 2 or array.shape[1] != 3:
+        raise ValueError(f"Expected a vector array with shape (T, 3), got {array.shape}.")
+    return {
+        axis: summarize_dynamics(array[:, index])
+        for index, axis in enumerate(("x", "y", "z"))
+    }
+
+
+def compute_gait_dynamics_metrics(
+    mask: np.ndarray,
+    data_arrays: Dict[str, np.ndarray],
+    constants: Dict[str, Any],
+    data_fidelity: dict[str, str],
+) -> dict[str, Any]:
+    """Compute the focused gait-dynamics metrics over a reset-safe analysis mask."""
+    selection = np.asarray(mask, dtype=bool)
+    if selection.ndim != 1:
+        raise ValueError(f"mask must be one-dimensional, got {selection.shape}.")
+    step_dt = float(constants["step_dt"])
+    foot_labels = list(constants["foot_labels"])
+    robot_mass = float(constants["total_robot_mass"])
+
+    def selected(name: str) -> np.ndarray:
+        values = np.asarray(data_arrays[name])
+        if values.shape[0] != selection.shape[0]:
+            raise ValueError(
+                f"Array '{name}' has {values.shape[0]} timesteps but mask has {selection.shape[0]}."
+            )
+        return values[selection]
+
+    contact_state = selected("contact_state")
+    force_history = selected("foot_contact_force_world_history")
+    linear_velocity_world = selected("base_linear_velocity")
+    angular_velocity_body = selected("base_angular_velocity_body")
+    linear_acceleration_world = selected("base_linear_acceleration_world")
+    angular_acceleration_body = selected("base_angular_acceleration_body")
+
+    support_dynamics = compute_support_dynamics(contact_state, step_dt, foot_labels)
+    impact_loading = compute_vertical_grf_dynamics(
+        force_history,
+        contact_state,
+        robot_mass,
+        foot_labels,
+    )
+
+    linear_velocity_summary = _summarize_vector_axes(linear_velocity_world)
+    angular_velocity_summary = _summarize_vector_axes(angular_velocity_body)
+    linear_acceleration_summary = _summarize_vector_axes(linear_acceleration_world)
+    angular_acceleration_summary = _summarize_vector_axes(angular_acceleration_body)
+
+    gravity = 9.81
+    vertical_acceleration_g = linear_acceleration_world[:, 2] / gravity
+    joint_demand = {
+        "joint_acceleration": summarize_dynamics(selected("joint_accelerations")),
+        "joint_velocity": summarize_dynamics(selected("joint_velocities")),
+        "action_rate": summarize_dynamics(selected("action_rate")),
+        "joint_torque": summarize_dynamics(selected("joint_torques")),
+    }
+
+    return {
+        "analysis_sample_count": int(selection.sum()),
+        "data_fidelity": dict(data_fidelity),
+        "support_dynamics": support_dynamics,
+        "base_excitation": {
+            "vertical_velocity_rms_m_s": linear_velocity_summary["z"]["rms"],
+            "vertical_acceleration_rms_g": summarize_dynamics(vertical_acceleration_g)["rms"],
+            "vertical_acceleration_abs_p95_g": summarize_dynamics(vertical_acceleration_g)["abs_p95"],
+            "vertical_acceleration_abs_p99_g": summarize_dynamics(vertical_acceleration_g)["abs_p99"],
+            "pitch_rate_rms_rad_s": angular_velocity_summary["y"]["rms"],
+            "pitch_acceleration_rms_rad_s2": angular_acceleration_summary["y"]["rms"],
+            "linear_velocity_world": linear_velocity_summary,
+            "angular_velocity_body": angular_velocity_summary,
+            "linear_acceleration_world": linear_acceleration_summary,
+            "angular_acceleration_body": angular_acceleration_summary,
+        },
+        "impact_loading": impact_loading,
+        "joint_demand": joint_demand,
     }
 
 

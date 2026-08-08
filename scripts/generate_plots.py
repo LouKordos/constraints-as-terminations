@@ -61,6 +61,7 @@ plt.rcParams.update({
 # Axes.grid = partialmethod(Axes.grid, which='both') # type: ignore
 
 from metrics_utils import (
+    build_scenario_analysis_mask,
     compute_energy_arrays,
     compute_swing_durations,
     compute_swing_heights,
@@ -70,7 +71,8 @@ from metrics_utils import (
     compute_histogram,
     compute_stance_segments,
     compute_swing_segments,
-    compute_trimmed_histogram_data
+    compute_trimmed_histogram_data,
+    compute_vertical_grf_arrays,
 )
 
 # Disable interactive display until --interactive is set
@@ -129,6 +131,99 @@ def load_data(npz_path, summary_path=None):
     """
     data = np.load(npz_path, allow_pickle=True)
     return data
+
+
+def slice_plot_data(data, start_step: int, end_step: int) -> dict:
+    """Slice every time-indexed array to ``[start_step, end_step)``.
+
+    Scenario boundaries written by ``eval.py`` use an exclusive end.  Detecting
+    time arrays by their first dimension also covers newly added arrays without
+    requiring a fragile key-name allow-list.
+    """
+    source = {key: data[key] for key in data.keys()}
+    sim_times = np.asarray(source["sim_times"])
+    total_steps = int(sim_times.shape[0])
+    if not 0 <= start_step <= end_step <= total_steps:
+        raise ValueError(
+            "Plot slice must satisfy 0 <= start_step <= end_step <= number of steps, "
+            f"got {start_step}, {end_step}, {total_steps}."
+        )
+
+    non_time_indexed_keys = {
+        "foot_labels",
+        "joint_names",
+        "reset_times",
+        "manual_reset_times",
+        "automatic_reset_times",
+    }
+    sliced: dict = {}
+    for key, value in source.items():
+        if (
+            key not in non_time_indexed_keys
+            and isinstance(value, np.ndarray)
+            and value.ndim > 0
+            and value.shape[0] == total_steps
+        ):
+            sliced[key] = value[start_step:end_step]
+        else:
+            sliced[key] = value
+
+    window_times = np.asarray(sliced["sim_times"])
+    if window_times.size:
+        t0, t1 = float(window_times[0]), float(window_times[-1])
+        for key in ("reset_times", "manual_reset_times", "automatic_reset_times"):
+            if key not in source:
+                continue
+            reset_times = np.asarray(source[key], dtype=float)
+            sliced[key] = reset_times[(reset_times >= t0) & (reset_times <= t1)]
+    return sliced
+
+
+def resolve_gait_dynamics_plot_arrays(data, step_dt: float) -> tuple[dict[str, np.ndarray], dict[str, str]]:
+    """Resolve direct rebuttal signals, with explicitly labelled legacy fallbacks."""
+    if step_dt <= 0.0:
+        raise ValueError(f"step_dt must be positive, got {step_dt}.")
+
+    if "base_linear_acceleration_world_array" in data:
+        linear_acceleration_world = np.asarray(data["base_linear_acceleration_world_array"], dtype=float)
+        angular_acceleration_body = np.asarray(data["base_angular_acceleration_body_array"], dtype=float)
+        base_acceleration_fidelity = "direct"
+    else:
+        linear_velocity_world = np.asarray(data["base_linear_velocity_array"], dtype=float)
+        angular_velocity_body = np.asarray(data["base_angular_velocity_body_array"], dtype=float)
+        if linear_velocity_world.shape[0] > 1:
+            linear_acceleration_world = np.gradient(linear_velocity_world, step_dt, axis=0)
+            angular_acceleration_body = np.gradient(angular_velocity_body, step_dt, axis=0)
+        else:
+            linear_acceleration_world = np.zeros_like(linear_velocity_world)
+            angular_acceleration_body = np.zeros_like(angular_velocity_body)
+        base_acceleration_fidelity = "finite_difference"
+
+    robot_mass = float(np.asarray(data["total_robot_mass"]).item())
+    if "foot_contact_force_world_history_array" in data:
+        total_vertical_grf_bw, per_foot_vertical_grf_bw = compute_vertical_grf_arrays(
+            np.asarray(data["foot_contact_force_world_history_array"]), robot_mass
+        )
+        vertical_grf_fidelity = "direct_vector_history"
+    else:
+        per_foot_vertical_grf_bw = (
+            np.clip(np.asarray(data["contact_forces_array"], dtype=float), 0.0, None)
+            / (robot_mass * 9.81)
+        )
+        total_vertical_grf_bw = per_foot_vertical_grf_bw.sum(axis=1)
+        vertical_grf_fidelity = "legacy_resultant_force_approximation"
+
+    arrays = {
+        "base_linear_acceleration_world": linear_acceleration_world,
+        "base_angular_acceleration_body": angular_acceleration_body,
+        "total_vertical_grf_body_weight": total_vertical_grf_bw,
+        "per_foot_vertical_grf_body_weight": per_foot_vertical_grf_bw,
+    }
+    fidelity = {
+        "base_acceleration": base_acceleration_fidelity,
+        "vertical_grf": vertical_grf_fidelity,
+    }
+    return arrays, fidelity
 
 def draw_limits(ax, term, bounds):
     """
@@ -2967,9 +3062,319 @@ def _plot_joint_phase_line_grid_4x3(
 
 
 # ----------------------------------------------------------------------------------------------------------------------
+# Rebuttal gait-dynamics diagnostics
+# ----------------------------------------------------------------------------------------------------------------------
+
+def _rebuttal_plot_path(output_dir: str, filename: str) -> str:
+    plot_dir = os.path.join(output_dir, "rebuttal")
+    os.makedirs(plot_dir, exist_ok=True)
+    return os.path.join(plot_dir, filename)
+
+
+def _validate_rebuttal_mask(valid_mask: np.ndarray, num_steps: int) -> np.ndarray:
+    mask = np.asarray(valid_mask, dtype=bool)
+    if mask.shape != (num_steps,):
+        raise ValueError(f"valid_mask must have shape ({num_steps},), got {mask.shape}.")
+    return mask
+
+
+def _annotate_fidelity(fig: plt.Figure, fidelity: str) -> None:
+    readable_fidelity = fidelity.replace("_", " ")
+    fig.text(0.995, 0.005, f"signal: {readable_fidelity}", ha="right", va="bottom", fontsize=7, color="0.4")
+
+
+def _plot_rebuttal_support_dynamics(
+    sim_times: np.ndarray,
+    contact_state: np.ndarray,
+    valid_mask: np.ndarray,
+    foot_labels: list[str],
+    output_dir: str,
+) -> str:
+    """Plot support count over time and its empirical distribution."""
+    times = np.asarray(sim_times, dtype=float)
+    contacts = np.asarray(contact_state, dtype=bool)
+    mask = _validate_rebuttal_mask(valid_mask, contacts.shape[0])
+    support_count = contacts.sum(axis=1)
+
+    fig, (ax_time, ax_fraction) = plt.subplots(2, 1, figsize=(8.0, 6.0))
+    if mask.any():
+        ax_time.step(times[mask], support_count[mask], where="post", color="C0", linewidth=1.2)
+        counts = np.arange(contacts.shape[1] + 1)
+        fractions = [float(np.mean(support_count[mask] == count)) for count in counts]
+        bar_colors = ["#D55E00" if count <= 1 else "C0" for count in counts]
+        ax_fraction.bar(counts, 100.0 * np.asarray(fractions), color=bar_colors)
+        aerial = 100.0 * fractions[0]
+        low_support = 100.0 * sum(fractions[:2])
+        mean_duty = 100.0 * contacts[mask].mean()
+        ax_fraction.text(
+            0.98,
+            0.96,
+            f"aerial={aerial:.1f}$\\%$\n"
+            f"$\\leq$1 foot={low_support:.1f}$\\%$\n"
+            f"mean duty={mean_duty:.1f}$\\%$",
+            ha="right",
+            va="top",
+            transform=ax_fraction.transAxes,
+            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.88, "pad": 2.0},
+        )
+    else:
+        for ax in (ax_time, ax_fraction):
+            ax.text(0.5, 0.5, "No valid post-warm-up samples", ha="center", va="center", transform=ax.transAxes)
+
+    ax_time.set_ylabel("Feet in contact")
+    ax_time.set_ylim(-0.2, contacts.shape[1] + 0.2)
+    ax_time.set_yticks(np.arange(contacts.shape[1] + 1))
+    ax_time.set_title("Support dynamics")
+    ax_fraction.set_xlabel("Simultaneous feet in contact")
+    ax_fraction.set_ylabel(r"Time fraction ($\%$)")
+    ax_fraction.set_xticks(np.arange(contacts.shape[1] + 1))
+    if mask.any():
+        ax_time.set_xlabel("Time (s)")
+    fig.suptitle("Dynamic support and aerial phases")
+
+    path = _rebuttal_plot_path(output_dir, "support_dynamics.pdf")
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def _plot_rebuttal_base_acceleration(
+    sim_times: np.ndarray,
+    linear_acceleration_world: np.ndarray,
+    angular_acceleration_body: np.ndarray,
+    valid_mask: np.ndarray,
+    output_dir: str,
+    fidelity: str,
+) -> str:
+    """Plot all base linear and angular acceleration axes over time."""
+    times = np.asarray(sim_times, dtype=float)
+    linear = np.asarray(linear_acceleration_world, dtype=float)
+    angular = np.asarray(angular_acceleration_body, dtype=float)
+    mask = _validate_rebuttal_mask(valid_mask, linear.shape[0])
+
+    fig, axes = plt.subplots(2, 1, figsize=(9.0, 6.0), sharex=True)
+    labels = ("x", "y", "z")
+    if mask.any():
+        for axis_index, label in enumerate(labels):
+            axes[0].plot(times[mask], linear[mask, axis_index] / 9.81, label=label, linewidth=1.0)
+            axes[1].plot(times[mask], angular[mask, axis_index], label=label, linewidth=1.0)
+    else:
+        for ax in axes:
+            ax.text(0.5, 0.5, "No valid post-warm-up samples", ha="center", va="center", transform=ax.transAxes)
+    axes[0].set_ylabel("Linear accel. (g)")
+    axes[0].set_title("Base linear acceleration (world frame)")
+    axes[1].set_ylabel(r"Angular accel. (rad/s$^2$)")
+    axes[1].set_xlabel("Time (s)")
+    axes[1].set_title("Base angular acceleration (body frame)")
+    if mask.any():
+        for ax in axes:
+            ax.legend(ncol=3, loc="upper right")
+    _annotate_fidelity(fig, fidelity)
+
+    path = _rebuttal_plot_path(output_dir, "base_acceleration.pdf")
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def _plot_rebuttal_base_excitation_summary(
+    linear_velocity_world: np.ndarray,
+    angular_velocity_body: np.ndarray,
+    linear_acceleration_world: np.ndarray,
+    angular_acceleration_body: np.ndarray,
+    valid_mask: np.ndarray,
+    output_dir: str,
+) -> str:
+    """Plot compact RMS/p95 base-excitation statistics used in the report."""
+    linear_velocity = np.asarray(linear_velocity_world, dtype=float)
+    angular_velocity = np.asarray(angular_velocity_body, dtype=float)
+    linear_acceleration = np.asarray(linear_acceleration_world, dtype=float)
+    angular_acceleration = np.asarray(angular_acceleration_body, dtype=float)
+    mask = _validate_rebuttal_mask(valid_mask, linear_velocity.shape[0])
+
+    names = ["vertical\nvelocity", "pitch\nrate", "vertical\naccel. / g", "pitch\naccel."]
+    series = [
+        linear_velocity[:, 2],
+        angular_velocity[:, 1],
+        linear_acceleration[:, 2] / 9.81,
+        angular_acceleration[:, 1],
+    ]
+    rms_values = []
+    p95_values = []
+    for values in series:
+        selected = np.asarray(values[mask], dtype=float)
+        selected = selected[np.isfinite(selected)]
+        rms_values.append(float(np.sqrt(np.mean(selected ** 2))) if selected.size else np.nan)
+        p95_values.append(float(np.percentile(np.abs(selected), 95)) if selected.size else np.nan)
+
+    x = np.arange(len(names))
+    width = 0.38
+    fig, ax = plt.subplots(figsize=(8.0, 4.5))
+    ax.bar(x - width / 2.0, rms_values, width, label="RMS", color="C0")
+    ax.bar(x + width / 2.0, p95_values, width, label="absolute p95", color="C1")
+    ax.set_xticks(x)
+    ax.set_xticklabels(names)
+    ax.set_ylabel("Magnitude (native axis units)")
+    ax.set_title("Base excitation statistics")
+    ax.legend()
+    ax.text(
+        0.01,
+        0.98,
+        r"velocity: m/s, rate: rad/s, linear accel.: g, angular accel.: rad/s$^2$",
+        ha="left",
+        va="top",
+        transform=ax.transAxes,
+        fontsize=8,
+        color="0.35",
+    )
+
+    path = _rebuttal_plot_path(output_dir, "base_excitation_summary.pdf")
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def _plot_rebuttal_vertical_grf(
+    sim_times: np.ndarray,
+    total_vertical_grf_bw: np.ndarray,
+    per_foot_vertical_grf_bw: np.ndarray,
+    valid_mask: np.ndarray,
+    foot_labels: list[str],
+    output_dir: str,
+    fidelity: str,
+) -> str:
+    """Plot synchronized total and per-foot vertical ground reaction force."""
+    times = np.asarray(sim_times, dtype=float)
+    total = np.asarray(total_vertical_grf_bw, dtype=float)
+    per_foot = np.asarray(per_foot_vertical_grf_bw, dtype=float)
+    mask = _validate_rebuttal_mask(valid_mask, total.shape[0])
+
+    fig, (ax_total, ax_feet) = plt.subplots(2, 1, figsize=(9.0, 6.0), sharex=True)
+    if mask.any():
+        ax_total.plot(times[mask], total[mask], color="black", linewidth=1.0)
+        ax_total.axhline(1.0, color="0.5", linestyle="--", linewidth=0.8, label="body weight")
+        for foot_index, label in enumerate(foot_labels):
+            ax_feet.plot(times[mask], per_foot[mask, foot_index], label=_shorten_foot_label(label), linewidth=0.9)
+        p95, p99 = np.percentile(total[mask], [95, 99])
+        ax_total.text(
+            0.98,
+            0.95,
+            f"p95={p95:.2f} BW\np99={p99:.2f} BW",
+            ha="right",
+            va="top",
+            transform=ax_total.transAxes,
+        )
+        ax_total.legend(loc="upper left")
+        ax_feet.legend(ncol=4, loc="upper right")
+    else:
+        for ax in (ax_total, ax_feet):
+            ax.text(0.5, 0.5, "No valid post-warm-up samples", ha="center", va="center", transform=ax.transAxes)
+    ax_total.set_ylabel("Total vertical GRF (BW)")
+    ax_total.set_title("Synchronized vertical loading")
+    ax_feet.set_ylabel("Per-foot vertical GRF (BW)")
+    ax_feet.set_xlabel("Time (s)")
+    _annotate_fidelity(fig, fidelity)
+
+    path = _rebuttal_plot_path(output_dir, "vertical_ground_reaction_force.pdf")
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def _plot_rebuttal_vertical_grf_distribution(
+    total_vertical_grf_bw: np.ndarray,
+    valid_mask: np.ndarray,
+    output_dir: str,
+    fidelity: str,
+) -> str:
+    """Plot the total vertical-GRF histogram and exceedance curve."""
+    total = np.asarray(total_vertical_grf_bw, dtype=float)
+    mask = _validate_rebuttal_mask(valid_mask, total.shape[0])
+    selected = total[mask]
+    selected = selected[np.isfinite(selected)]
+
+    fig, (ax_hist, ax_exceedance) = plt.subplots(1, 2, figsize=(9.0, 4.0))
+    if selected.size:
+        ax_hist.hist(selected, bins="auto", density=True, color="C0", alpha=0.8)
+        ordered = np.sort(selected)
+        exceedance = 1.0 - np.arange(1, ordered.size + 1) / ordered.size
+        ax_exceedance.plot(ordered, exceedance, color="C1")
+        for percentile, style in ((95, "--"), (99, ":")):
+            value = float(np.percentile(selected, percentile))
+            ax_hist.axvline(value, color="black", linestyle=style, linewidth=0.9, label=f"p{percentile}={value:.2f}")
+        ax_hist.legend()
+    else:
+        for ax in (ax_hist, ax_exceedance):
+            ax.text(0.5, 0.5, "No valid samples", ha="center", va="center", transform=ax.transAxes)
+    ax_hist.set_xlabel("Total vertical GRF (BW)")
+    ax_hist.set_ylabel("Density")
+    ax_hist.set_title("Loading distribution")
+    ax_exceedance.set_xlabel("Total vertical GRF (BW)")
+    ax_exceedance.set_ylabel("Exceedance probability")
+    ax_exceedance.set_title("Upper-tail loading")
+    ax_exceedance.set_ylim(0.0, 1.0)
+    _annotate_fidelity(fig, fidelity)
+
+    path = _rebuttal_plot_path(output_dir, "vertical_ground_reaction_force_distribution.pdf")
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def _plot_rebuttal_touchdown_impacts(
+    contact_state: np.ndarray,
+    per_foot_vertical_grf_bw: np.ndarray,
+    valid_mask: np.ndarray,
+    foot_labels: list[str],
+    output_dir: str,
+    fidelity: str,
+) -> str:
+    """Plot per-foot vertical loads at false-to-true contact transitions."""
+    contacts = np.asarray(contact_state, dtype=bool)
+    per_foot = np.asarray(per_foot_vertical_grf_bw, dtype=float)
+    mask = _validate_rebuttal_mask(valid_mask, contacts.shape[0])
+    touchdown = np.zeros_like(contacts, dtype=bool)
+    if contacts.shape[0] > 1:
+        touchdown[1:] = (~contacts[:-1]) & contacts[1:]
+    samples = [per_foot[touchdown[:, index] & mask, index] for index in range(contacts.shape[1])]
+
+    fig, ax = plt.subplots(figsize=(8.0, 4.5))
+    nonempty = [values for values in samples if values.size]
+    if nonempty:
+        positions = [index + 1 for index, values in enumerate(samples) if values.size]
+        ax.boxplot(nonempty, positions=positions, showmeans=True, showfliers=True)
+        ax.set_xticks(np.arange(1, len(foot_labels) + 1))
+        ax.set_xticklabels([_shorten_foot_label(label) for label in foot_labels])
+        counts = ", ".join(
+            f"{_shorten_foot_label(label)}: {values.size}"
+            for label, values in zip(foot_labels, samples)
+        )
+        ax.text(0.01, 0.98, f"touchdowns: {counts}", ha="left", va="top", transform=ax.transAxes, fontsize=8)
+    else:
+        ax.text(0.5, 0.5, "No touchdown transitions in valid window", ha="center", va="center", transform=ax.transAxes)
+        ax.set_xticks(np.arange(1, len(foot_labels) + 1))
+        ax.set_xticklabels([_shorten_foot_label(label) for label in foot_labels])
+    ax.set_ylabel("Vertical GRF at touchdown (BW)")
+    ax.set_title("Touchdown impact distribution")
+    _annotate_fidelity(fig, fidelity)
+
+    path = _rebuttal_plot_path(output_dir, "touchdown_impact_distribution.pdf")
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+# ----------------------------------------------------------------------------------------------------------------------
 # Main plot generation orchestrator
 # ----------------------------------------------------------------------------------------------------------------------
-def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshold: float = 0.1, job_timeout_seconds: int = 900):
+def generate_plots(
+    data,
+    output_dir,
+    interactive=False,
+    foot_vel_height_threshold: float = 0.1,
+    job_timeout_seconds: int = 900,
+    rebuttal_plots: bool = False,
+):
     """
     Recreate all plots from loaded data.
     - data: numpy.lib.npyio.NpzFile containing arrays
@@ -3131,8 +3536,87 @@ def generate_plots(data, output_dir, interactive=False, foot_vel_height_threshol
     }
     # --- End Prepare for Joint Phase Plots ---
 
+    rebuttal_arrays = None
+    rebuttal_fidelity = None
+    rebuttal_valid_mask = None
+    if rebuttal_plots:
+        rebuttal_arrays, rebuttal_fidelity = resolve_gait_dynamics_plot_arrays(data, float(step_dt))
+        automatic_reset_times = (
+            np.asarray(data["automatic_reset_times"], dtype=float)
+            if "automatic_reset_times" in data
+            else np.asarray([], dtype=float)
+        )
+        automatic_reset_steps = [
+            int(round((reset_time - float(sim_times[0])) / float(step_dt)))
+            for reset_time in automatic_reset_times
+        ]
+        warmup_steps = min(int(round(1.0 / float(step_dt))), T)
+        rebuttal_valid_mask, _ = build_scenario_analysis_mask(
+            total_steps=T,
+            scenario_start=0,
+            scenario_end=T,
+            warmup_steps=warmup_steps,
+            automatic_reset_steps=automatic_reset_steps,
+        )
+
     futures_map = {}
     with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
+        if rebuttal_plots:
+            submit_timed_job(
+                executor, futures_map, "Rebuttal: support dynamics",
+                _plot_rebuttal_support_dynamics, job_timeout_seconds,
+                sim_times, contact_state_array, rebuttal_valid_mask, foot_labels, output_dir,
+            )
+            submit_timed_job(
+                executor, futures_map, "Rebuttal: base acceleration",
+                _plot_rebuttal_base_acceleration, job_timeout_seconds,
+                sim_times,
+                rebuttal_arrays["base_linear_acceleration_world"],
+                rebuttal_arrays["base_angular_acceleration_body"],
+                rebuttal_valid_mask,
+                output_dir,
+                rebuttal_fidelity["base_acceleration"],
+            )
+            submit_timed_job(
+                executor, futures_map, "Rebuttal: base excitation summary",
+                _plot_rebuttal_base_excitation_summary, job_timeout_seconds,
+                np.asarray(data["base_linear_velocity_array"]),
+                base_angular_velocities,
+                rebuttal_arrays["base_linear_acceleration_world"],
+                rebuttal_arrays["base_angular_acceleration_body"],
+                rebuttal_valid_mask,
+                output_dir,
+            )
+            submit_timed_job(
+                executor, futures_map, "Rebuttal: vertical ground reaction force",
+                _plot_rebuttal_vertical_grf, job_timeout_seconds,
+                sim_times,
+                rebuttal_arrays["total_vertical_grf_body_weight"],
+                rebuttal_arrays["per_foot_vertical_grf_body_weight"],
+                rebuttal_valid_mask,
+                foot_labels,
+                output_dir,
+                rebuttal_fidelity["vertical_grf"],
+            )
+            submit_timed_job(
+                executor, futures_map, "Rebuttal: vertical GRF distribution",
+                _plot_rebuttal_vertical_grf_distribution, job_timeout_seconds,
+                rebuttal_arrays["total_vertical_grf_body_weight"],
+                rebuttal_valid_mask,
+                output_dir,
+                rebuttal_fidelity["vertical_grf"],
+            )
+            submit_timed_job(
+                executor, futures_map, "Rebuttal: touchdown impact distribution",
+                _plot_rebuttal_touchdown_impacts, job_timeout_seconds,
+                contact_state_array,
+                rebuttal_arrays["per_foot_vertical_grf_body_weight"],
+                rebuttal_valid_mask,
+                foot_labels,
+                output_dir,
+                rebuttal_fidelity["vertical_grf"],
+            )
+
         # 1) Foot contact-force per-foot grid
         submit_timed_job(
             executor, futures_map, "Foot contact force per-foot grid",
@@ -3952,7 +4436,9 @@ def main():
     parser.add_argument("--start_step", type=int, default=None,
                     help="(Optional) first step to include (global index, 0-based)")
     parser.add_argument("--end_step", type=int, default=None,
-                    help="(Optional) last step to include, inclusive")
+                    help="(Optional) exclusive end step, matching eval.py scenario bounds")
+    parser.add_argument("--rebuttal_plots", action="store_true", default=False,
+                        help="Generate gait-dynamics plots for the rebuttal report.")
     parser.add_argument("--foot_vel_height_threshold", type=float, default=0.1,
                         help="Maximum foot height to include in the foot-velocity-vs-height plot.")
     parser.add_argument("--job_timeout", type=int, default=300,
@@ -3962,24 +4448,17 @@ def main():
 
     data = load_data(args.data_file)
     if args.start_step is not None:
-        s = slice(args.start_step, args.end_step + 1)
-        data = {k: (v[s] if (k.endswith("_array") or k == "sim_times") else v) for k, v in data.items()}
-
-        # bring resets in-range and shift them so that t=0 is the first
-        sim_times = data["sim_times"]
-        t0, t1 = float(sim_times[0]), float(sim_times[-1])
-        print(t0, t1)
-        full_resets = data["reset_times"]
-        in_window = (full_resets >= t0) & (full_resets <= t1)
-        data["reset_times"] = full_resets[in_window]
-        print(data["reset_times"])
+        if args.end_step is None:
+            args.end_step = int(np.asarray(data["sim_times"]).shape[0])
+        data = slice_plot_data(data, args.start_step, args.end_step)
         
     generate_plots(
         data,
         args.output_dir,
         interactive=args.interactive,
         foot_vel_height_threshold=args.foot_vel_height_threshold,
-        job_timeout_seconds=args.job_timeout
+        job_timeout_seconds=args.job_timeout,
+        rebuttal_plots=args.rebuttal_plots,
     )
 
 if __name__ == "__main__":

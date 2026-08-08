@@ -27,8 +27,16 @@ import re
 import yaml
 import uuid
 from typing import Dict, Tuple, Optional, List, Any
-from metrics_utils import compute_summary_metrics, summarize_metric
+from metrics_utils import (
+    build_scenario_analysis_mask,
+    compute_gait_dynamics_metrics,
+    compute_summary_metrics,
+    summarize_metric,
+)
+from rebuttal_report import REBUTTAL_DYNAMICS_SCENARIOS, write_rebuttal_reports
 eval_script_path = os.path.dirname(os.path.abspath(__file__))
+
+CONTACT_FORCE_THRESHOLD_NEWTONS = 1.0
 
 UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS: Dict[str, Tuple[Optional[float], Optional[float]]] = {
     "joint_torque": (-20.0, 20.0),
@@ -60,9 +68,23 @@ def apply_policy_action_delay(
 
 
 def select_fixed_command_scenarios(
-    scenarios: list[tuple], selected_scenario: Optional[str]
+    scenarios: list[tuple],
+    selected_scenario: Optional[str],
+    selected_scenarios: Optional[tuple[str, ...]] = None,
 ) -> list[tuple]:
     """Optionally restrict evaluation to one named fixed-command scenario."""
+    if selected_scenario is not None and selected_scenarios is not None:
+        raise ValueError("Select either one fixed scenario or a named scenario set, not both.")
+
+    if selected_scenarios is not None:
+        requested = set(selected_scenarios)
+        selected = [scenario for scenario in scenarios if scenario[0] in requested]
+        found = {scenario[0] for scenario in selected}
+        missing = sorted(requested - found)
+        if missing:
+            raise ValueError(f"Unknown fixed scenarios: {missing}")
+        return selected
+
     if selected_scenario is None:
         return scenarios
 
@@ -70,6 +92,17 @@ def select_fixed_command_scenarios(
     if not selected:
         raise ValueError(f"Unknown fixed scenario: {selected_scenario}")
     return selected
+
+
+def compute_contact_state(
+    per_foot_resultant_force: np.ndarray,
+    threshold_newtons: float = CONTACT_FORCE_THRESHOLD_NEWTONS,
+) -> np.ndarray:
+    """Return binary foot contact using the same strict 1 N convention as training."""
+    if threshold_newtons < 0.0:
+        raise ValueError(f"Contact threshold must be non-negative, got {threshold_newtons}.")
+    forces = np.asarray(per_foot_resultant_force)
+    return (forces > threshold_newtons).astype(np.int8)
 
 
 def compute_action_rate(
@@ -267,6 +300,12 @@ def parse_arguments():
     parser.add_argument("--delay_height_map", type=int, default=0, help="Latency steps for height map.")
     parser.add_argument("--delay_actions", type=int, choices=(0, 1, 2), default=0, help="Policy steps by which execution of actions is delayed.")
     parser.add_argument("--fixed_scenario", type=str, default=None, help="Run only the named fixed-command scenario.")
+    parser.add_argument(
+        "--rebuttal_scenarios_only",
+        action="store_true",
+        default=False,
+        help="Run only the four fixed scenarios used by the gait-dynamics rebuttal report.",
+    )
     parser.add_argument("--skip_cot_sweep", action="store_true", default=False, help="Turn off 0.2m/s increment forward walking on flat terrain that is used for Cost of Transport estimation")
     # Note that changing the seed will change terrain config and thus the fixed eval command scenarios, as well as random commands in the beginning!
     parser.add_argument("--seed", type=int, required=False, default=46, help="Seed for numpy, torch, env, terrain, terrain generator etc.. Good seeds for eval are 44, 46, 49")
@@ -471,7 +510,41 @@ def resolve_constraint_bounds_for_eval(
     return constraint_bounds, constraint_bounds_source
 
 
-def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory: str, sim_data_file_path: str, foot_vel_height_threshold: float, num_parallel: int, stagger_delay: int):
+def build_generate_plots_command(
+    generate_plots_script_path: str,
+    sim_data_file_path: str,
+    output_dir: str,
+    job_params: Dict[str, Any],
+    foot_vel_height_threshold: float,
+) -> List[str]:
+    """Build a plot command using the interpreter that is running eval.py."""
+    command = [
+        sys.executable,
+        generate_plots_script_path,
+        "--data_file",
+        sim_data_file_path,
+        "--output_dir",
+        output_dir,
+        "--start_step",
+        str(job_params["start_step"]),
+        "--end_step",
+        str(job_params["end_step"]),
+        "--foot_vel_height_threshold",
+        str(foot_vel_height_threshold),
+    ]
+    if job_params.get("rebuttal_plots", False):
+        command.append("--rebuttal_plots")
+    return command
+
+
+def run_generate_plots_parallel(
+    plot_jobs: List[Dict[str, Any]],
+    plots_directory: str,
+    sim_data_file_path: str,
+    foot_vel_height_threshold: float,
+    num_parallel: int,
+    stagger_delay: int,
+) -> Dict[str, int]:
     """
     Launch generate_plots.py for all jobs in plot_jobs.
     It runs them in batches of `num_parallel`, with a `stagger_delay` between each launch.
@@ -491,14 +564,13 @@ def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory
             output_dir = os.path.join(plots_directory, subdir)
             os.makedirs(output_dir, exist_ok=True)
             log_path = os.path.join(output_dir, f"generate_plots_{subdir}.log")
-            cmd = [
-                "python", generate_plots_script_path,
-                "--data_file", sim_data_file_path,
-                "--output_dir", output_dir,
-                "--start_step", str(job_params["start_step"]),
-                "--end_step", str(job_params["end_step"]),
-                "--foot_vel_height_threshold", str(foot_vel_height_threshold),
-            ]
+            cmd = build_generate_plots_command(
+                generate_plots_script_path=generate_plots_script_path,
+                sim_data_file_path=sim_data_file_path,
+                output_dir=output_dir,
+                job_params=job_params,
+                foot_vel_height_threshold=foot_vel_height_threshold,
+            )
             print(f"[INFO] Spawning plot generation for '{subdir}' (log -> {log_path}), command={' '.join(cmd)}")
             log_file = open(log_path, "w")
             proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
@@ -525,6 +597,7 @@ def run_generate_plots_parallel(plot_jobs: List[Dict[str, Any]], plots_directory
 
     if any(rc != 0 for rc in return_codes.values()):
         print("[WARN] At least one generate_plots.py run returned a non-zero exit code.")
+    return return_codes
 
 
 def ensure_tex_env():
@@ -703,6 +776,26 @@ def get_current_terrain_level(env) -> float:
         return float("nan")
 
 
+def maximum_numeric_value(nested_value: Any) -> Optional[float]:
+    """Return the largest finite numeric leaf in nested dictionaries/lists."""
+    values: list[float] = []
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                visit(child)
+        elif isinstance(value, (int, float, np.integer, np.floating)):
+            numeric = float(value)
+            if np.isfinite(numeric):
+                values.append(numeric)
+
+    visit(nested_value)
+    return max(values) if values else None
+
+
 def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
@@ -850,6 +943,8 @@ def main():
     eval_condition_suffix = f"action_delay_{args.delay_actions}"
     if args.fixed_scenario is not None:
         eval_condition_suffix += f"_scenario_{args.fixed_scenario}"
+    elif args.rebuttal_scenarios_only:
+        eval_condition_suffix += "_rebuttal_scenarios"
     eval_base_dir = os.path.join(
         str(run_path),
         f"eval_checkpoint_{os.path.basename(checkpoint_path).split('_')[-1].split('.')[0]}_seed_{seed}_{eval_condition_suffix}"
@@ -892,7 +987,9 @@ def main():
         print("Skipping Cost of Transport sweep scenarios")
 
     fixed_command_scenarios = select_fixed_command_scenarios(
-        fixed_command_scenarios, args.fixed_scenario
+        fixed_command_scenarios,
+        args.fixed_scenario,
+        REBUTTAL_DYNAMICS_SCENARIOS if args.rebuttal_scenarios_only else None,
     )
 
     # See main training loop for detailed explanation, but in summary, hard constraints terminate the environment or at least return terminated = 1
@@ -979,6 +1076,9 @@ def main():
         raise ValueError(f"Unsupported policy_backend={policy_backend}")
 
     robot = env.unwrapped.scene["robot"]
+    base_body_index = robot.data.body_names.index("base") if "base" in robot.data.body_names else 0
+    base_body_name = robot.data.body_names[base_body_index]
+    print(f"[INFO] Recording base COM acceleration from body index {base_body_index}: {base_body_name}")
     vel_term = env.unwrapped.command_manager.get_term("base_velocity")
 
     def set_fixed_velocity_command(vec: torch.Tensor):
@@ -999,6 +1099,7 @@ def main():
     joint_positions_buffer = []
     joint_velocities_buffer = []
     contact_forces_buffer = []
+    foot_contact_force_world_history_buffer = []
     joint_torques_buffer = []
     joint_accelerations_buffer = []
     action_rate_buffer = []
@@ -1008,6 +1109,10 @@ def main():
     base_angular_velocity_buffer = []
     base_linear_velocity_body_buffer = []
     base_angular_velocity_body_buffer = []
+    base_linear_acceleration_world_buffer = []
+    base_angular_acceleration_world_buffer = []
+    base_linear_acceleration_body_buffer = []
+    base_angular_acceleration_body_buffer = []
     commanded_velocity_buffer = []
     contact_state_buffer = []
     height_map_buffer = []
@@ -1146,6 +1251,7 @@ def main():
         feet_ids, _ = contact_sensors.find_bodies(foot_links, preserve_order=True)
         net_forces = contact_sensors.data.net_forces_w_history
         forces_history = net_forces[0].cpu()[:, feet_ids, :]
+        foot_contact_force_world_history_buffer.append(forces_history.numpy().copy())
         force_magnitudes = torch.norm(forces_history, dim=-1)
         max_per_foot = force_magnitudes.max(dim=0)[0].numpy()
         contact_forces_buffer.append(max_per_foot)
@@ -1194,6 +1300,20 @@ def main():
         base_linear_velocity_body_buffer.append(linear_velocity_b.cpu().numpy())
         base_angular_velocity_body_buffer.append(angular_velocity_b.cpu().numpy())
 
+        base_com_acceleration_world = scene_robot_data.body_com_acc_w[0, base_body_index]
+        linear_acceleration_world = base_com_acceleration_world[:3]
+        angular_acceleration_world = base_com_acceleration_world[3:]
+        linear_acceleration_body = quat_apply_inverse(
+            quat_wxyz, linear_acceleration_world.unsqueeze(0)
+        ).squeeze()
+        angular_acceleration_body = quat_apply_inverse(
+            quat_wxyz, angular_acceleration_world.unsqueeze(0)
+        ).squeeze()
+        base_linear_acceleration_world_buffer.append(linear_acceleration_world.cpu().numpy().copy())
+        base_angular_acceleration_world_buffer.append(angular_acceleration_world.cpu().numpy().copy())
+        base_linear_acceleration_body_buffer.append(linear_acceleration_body.cpu().numpy().copy())
+        base_angular_acceleration_body_buffer.append(angular_acceleration_body.cpu().numpy().copy())
+
         current_commanded_velocity = env.unwrapped.command_manager.get_command("base_velocity").clone()
         commanded_velocity_buffer.append(current_commanded_velocity)  # three components: lin_vel_x, lin_vel_y, ang_vel_z
 
@@ -1208,7 +1328,7 @@ def main():
 
         terrain_level_buffer.append(get_current_terrain_level(env.unwrapped))
 
-        contact_state = (max_per_foot > 0).astype(int)
+        contact_state = compute_contact_state(max_per_foot)
         contact_state_buffer.append(contact_state)
 
         height_map_sequence = get_height_map_sequence(env.unwrapped, SceneEntityCfg(name="ray_caster")).cpu().numpy()
@@ -1273,6 +1393,7 @@ def main():
     joint_accelerations_array = np.vstack(joint_accelerations_buffer)
     action_rate_array = np.vstack(action_rate_buffer)
     contact_forces_array = np.stack(contact_forces_buffer)
+    foot_contact_force_world_history_array = np.stack(foot_contact_force_world_history_buffer)
     base_position_array = np.vstack(base_position_buffer)
     print(np.vstack(base_orientation_buffer).shape)
     base_orientation_array = np.unwrap(np.vstack(base_orientation_buffer), axis=0)
@@ -1281,6 +1402,10 @@ def main():
     base_angular_velocity_array = np.vstack(base_angular_velocity_buffer)
     base_linear_velocity_body_array = np.vstack(base_linear_velocity_body_buffer)
     base_angular_velocity_body_array = np.vstack(base_angular_velocity_body_buffer)
+    base_linear_acceleration_world_array = np.vstack(base_linear_acceleration_world_buffer)
+    base_angular_acceleration_world_array = np.vstack(base_angular_acceleration_world_buffer)
+    base_linear_acceleration_body_array = np.vstack(base_linear_acceleration_body_buffer)
+    base_angular_acceleration_body_array = np.vstack(base_angular_acceleration_body_buffer)
     contact_state_array = np.vstack(contact_state_buffer)
     commanded_velocity_array = np.vstack([cv.cpu().numpy() if isinstance(cv, torch.Tensor) else np.asarray(cv) for cv in commanded_velocity_buffer])
     terrain_level_array = np.asarray(terrain_level_buffer, dtype=np.float64)
@@ -1346,12 +1471,19 @@ def main():
         joint_accelerations_array=joint_accelerations_array,
         action_rate_array=action_rate_array,
         contact_forces_array=contact_forces_array,
+        foot_contact_force_world_history_array=foot_contact_force_world_history_array,
+        contact_force_threshold_newtons=CONTACT_FORCE_THRESHOLD_NEWTONS,
         base_position_array=base_position_array,
         base_orientation_array=base_orientation_array,
         base_linear_velocity_array=base_linear_velocity_array,
         base_angular_velocity_array=base_angular_velocity_array,
         base_linear_velocity_body_array=base_linear_velocity_body_array,
         base_angular_velocity_body_array=base_angular_velocity_body_array,
+        base_linear_acceleration_world_array=base_linear_acceleration_world_array,
+        base_angular_acceleration_world_array=base_angular_acceleration_world_array,
+        base_linear_acceleration_body_array=base_linear_acceleration_body_array,
+        base_angular_acceleration_body_array=base_angular_acceleration_body_array,
+        base_acceleration_body_name=np.array(base_body_name),
         commanded_velocity_array=commanded_velocity_array,
         contact_state_array=contact_state_array,
         height_map_array=np.array(height_map_buffer),
@@ -1383,12 +1515,17 @@ def main():
         "joint_accelerations": joint_accelerations_array,
         "action_rate": action_rate_array,
         "contact_forces": contact_forces_array,
+        "foot_contact_force_world_history": foot_contact_force_world_history_array,
         "base_position": base_position_array,
         "base_orientation": base_orientation_array,
         "base_linear_velocity": base_linear_velocity_array,
         "base_angular_velocity": base_angular_velocity_array,
         "base_linear_velocity_body": base_linear_velocity_body_array,
         "base_angular_velocity_body": base_angular_velocity_body_array,
+        "base_linear_acceleration_world": base_linear_acceleration_world_array,
+        "base_angular_acceleration_world": base_angular_acceleration_world_array,
+        "base_linear_acceleration_body": base_linear_acceleration_body_array,
+        "base_angular_acceleration_body": base_angular_acceleration_body_array,
         "commanded_velocity": commanded_velocity_array,
         "contact_state": contact_state_array,
         "foot_velocities_world_frame": foot_velocities_world_frame_array,
@@ -1447,6 +1584,57 @@ def main():
         )
         for tag, msk in scenario_masks.items()
     }
+
+    rebuttal_scenario_metrics: dict[str, Any] = {}
+    warmup_seconds = 1.0
+    warmup_steps = int(round(warmup_seconds / step_dt))
+    for scenario_index, (scenario_tag, *_) in enumerate(fixed_command_scenarios):
+        if scenario_tag not in REBUTTAL_DYNAMICS_SCENARIOS:
+            continue
+
+        scenario_start = args.random_sim_step_length + scenario_index * fixed_command_sim_steps
+        scenario_end = scenario_start + fixed_command_sim_steps
+        dynamics_mask, window_metadata = build_scenario_analysis_mask(
+            total_steps=T,
+            scenario_start=scenario_start,
+            scenario_end=scenario_end,
+            warmup_steps=warmup_steps,
+            automatic_reset_steps=automatic_reset_steps,
+        )
+        window_metadata.update(
+            {
+                "warmup_seconds": warmup_seconds,
+                "valid_duration_seconds": float(window_metadata["sample_count"] * step_dt),
+            }
+        )
+        gait_dynamics = compute_gait_dynamics_metrics(
+            mask=dynamics_mask,
+            data_arrays=arrays_dict,
+            constants=constants_dict,
+            data_fidelity={
+                "base_acceleration": "direct",
+                "vertical_grf": "direct_vector_history",
+            },
+        )
+        general_metrics = scenario_metrics[scenario_tag]
+        achieved_velocity = base_linear_velocity_body_array[dynamics_mask]
+        mean_achieved_velocity = (
+            achieved_velocity.mean(axis=0).tolist() if achieved_velocity.shape[0] > 0 else None
+        )
+        rebuttal_scenario_metrics[scenario_tag] = {
+            "analysis_window": window_metadata,
+            "gait_dynamics": gait_dynamics,
+            "context": {
+                "mean_achieved_base_linear_velocity_body_m_s": mean_achieved_velocity,
+                "base_linear_velocity_x_rms_error": general_metrics.get("base_linear_velocity_x_rms_error"),
+                "base_linear_velocity_y_rms_error": general_metrics.get("base_linear_velocity_y_rms_error"),
+                "base_angular_velocity_z_rms_error": general_metrics.get("base_angular_velocity_z_rms_error"),
+                "cost_of_transport": general_metrics.get("cost_of_transport"),
+                "max_operational_limit_violation_percent": maximum_numeric_value(
+                    general_metrics.get("constraint_violations_percent", {})
+                ),
+            },
+        }
     scenario_completion = compute_scenario_completion(
         scenarios=fixed_command_scenarios,
         random_sim_steps=args.random_sim_step_length,
@@ -1458,6 +1646,7 @@ def main():
     # metrics per segment / fixed command scenario
     summary_metrics["random_simulation_steps_metrics"] = random_metrics
     summary_metrics["fixed_command_scenarios_metrics"] = scenario_metrics
+    summary_metrics["fixed_command_scenarios_gait_dynamics_metrics"] = rebuttal_scenario_metrics
     summary_metrics.update({
         "env_name": env_name,
         "run_name": run_name,
@@ -1478,6 +1667,11 @@ def main():
         "automatic_reset_steps": automatic_reset_steps,
         "action_delay_steps": args.delay_actions,
         "selected_fixed_scenario": args.fixed_scenario,
+        "rebuttal_scenarios_only": args.rebuttal_scenarios_only,
+        "rebuttal_dynamics_scenarios": REBUTTAL_DYNAMICS_SCENARIOS,
+        "rebuttal_dynamics_warmup_seconds": warmup_seconds,
+        "contact_force_threshold_newtons": CONTACT_FORCE_THRESHOLD_NEWTONS,
+        "base_acceleration_body_name": base_body_name,
         "constraint_bounds": constraint_bounds,
         "constraint_bounds_source": constraint_bounds_source,
         "hardcoded_upstream_go2_constraint_bounds": UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS,
@@ -1509,13 +1703,20 @@ def main():
         start = args.random_sim_step_length + k * fixed_command_sim_steps
         end = start + fixed_command_sim_steps
         subdir = f"scenario_{scenario_tag}"
-        plot_jobs.append({"start_step": start, "end_step": end, "subdir": subdir})
+        plot_jobs.append(
+            {
+                "start_step": start,
+                "end_step": end,
+                "subdir": subdir,
+                "rebuttal_plots": scenario_tag in REBUTTAL_DYNAMICS_SCENARIOS,
+            }
+        )
 
     if args.random_sim_step_length > 0:
         plot_jobs.append({"start_step": 0, "end_step": args.random_sim_step_length, "subdir": "random_simulation_steps"})
     plot_jobs.append({"start_step": 0, "end_step": total_sim_steps, "subdir": "overall"})
 
-    run_generate_plots_parallel(
+    plot_status = run_generate_plots_parallel(
         plot_jobs=plot_jobs,
         plots_directory=plots_directory,
         sim_data_file_path=np_data_file,
@@ -1523,6 +1724,14 @@ def main():
         num_parallel=args.num_plot_jobs_in_parallel,
         stagger_delay=args.plot_job_stagger_delay
     )
+    report_paths = write_rebuttal_reports(
+        summary_metrics=summary_metrics,
+        output_dir=eval_base_dir,
+        plot_status=plot_status,
+    )
+    print("[INFO] Wrote rebuttal gait-dynamics reports:")
+    for report_format, report_path in report_paths.items():
+        print(f"[INFO]   {report_format}: {report_path}")
 
     env.close()
     simulation_app.close()
