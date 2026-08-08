@@ -69,7 +69,8 @@ For each `(env_name, run_name)`, candidate selection is deterministic:
 1. reject non-zero action-delay candidates from default paper aggregation;
 2. retain the highest parseable checkpoint;
 3. at the same checkpoint, prefer a full evaluation over a purpose-built rebuttal-only evaluation;
-4. if candidates remain tied with conflicting paths or payloads, fail with a diagnostic listing the candidates rather than silently choosing one.
+4. if old and current full evaluations share the same checkpoint, prefer the candidate with explicit zero-delay metadata and the current gait-dynamics payload;
+5. if candidates remain tied with conflicting paths or payloads, fail with a diagnostic listing the candidates rather than silently choosing one.
 
 The discovery manifest records checkpoint, action delay, evaluation scope, eligibility, selection status, and selection reason. `selected_runs.csv` continues to expose the selected paths. These rules apply without deleting or renaming any existing output.
 
