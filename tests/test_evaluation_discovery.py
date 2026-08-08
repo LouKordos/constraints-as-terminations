@@ -12,7 +12,12 @@ SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from analyze_run_range import discover_metrics_summary_files, extract_checkpoint_from_path
+from analyze_run_range import (
+    SeriesData,
+    build_terrain_run_sources,
+    discover_metrics_summary_files,
+    extract_checkpoint_from_path,
+)
 from gait_dynamics_aggregate import discover_rebuttal_gait_dynamics_files
 
 
@@ -128,3 +133,35 @@ def test_general_discovery_accepts_suffixed_paths_and_prefers_current_full_data(
     assert selected_row["selection_reason"] == "current_schema_tiebreak"
     assert not bool(manifest.loc[manifest["json_path"] == str(old_path.resolve()), "selected"].item())
 
+
+def test_selected_full_non_rebuttal_eval_becomes_a_terrain_analysis_source(
+    tmp_path: Path,
+) -> None:
+    _write_summary(
+        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_0",
+        _make_summary(rebuttal_scenarios_only=False, action_delay_steps=0),
+    )
+    selected, _ = discover_metrics_summary_files(
+        root_dir=tmp_path,
+        cot_scenario_pattern=r"^cot_(\d+(?:\.\d+)?)$",
+        cot_velocity_range=(0.6, 1.6),
+    )
+    json_run = selected[(ENV_NAME, RUN_NAME)]
+    series_data = {
+        "LEP": SeriesData(
+            label="LEP",
+            env_name=ENV_NAME,
+            wandb_path=ENV_NAME,
+            wandb_runs={},
+            json_runs={RUN_NAME: json_run},
+            selected_wandb_run_names=[],
+            selected_json_run_names=[RUN_NAME],
+        )
+    }
+
+    sources = build_terrain_run_sources(series_data)
+
+    assert len(sources) == 1
+    assert sources[0].label == "LEP"
+    assert sources[0].run_name == RUN_NAME
+    assert sources[0].json_path == json_run.json_path

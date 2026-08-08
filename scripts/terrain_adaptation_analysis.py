@@ -531,6 +531,8 @@ def _render_terrain_report(
         "The flat and uneven scenarios both command `(vx, vy, yaw) = (1.0, 0.0, 0.0)`. "
         "Each independently trained run contributes one paired value; individual stance or "
         "swing events are not treated as independent seeds.",
+        "Among the archived command-matched terrain scenarios, the selected uneven scenario "
+        "showed the largest changes in diagonal-state occupancy and stance/swing timing variability.",
         "",
         "## Rebuttal-facing metrics",
         "",

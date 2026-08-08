@@ -32,6 +32,11 @@ from gait_dynamics_aggregate import (
     write_rebuttal_aggregate_outputs,
 )
 from metrics_utils import compute_swing_heights, summarize_metric
+from terrain_adaptation_analysis import (
+    TerrainRunSource,
+    analyze_terrain_sources,
+    write_terrain_adaptation_outputs,
+)
 
 
 DEFAULT_FIGURE_WIDTH_IN = 3.5
@@ -82,7 +87,7 @@ SUMMARY_STATISTICS_METRIC_ORDER = [
 ]
 
 DEFAULT_STEP_HEIGHT_FLAT_SCENARIO_TAG = "walk_x_flat_terrain_1.0mps"
-DEFAULT_STEP_HEIGHT_UNEVEN_SCENARIO_TAG = "medium_walk_x_uneven_terrain"
+DEFAULT_STEP_HEIGHT_UNEVEN_SCENARIO_TAG = "fast_walk_x_uneven_terrain"
 ALL_TIME_PLACEHOLDER = "ALL"
 TRUNCATED_WANDB_METRIC_SUFFIX = "__truncated"
 
@@ -140,6 +145,27 @@ class SeriesData:
     json_runs: dict[str, JsonRunData]
     selected_wandb_run_names: list[str]
     selected_json_run_names: list[str]
+
+
+def build_terrain_run_sources(series_data: dict[str, SeriesData]) -> list[TerrainRunSource]:
+    """Convert selected general-analysis JSON runs into offline terrain sources."""
+    sources: list[TerrainRunSource] = []
+    for label, data in series_data.items():
+        for run_name in data.selected_json_run_names:
+            json_run = data.json_runs.get(run_name)
+            if json_run is None:
+                continue
+            sources.append(
+                TerrainRunSource(
+                    label=label,
+                    env_name=data.env_name,
+                    run_name=run_name,
+                    checkpoint=json_run.checkpoint,
+                    json_path=json_run.json_path,
+                    metrics_summary=json_run.metrics_summary,
+                )
+            )
+    return sources
 
 
 def sanitize_filename(name: str, max_length: int = 96) -> str:
@@ -2338,6 +2364,15 @@ def parse_args() -> argparse.Namespace:
         help="Show outliers in the step-height box plot.",
     )
     parser.add_argument(
+        "--terrain_adaptation_primary_label",
+        type=str,
+        default="LEP",
+        help=(
+            "Series label used for the compact terrain-adaptation contact raster and paired "
+            "panels. If absent from the analyzed pairs, the first available label is used."
+        ),
+    )
+    parser.add_argument(
         "--plot_style",
         choices=["corl", "scienceplots"],
         default="corl",
@@ -2443,6 +2478,8 @@ def main() -> None:
         raise ValueError("--step_height_flat_scenario_tag must be non-empty")
     if not args.step_height_uneven_scenario_tag:
         raise ValueError("--step_height_uneven_scenario_tag must be non-empty")
+    if not args.terrain_adaptation_primary_label:
+        raise ValueError("--terrain_adaptation_primary_label must be non-empty")
     if args.figure_width <= 0.0:
         raise ValueError("--figure_width must be positive")
     if args.timeseries_figure_height <= 0.0:
@@ -2871,6 +2908,46 @@ def main() -> None:
             "Wrote aggregate rebuttal gait-dynamics outputs for %d run-scenario rows (%d artifacts).",
             len(rebuttal_per_run_df),
             len(rebuttal_paths),
+        )
+
+    terrain_sources = build_terrain_run_sources(series_data)
+    terrain_per_scenario_df, terrain_paired_df, terrain_manifest_df = analyze_terrain_sources(
+        sources=terrain_sources,
+        flat_tag=args.step_height_flat_scenario_tag,
+        uneven_tag=args.step_height_uneven_scenario_tag,
+    )
+    save_dataframe(terrain_manifest_df, output_dir / "terrain_adaptation_manifest.csv")
+    if terrain_paired_df.empty:
+        logging.info(
+            "No selected full evaluations contained the matched terrain scenarios and arrays; "
+            "skipping terrain-adaptation tables and figure."
+        )
+    else:
+        available_labels = terrain_paired_df["label"].drop_duplicates().tolist()
+        primary_label = args.terrain_adaptation_primary_label
+        if primary_label not in available_labels:
+            fallback_label = str(available_labels[0])
+            logging.warning(
+                "Terrain-adaptation primary label %r is unavailable; using %r.",
+                primary_label,
+                fallback_label,
+            )
+            primary_label = fallback_label
+        terrain_paths = write_terrain_adaptation_outputs(
+            per_scenario_df=terrain_per_scenario_df,
+            paired_df=terrain_paired_df,
+            manifest_df=terrain_manifest_df,
+            output_dir=output_dir,
+            primary_label=primary_label,
+            export_formats=args.export_formats,
+            figure_width=max(args.figure_width, 7.0),
+            figure_height=max(args.step_height_figure_height, 4.5),
+            grid_alpha=args.grid_alpha,
+        )
+        logging.info(
+            "Wrote terrain-adaptation outputs for %d paired trained runs (%d artifacts).",
+            len(terrain_paired_df),
+            len(terrain_paths),
         )
 
     logging.info("Finished. Outputs written to: %s", output_dir)
