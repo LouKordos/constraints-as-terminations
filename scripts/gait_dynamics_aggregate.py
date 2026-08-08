@@ -101,10 +101,19 @@ PLOT_COLORS = ("#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00")
 
 
 @dataclass(frozen=True)
+class EvaluationMetadata:
+    checkpoint: int | None
+    action_delay_steps: int
+    evaluation_scope: str
+
+
+@dataclass(frozen=True)
 class RebuttalGaitRunData:
     env_name: str
     run_name: str
-    checkpoint: int
+    checkpoint: int | None
+    action_delay_steps: int
+    evaluation_scope: str
     json_path: Path
     metrics_summary: dict[str, Any]
 
@@ -117,15 +126,77 @@ def _extract_checkpoint_with_suffix(path: Path) -> int | None:
     return None
 
 
+def extract_evaluation_metadata(
+    summary: dict[str, Any],
+    json_path: Path,
+) -> EvaluationMetadata:
+    raw_action_delay = summary.get("action_delay_steps")
+    if raw_action_delay is None:
+        path_match = re.search(r"_action_delay_(\d+)(?:_|$)", str(json_path))
+        action_delay_steps = int(path_match.group(1)) if path_match else 0
+    else:
+        action_delay_steps = int(raw_action_delay)
+    evaluation_scope = (
+        "rebuttal_only" if summary.get("rebuttal_scenarios_only") is True else "full"
+    )
+    return EvaluationMetadata(
+        checkpoint=_extract_checkpoint_with_suffix(json_path),
+        action_delay_steps=action_delay_steps,
+        evaluation_scope=evaluation_scope,
+    )
+
+
 def _is_rebuttal_gait_summary(summary: dict[str, Any]) -> bool:
     dynamics = summary.get("fixed_command_scenarios_gait_dynamics_metrics")
-    return summary.get("rebuttal_scenarios_only") is True and isinstance(dynamics, dict) and bool(dynamics)
+    return isinstance(dynamics, dict) and bool(dynamics)
+
+
+def _has_current_evaluation_metadata(entry: RebuttalGaitRunData) -> bool:
+    return "action_delay_steps" in entry.metrics_summary
+
+
+def _choose_preferred_gait_entry(
+    key: tuple[str, str],
+    entries: list[RebuttalGaitRunData],
+) -> tuple[RebuttalGaitRunData | None, str | None]:
+    eligible = [
+        entry
+        for entry in entries
+        if entry.action_delay_steps == 0 and entry.checkpoint is not None
+    ]
+    if not eligible:
+        return None, None
+
+    full_entries = [entry for entry in eligible if entry.evaluation_scope == "full"]
+    preferred_scope = full_entries if full_entries else eligible
+    max_checkpoint = max(
+        entry.checkpoint for entry in preferred_scope if entry.checkpoint is not None
+    )
+    latest = [entry for entry in preferred_scope if entry.checkpoint == max_checkpoint]
+
+    if len(latest) > 1:
+        current = [entry for entry in latest if _has_current_evaluation_metadata(entry)]
+        if current:
+            latest = current
+    if len(latest) != 1:
+        raise ValueError(
+            "Multiple equally preferred gait-dynamics summaries found for "
+            f"env_name={key[0]!r}, run_name={key[1]!r}: "
+            f"{[str(entry.json_path) for entry in latest]}"
+        )
+
+    selected = latest[0]
+    if selected.evaluation_scope == "full":
+        reason = "highest_checkpoint_full_zero_delay"
+    else:
+        reason = "highest_checkpoint_rebuttal_only_fallback"
+    return selected, reason
 
 
 def discover_rebuttal_gait_dynamics_files(
     root_dirs: Iterable[Path],
 ) -> tuple[dict[tuple[str, str], RebuttalGaitRunData], pd.DataFrame]:
-    """Discover purpose-built gait evaluations independently of normal eval summaries."""
+    """Discover full or purpose-built zero-delay evaluations containing gait metrics."""
     candidates: dict[tuple[str, str], list[RebuttalGaitRunData]] = {}
     manifest_rows: list[dict[str, Any]] = []
     visited_paths: set[Path] = set()
@@ -149,18 +220,17 @@ def discover_rebuttal_gait_dynamics_files(
 
             env_name = summary.get("env_name")
             run_name = summary.get("run_name")
-            checkpoint = _extract_checkpoint_with_suffix(json_path)
+            metadata = extract_evaluation_metadata(summary, json_path)
             if not isinstance(env_name, str) or not env_name or not isinstance(run_name, str) or not run_name:
                 logging.warning("Skipping gait summary without valid env/run identity: %s", json_path)
-                continue
-            if checkpoint is None:
-                logging.warning("Skipping gait summary without a parseable checkpoint: %s", json_path)
                 continue
 
             entry = RebuttalGaitRunData(
                 env_name=env_name,
                 run_name=run_name,
-                checkpoint=checkpoint,
+                checkpoint=metadata.checkpoint,
+                action_delay_steps=metadata.action_delay_steps,
+                evaluation_scope=metadata.evaluation_scope,
                 json_path=json_path,
                 metrics_summary=summary,
             )
@@ -169,27 +239,42 @@ def discover_rebuttal_gait_dynamics_files(
                 {
                     "env_name": env_name,
                     "run_name": run_name,
-                    "checkpoint": checkpoint,
+                    "checkpoint": metadata.checkpoint,
                     "eval_seed": summary.get("seed"),
-                    "action_delay_steps": summary.get("action_delay_steps"),
+                    "action_delay_steps": metadata.action_delay_steps,
+                    "evaluation_scope": metadata.evaluation_scope,
+                    "eligible": metadata.action_delay_steps == 0 and metadata.checkpoint is not None,
+                    "selected": False,
+                    "selection_reason": (
+                        "excluded_nonzero_action_delay"
+                        if metadata.action_delay_steps != 0
+                        else "excluded_unparseable_checkpoint"
+                        if metadata.checkpoint is None
+                        else "not_selected"
+                    ),
                     "json_path": str(json_path),
                 }
             )
 
     selected: dict[tuple[str, str], RebuttalGaitRunData] = {}
+    selected_reasons: dict[Path, str] = {}
     for key, entries in sorted(candidates.items()):
-        max_checkpoint = max(entry.checkpoint for entry in entries)
-        latest = [entry for entry in entries if entry.checkpoint == max_checkpoint]
-        if len(latest) != 1:
-            raise ValueError(
-                "Multiple rebuttal gait-dynamics summaries found at the latest checkpoint "
-                f"for env_name={key[0]!r}, run_name={key[1]!r}: "
-                f"{[str(entry.json_path) for entry in latest]}"
-            )
-        selected[key] = latest[0]
+        selected_entry, reason = _choose_preferred_gait_entry(key, entries)
+        if selected_entry is None or reason is None:
+            continue
+        selected[key] = selected_entry
+        selected_reasons[selected_entry.json_path.resolve()] = reason
 
     manifest = pd.DataFrame(manifest_rows)
     if not manifest.empty:
+        resolved_manifest_paths = manifest["json_path"].map(lambda value: Path(value).resolve())
+        manifest["selected"] = resolved_manifest_paths.isin(selected_reasons)
+        manifest.loc[manifest["selected"], "selection_reason"] = resolved_manifest_paths[
+            manifest["selected"]
+        ].map(selected_reasons)
+        manifest.loc[
+            manifest["eligible"] & ~manifest["selected"], "selection_reason"
+        ] = "lower_priority_candidate"
         manifest.sort_values(["env_name", "run_name", "checkpoint", "json_path"], inplace=True)
         manifest.reset_index(drop=True, inplace=True)
     return selected, manifest

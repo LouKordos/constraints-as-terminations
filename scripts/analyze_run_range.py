@@ -27,6 +27,7 @@ import wandb
 from gait_dynamics_aggregate import (
     build_rebuttal_per_run_dataframe,
     discover_rebuttal_gait_dynamics_files,
+    extract_evaluation_metadata,
     filter_rebuttal_runs_for_series,
     write_rebuttal_aggregate_outputs,
 )
@@ -122,6 +123,8 @@ class JsonRunData:
     env_name: str
     run_name: str
     checkpoint: int | None
+    action_delay_steps: int
+    evaluation_scope: str
     json_path: Path
     cot_df: pd.DataFrame | None
     summary: dict[str, Any]
@@ -581,7 +584,7 @@ def fill_ci_band(
 
 
 def extract_checkpoint_from_path(path: Path) -> int | None:
-    pattern = re.compile(r"^eval_checkpoint_(\d+)(?:_seed_\d+)?$")
+    pattern = re.compile(r"^eval_checkpoint_(\d+)(?:_seed_\d+)?(?:_.*)?$")
     for part in reversed(path.parts):
         match = pattern.match(part)
         if match:
@@ -701,6 +704,7 @@ def discover_metrics_summary_files(
             continue
 
         checkpoint = extract_checkpoint_from_path(json_path)
+        evaluation_metadata = extract_evaluation_metadata(metrics_summary, json_path)
         cot_df = parse_cot_dataframe(metrics_summary, pattern)
         summary = parse_json_summary(metrics_summary, cot_velocity_range, cot_df)
         summary["run_name"] = run_name
@@ -712,6 +716,8 @@ def discover_metrics_summary_files(
             env_name=env_name,
             run_name=run_name,
             checkpoint=checkpoint,
+            action_delay_steps=evaluation_metadata.action_delay_steps,
+            evaluation_scope=evaluation_metadata.evaluation_scope,
             json_path=json_path,
             cot_df=cot_df,
             summary=summary,
@@ -726,6 +732,15 @@ def discover_metrics_summary_files(
                 "env_name": env_name,
                 "run_name": run_name,
                 "checkpoint": checkpoint,
+                "action_delay_steps": evaluation_metadata.action_delay_steps,
+                "evaluation_scope": evaluation_metadata.evaluation_scope,
+                "eligible": evaluation_metadata.action_delay_steps == 0,
+                "selected": False,
+                "selection_reason": (
+                    "not_selected"
+                    if evaluation_metadata.action_delay_steps == 0
+                    else "excluded_nonzero_action_delay"
+                ),
                 "json_path": str(json_path),
             }
         )
@@ -733,13 +748,19 @@ def discover_metrics_summary_files(
     selected: dict[tuple[str, str], JsonRunData] = {}
 
     for key, entries in sorted(candidates.items()):
-        if len(entries) == 1:
-            selected[key] = entries[0]
+        eligible = [entry for entry in entries if entry.action_delay_steps == 0]
+        if not eligible:
             continue
 
-        parseable = [entry for entry in entries if entry.checkpoint is not None]
+        full_entries = [entry for entry in eligible if entry.evaluation_scope == "full"]
+        preferred_scope = full_entries if full_entries else eligible
+
+        parseable = [entry for entry in preferred_scope if entry.checkpoint is not None]
         if not parseable:
-            paths = [str(entry.json_path) for entry in entries]
+            if len(preferred_scope) == 1:
+                selected[key] = preferred_scope[0]
+                continue
+            paths = [str(entry.json_path) for entry in preferred_scope]
             raise ValueError(
                 f"Multiple metrics_summary.json files found for env_name={key[0]!r}, run_name={key[1]!r}, "
                 f"but no checkpoint could be inferred: {paths}"
@@ -747,6 +768,22 @@ def discover_metrics_summary_files(
 
         max_checkpoint = max(entry.checkpoint for entry in parseable if entry.checkpoint is not None)
         latest_entries = [entry for entry in parseable if entry.checkpoint == max_checkpoint]
+
+        selection_reason = (
+            "highest_checkpoint_full_zero_delay"
+            if latest_entries[0].evaluation_scope == "full"
+            else "highest_checkpoint_rebuttal_only_fallback"
+        )
+        if len(latest_entries) != 1:
+            current_schema_entries = [
+                entry
+                for entry in latest_entries
+                if "action_delay_steps" in entry.metrics_summary
+                and bool(entry.metrics_summary.get("fixed_command_scenarios_gait_dynamics_metrics"))
+            ]
+            if current_schema_entries:
+                latest_entries = current_schema_entries
+                selection_reason = "current_schema_tiebreak"
 
         if len(latest_entries) != 1:
             paths = [str(entry.json_path) for entry in latest_entries]
@@ -763,6 +800,29 @@ def discover_metrics_summary_files(
             latest_entries[0].json_path,
         )
         selected[key] = latest_entries[0]
+
+        selected_path = str(latest_entries[0].json_path)
+        for row in manifest_rows:
+            if row["json_path"] == selected_path:
+                row["selected"] = True
+                row["selection_reason"] = selection_reason
+            elif row["env_name"] == key[0] and row["run_name"] == key[1] and row["eligible"]:
+                row["selection_reason"] = "lower_priority_candidate"
+
+    for key, entry in selected.items():
+        selected_path = str(entry.json_path)
+        if any(row["json_path"] == selected_path and row["selected"] for row in manifest_rows):
+            continue
+        for row in manifest_rows:
+            if row["json_path"] == selected_path:
+                row["selected"] = True
+                row["selection_reason"] = (
+                    "highest_checkpoint_full_zero_delay"
+                    if entry.evaluation_scope == "full"
+                    else "highest_checkpoint_rebuttal_only_fallback"
+                )
+            elif row["env_name"] == key[0] and row["run_name"] == key[1] and row["eligible"]:
+                row["selection_reason"] = "lower_priority_candidate"
 
     manifest_df = pd.DataFrame(manifest_rows)
     if not manifest_df.empty:
