@@ -100,7 +100,7 @@ Update `extract_checkpoint_from_path()` to accept suffixes and use the same pref
 pattern = re.compile(r"^eval_checkpoint_(\d+)(?:_seed_\d+)?(?:_.*)?$")
 ```
 
-Prefer zero action delay and full scope so `analyze_run_range.py` obtains full scenario data rather than rebuttal-only data, then choose the highest checkpoint within that scope. If an old unsuffixed full evaluation and a current full evaluation still tie, prefer explicit zero-delay/current-schema data (a non-empty gait-dynamics payload); fail only when equally preferred candidates remain. Add `action_delay_steps`, `evaluation_scope`, `eligible`, `selected`, and `selection_reason` to discovery manifests.
+Prefer zero action delay and full scope so `analyze_run_range.py` obtains full scenario data rather than rebuttal-only data, then choose the highest checkpoint within that scope. If an old unsuffixed full evaluation and a current full evaluation still tie, prefer explicit zero-delay/current-schema data; gait-dynamics discovery separately requires its own non-empty payload. Fail only when equally preferred candidates remain. Add `action_delay_steps`, `evaluation_scope`, `eligible`, `selected`, and `selection_reason` to discovery manifests.
 
 - [ ] **Step 5: Run the focused tests**
 

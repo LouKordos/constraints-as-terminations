@@ -117,7 +117,11 @@ def test_general_discovery_accepts_suffixed_paths_and_prefers_current_full_data(
     )
     current_path = _write_summary(
         tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_0",
-        _make_summary(rebuttal_scenarios_only=False, action_delay_steps=0),
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=0,
+            include_gait_dynamics=False,
+        ),
     )
 
     assert extract_checkpoint_from_path(current_path) == 100

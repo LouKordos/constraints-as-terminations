@@ -805,7 +805,6 @@ def discover_metrics_summary_files(
                 entry
                 for entry in latest_entries
                 if "action_delay_steps" in entry.metrics_summary
-                and bool(entry.metrics_summary.get("fixed_command_scenarios_gait_dynamics_metrics"))
             ]
             if current_schema_entries:
                 latest_entries = current_schema_entries
