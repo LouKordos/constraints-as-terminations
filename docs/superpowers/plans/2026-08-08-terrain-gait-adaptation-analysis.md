@@ -90,7 +90,7 @@ def extract_evaluation_metadata(summary: dict[str, Any], json_path: Path) -> Eva
     return EvaluationMetadata(checkpoint, action_delay, scope)
 ```
 
-Replace the `rebuttal_scenarios_only is True` eligibility gate with a non-empty gait-dynamics mapping plus zero action delay. Select highest checkpoint, then full scope, and raise only if equally preferred candidates remain.
+Replace the `rebuttal_scenarios_only is True` eligibility gate with a non-empty gait-dynamics mapping plus zero action delay. Prefer full scope whenever available, then select the highest checkpoint within that scope, and raise only if equally preferred candidates remain.
 
 - [ ] **Step 4: Generalize normal JSON checkpoint resolution**
 
@@ -100,7 +100,7 @@ Update `extract_checkpoint_from_path()` to accept suffixes and use the same pref
 pattern = re.compile(r"^eval_checkpoint_(\d+)(?:_seed_\d+)?(?:_.*)?$")
 ```
 
-At equal checkpoints, prefer zero action delay and full scope so `analyze_run_range.py` obtains full scenario data rather than rebuttal-only data. If an old unsuffixed full evaluation and a current full evaluation still tie, prefer explicit zero-delay/current-schema data (a non-empty gait-dynamics payload); fail only when equally preferred candidates remain. Add `action_delay_steps`, `evaluation_scope`, `eligible`, `selected`, and `selection_reason` to discovery manifests.
+Prefer zero action delay and full scope so `analyze_run_range.py` obtains full scenario data rather than rebuttal-only data, then choose the highest checkpoint within that scope. If an old unsuffixed full evaluation and a current full evaluation still tie, prefer explicit zero-delay/current-schema data (a non-empty gait-dynamics payload); fail only when equally preferred candidates remain. Add `action_delay_steps`, `evaluation_scope`, `eligible`, `selected`, and `selection_reason` to discovery manifests.
 
 - [ ] **Step 5: Run the focused tests**
 
