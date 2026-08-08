@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -413,3 +414,391 @@ def analyze_terrain_sources(
         manifest.sort_values(["label", "run_name"], inplace=True)
         manifest.reset_index(drop=True, inplace=True)
     return per_scenario, paired, manifest
+
+
+def _metric_statistics(values: pd.Series) -> dict[str, float | int]:
+    numeric = pd.to_numeric(values, errors="coerce").dropna()
+    count = int(len(numeric))
+    if count == 0:
+        return {
+            "mean": np.nan,
+            "std": np.nan,
+            "sem": np.nan,
+            "ci95": np.nan,
+            "n": 0,
+        }
+    mean = float(numeric.mean())
+    if count == 1:
+        return {
+            "mean": mean,
+            "std": np.nan,
+            "sem": np.nan,
+            "ci95": np.nan,
+            "n": 1,
+        }
+    standard_deviation = float(numeric.std(ddof=1))
+    standard_error = standard_deviation / np.sqrt(count)
+    return {
+        "mean": mean,
+        "std": standard_deviation,
+        "sem": standard_error,
+        "ci95": float(1.96 * standard_error),
+        "n": count,
+    }
+
+
+def aggregate_terrain_adaptation(paired_df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate paired run-level values without treating stride events as seeds."""
+    if paired_df.empty:
+        return pd.DataFrame()
+    identity_columns = [column for column in ("label", "env_name") if column in paired_df]
+    metric_columns = [
+        column
+        for column in paired_df.columns
+        if column.endswith(("_flat", "_uneven", "_delta"))
+        and column not in {"flat_completed", "uneven_completed"}
+    ]
+    rows: list[dict[str, Any]] = []
+    grouped = paired_df.groupby(identity_columns, dropna=False, sort=False)
+    for group_key, group in grouped:
+        if not isinstance(group_key, tuple):
+            group_key = (group_key,)
+        identity = dict(zip(identity_columns, group_key))
+        for metric in metric_columns:
+            rows.append({**identity, "metric": metric, **_metric_statistics(group[metric])})
+    return pd.DataFrame(rows)
+
+
+def select_representative_run(paired_df: pd.DataFrame, label: str) -> str:
+    """Select the run nearest the bivariate median of the two headline changes."""
+    headline_metrics = (
+        "diagonal_support_occupancy_delta",
+        "stance_duration_iqr_s_delta",
+    )
+    group = paired_df.loc[paired_df["label"] == label].copy()
+    if group.empty:
+        raise ValueError(f"No paired terrain-adaptation rows found for label {label!r}")
+    missing = [metric for metric in headline_metrics if metric not in group]
+    if missing:
+        raise ValueError(f"Missing representative-run metric columns: {missing}")
+    for metric in headline_metrics:
+        group[metric] = pd.to_numeric(group[metric], errors="coerce")
+    group.dropna(subset=list(headline_metrics), inplace=True)
+    if group.empty:
+        raise ValueError(f"No finite headline terrain-adaptation metrics for label {label!r}")
+
+    squared_distance = np.zeros(len(group), dtype=float)
+    for metric in headline_metrics:
+        values = group[metric].to_numpy(dtype=float)
+        median = float(np.median(values))
+        scale = float(np.percentile(values, 75) - np.percentile(values, 25))
+        if not np.isfinite(scale) or scale == 0.0:
+            scale = 1.0
+        squared_distance += ((values - median) / scale) ** 2
+    group["_representative_distance"] = squared_distance
+    group.sort_values(["_representative_distance", "run_name"], inplace=True)
+    return str(group.iloc[0]["run_name"])
+
+
+def _format_mean_ci(summary_df: pd.DataFrame, label: str, metric: str) -> str:
+    row = summary_df.loc[
+        (summary_df["label"] == label) & (summary_df["metric"] == metric)
+    ]
+    if row.empty or int(row.iloc[0]["n"]) == 0:
+        return "N/A"
+    values = row.iloc[0]
+    if int(values["n"]) == 1 or pd.isna(values["ci95"]):
+        return f"{float(values['mean']):.4f} (n={int(values['n'])})"
+    return (
+        f"{float(values['mean']):.4f} ± {float(values['ci95']):.4f} "
+        f"(95% CI, n={int(values['n'])})"
+    )
+
+
+def _render_terrain_report(
+    paired_df: pd.DataFrame,
+    summary_df: pd.DataFrame,
+    manifest_df: pd.DataFrame,
+    primary_label: str,
+    representative_run: str,
+) -> str:
+    lines = [
+        "# Terrain-Conditioned Gait-Adaptation Report",
+        "",
+        "This analysis tests continuous terrain-conditioned timing modulation around the "
+        "policy's nominal trot. It does not claim discrete gait-family transitions across speed.",
+        "",
+        "The flat and uneven scenarios both command `(vx, vy, yaw) = (1.0, 0.0, 0.0)`. "
+        "Each independently trained run contributes one paired value; individual stance or "
+        "swing events are not treated as independent seeds.",
+        "",
+        "## Rebuttal-facing metrics",
+        "",
+        "- **Diagonal-support occupancy:** fraction of all analyzed control steps in the observed "
+        "`FL+RR` or `FR+RL` contact state. This is a post-hoc statistic, not a prescribed contact pattern.",
+        "- **Stance-duration IQR:** within-run interquartile range of complete stance durations after "
+        "the 1 s warm-up and reset truncation.",
+        "- Supporting exports include swing-duration IQR and maximum swing height above local terrain.",
+        "",
+        f"Representative contact raster for **{primary_label}**: `{representative_run}` "
+        "(selected deterministically as the run nearest the median headline changes).",
+        "",
+        "| Metric | Flat | Uneven | Uneven − flat |",
+        "|---|---:|---:|---:|",
+    ]
+    metric_rows = (
+        ("Diagonal-support occupancy", "diagonal_support_occupancy"),
+        ("Stance-duration IQR (s)", "stance_duration_iqr_s"),
+        ("Swing-duration IQR (s)", "swing_duration_iqr_s"),
+        ("Mean maximum swing height (m)", "mean_swing_height_m"),
+    )
+    for display_name, metric in metric_rows:
+        lines.append(
+            f"| {display_name} | "
+            f"{_format_mean_ci(summary_df, primary_label, metric + '_flat')} | "
+            f"{_format_mean_ci(summary_df, primary_label, metric + '_uneven')} | "
+            f"{_format_mean_ci(summary_df, primary_label, metric + '_delta')} |"
+        )
+
+    lines.extend(["", "## Data quality", ""])
+    analyzed = manifest_df.loc[manifest_df.get("status", pd.Series(dtype=str)) == "analyzed"]
+    lines.append(
+        f"- Analyzed {paired_df.loc[paired_df['label'] == primary_label, 'run_name'].nunique()} "
+        f"paired {primary_label} runs ({len(analyzed)} sources across all labels)."
+    )
+    warnings = manifest_df.loc[
+        manifest_df.get("warning", pd.Series(dtype=str)).astype(str).str.len() > 0,
+        [column for column in ("label", "run_name", "warning") if column in manifest_df],
+    ]
+    if warnings.empty:
+        lines.append("- No source-level warnings.")
+    else:
+        for _, warning in warnings.iterrows():
+            lines.append(
+                f"- {warning.get('label', '')}/{warning.get('run_name', '')}: "
+                f"{warning.get('warning', '')}"
+            )
+    lines.extend(
+        [
+            "",
+            "Contact is reconstructed from resultant foot force strictly greater than 1 N. "
+            "Segments intersecting an analysis boundary are excluded from duration distributions.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _plot_contact_raster(
+    axis: plt.Axes,
+    scenario_row: pd.Series,
+    title: str,
+) -> None:
+    sim_data = _load_sim_data(Path(str(scenario_row["sim_data_path"])))
+    contacts = reconstruct_contact_state(sim_data["contact_forces_array"])
+    labels = _foot_labels_from_sim_data(sim_data)
+    fl, fr, rl, rr = resolve_foot_indices(labels)
+    order = [fl, fr, rl, rr]
+    start = int(scenario_row["analysis_start_step"])
+    end = int(scenario_row["analysis_end_step"])
+    selected_contacts = contacts[start:end, order].T.astype(float)
+    step_dt = _infer_step_dt(sim_data)
+    duration = len(selected_contacts.T) * step_dt
+    axis.pcolormesh(
+        np.arange(selected_contacts.shape[1] + 1, dtype=float) * step_dt,
+        np.arange(selected_contacts.shape[0] + 1, dtype=float) - 0.5,
+        selected_contacts,
+        shading="flat",
+        cmap="Greys",
+        vmin=0.0,
+        vmax=1.0,
+    )
+    axis.set_yticks(range(4))
+    axis.set_yticklabels(["FL", "FR", "RL", "RR"])
+    axis.set_ylim(3.5, -0.5)
+    axis.set_xlim(0.0, max(duration, step_dt))
+    axis.set_ylabel("Foot")
+    axis.set_title(title, loc="left")
+
+
+def _plot_paired_metric(
+    axis: plt.Axes,
+    paired_df: pd.DataFrame,
+    label: str,
+    metric: str,
+    ylabel: str,
+    title: str,
+    grid_alpha: float,
+) -> None:
+    group = paired_df.loc[paired_df["label"] == label].copy()
+    flat_column = f"{metric}_flat"
+    uneven_column = f"{metric}_uneven"
+    group[flat_column] = pd.to_numeric(group[flat_column], errors="coerce")
+    group[uneven_column] = pd.to_numeric(group[uneven_column], errors="coerce")
+    group.dropna(subset=[flat_column, uneven_column], inplace=True)
+    for _, row in group.sort_values("run_name").iterrows():
+        axis.plot(
+            [0.0, 1.0],
+            [row[flat_column], row[uneven_column]],
+            color="0.70",
+            linewidth=0.7,
+            alpha=0.75,
+            zorder=1,
+        )
+        axis.scatter(
+            [0.0, 1.0],
+            [row[flat_column], row[uneven_column]],
+            color="0.45",
+            s=9,
+            alpha=0.75,
+            zorder=2,
+        )
+    means = [float(group[column].mean()) for column in (flat_column, uneven_column)]
+    cis = []
+    for column in (flat_column, uneven_column):
+        stats = _metric_statistics(group[column])
+        cis.append(0.0 if pd.isna(stats["ci95"]) else float(stats["ci95"]))
+    axis.errorbar(
+        [0.0, 1.0],
+        means,
+        yerr=cis,
+        color="#0072B2",
+        marker="o",
+        markersize=4.0,
+        linewidth=1.5,
+        capsize=2.5,
+        zorder=4,
+    )
+    axis.set_xticks([0.0, 1.0], ["Flat", "Uneven"])
+    axis.set_ylabel(ylabel)
+    axis.set_title(title, loc="left")
+    axis.grid(True, axis="y", color="0.82", linewidth=0.5, alpha=grid_alpha)
+    axis.spines["top"].set_visible(False)
+    axis.spines["right"].set_visible(False)
+    if metric == "diagonal_support_occupancy":
+        axis.set_ylim(0.0, 1.0)
+
+
+def _plot_terrain_adaptation(
+    per_scenario_df: pd.DataFrame,
+    paired_df: pd.DataFrame,
+    output_stem: Path,
+    primary_label: str,
+    representative_run: str,
+    export_formats: list[str],
+    figure_width: float,
+    figure_height: float,
+    grid_alpha: float,
+) -> list[Path]:
+    representative = per_scenario_df.loc[
+        (per_scenario_df["label"] == primary_label)
+        & (per_scenario_df["run_name"] == representative_run)
+    ]
+    flat_rows = representative.loc[representative["terrain_condition"] == "flat"]
+    uneven_rows = representative.loc[representative["terrain_condition"] == "uneven"]
+    if flat_rows.empty or uneven_rows.empty:
+        raise ValueError(
+            f"Representative run {representative_run!r} is missing flat or uneven raster data"
+        )
+
+    figure = plt.figure(figsize=(figure_width, figure_height), layout="constrained")
+    grid = figure.add_gridspec(2, 2, width_ratios=(1.35, 1.0))
+    flat_axis = figure.add_subplot(grid[0, 0])
+    uneven_axis = figure.add_subplot(grid[1, 0], sharex=flat_axis)
+    occupancy_axis = figure.add_subplot(grid[0, 1])
+    stance_axis = figure.add_subplot(grid[1, 1])
+    _plot_contact_raster(flat_axis, flat_rows.iloc[0], "(a) Flat, 1.0 m/s")
+    _plot_contact_raster(uneven_axis, uneven_rows.iloc[0], "(b) Uneven, 1.0 m/s")
+    flat_axis.set_xlabel("")
+    flat_axis.tick_params(axis="x", labelbottom=False)
+    uneven_axis.set_xlabel("Time (s)")
+    _plot_paired_metric(
+        occupancy_axis,
+        paired_df,
+        primary_label,
+        "diagonal_support_occupancy",
+        "Diagonal-state occupancy",
+        "(c) Contact-state regularity",
+        grid_alpha,
+    )
+    _plot_paired_metric(
+        stance_axis,
+        paired_df,
+        primary_label,
+        "stance_duration_iqr_s",
+        "Stance-duration IQR (s)",
+        "(d) Contact-timing modulation",
+        grid_alpha,
+    )
+
+    output_paths: list[Path] = []
+    for export_format in export_formats:
+        output_path = output_stem.with_suffix(f".{export_format}")
+        figure.savefig(
+            output_path,
+            dpi=600,
+            bbox_inches="tight",
+            pad_inches=0.02,
+            facecolor="white",
+        )
+        output_paths.append(output_path)
+    plt.close(figure)
+    return output_paths
+
+
+def write_terrain_adaptation_outputs(
+    per_scenario_df: pd.DataFrame,
+    paired_df: pd.DataFrame,
+    manifest_df: pd.DataFrame,
+    output_dir: Path,
+    primary_label: str,
+    export_formats: list[str],
+    figure_width: float,
+    figure_height: float,
+    grid_alpha: float,
+) -> dict[str, str]:
+    """Write terrain-specific artifacts while leaving all existing outputs untouched."""
+    if paired_df.empty:
+        return {}
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    summary_df = aggregate_terrain_adaptation(paired_df)
+    representative_run = select_representative_run(paired_df, primary_label)
+    table_paths = {
+        "per_scenario": output_dir / "terrain_adaptation_per_scenario.csv",
+        "paired": output_dir / "terrain_adaptation_paired.csv",
+        "summary": output_dir / "terrain_adaptation_summary.csv",
+        "manifest": output_dir / "terrain_adaptation_manifest.csv",
+    }
+    per_scenario_df.to_csv(table_paths["per_scenario"], index=False)
+    paired_df.to_csv(table_paths["paired"], index=False)
+    summary_df.to_csv(table_paths["summary"], index=False)
+    manifest_df.to_csv(table_paths["manifest"], index=False)
+
+    report_path = output_dir / "terrain_adaptation_report.md"
+    report_path.write_text(
+        _render_terrain_report(
+            paired_df=paired_df,
+            summary_df=summary_df,
+            manifest_df=manifest_df,
+            primary_label=primary_label,
+            representative_run=representative_run,
+        ),
+        encoding="utf-8",
+    )
+    figure_paths = _plot_terrain_adaptation(
+        per_scenario_df=per_scenario_df,
+        paired_df=paired_df,
+        output_stem=output_dir / "plot_terrain_adaptation",
+        primary_label=primary_label,
+        representative_run=representative_run,
+        export_formats=export_formats,
+        figure_width=figure_width,
+        figure_height=figure_height,
+        grid_alpha=grid_alpha,
+    )
+    paths = {key: str(path) for key, path in table_paths.items()}
+    paths["report"] = str(report_path)
+    for path in figure_paths:
+        paths[f"figure_{path.suffix.lstrip('.')}"] = str(path)
+    return paths

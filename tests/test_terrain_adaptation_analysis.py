@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 
@@ -13,8 +14,11 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 from terrain_adaptation_analysis import (
     TerrainRunSource,
+    aggregate_terrain_adaptation,
     analyze_terrain_sources,
     compute_scenario_contact_metrics,
+    select_representative_run,
+    write_terrain_adaptation_outputs,
 )
 
 
@@ -175,3 +179,97 @@ def test_source_failure_does_not_leave_an_unpaired_scenario_row(tmp_path: Path) 
     assert paired.empty
     assert manifest.iloc[0]["status"] == "skipped"
     assert manifest.iloc[0]["warning"]
+
+
+def _three_run_pairs() -> pd.DataFrame:
+    rows = []
+    for run_name, occupancy_delta, stance_delta in (
+        ("low-run", -0.10, 0.04),
+        ("median-run", -0.15, 0.08),
+        ("high-run", -0.20, 0.12),
+    ):
+        rows.append(
+            {
+                "label": "LEP",
+                "env_name": "env",
+                "run_name": run_name,
+                "diagonal_support_occupancy_flat": 0.75,
+                "diagonal_support_occupancy_uneven": 0.75 + occupancy_delta,
+                "diagonal_support_occupancy_delta": occupancy_delta,
+                "stance_duration_iqr_s_flat": 0.03,
+                "stance_duration_iqr_s_uneven": 0.03 + stance_delta,
+                "stance_duration_iqr_s_delta": stance_delta,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def test_aggregation_uses_one_paired_value_per_trained_run() -> None:
+    summary = aggregate_terrain_adaptation(_three_run_pairs())
+
+    row = summary.loc[
+        summary["metric"] == "diagonal_support_occupancy_delta"
+    ].iloc[0]
+    assert row["n"] == 3
+    assert row["mean"] == pytest.approx(-0.15)
+
+
+def test_representative_run_is_closest_to_median_headline_changes() -> None:
+    assert select_representative_run(_three_run_pairs(), "LEP") == "median-run"
+
+
+def test_output_writer_creates_compact_figure_tables_and_interpretation_report(
+    tmp_path: Path,
+) -> None:
+    flat_contacts = _diagonal_contacts([4] * 8)
+    uneven_contacts = _diagonal_contacts([2, 4, 6, 4, 2, 6, 4, 4])
+    contacts = np.concatenate([flat_contacts, uneven_contacts])
+    sim_data_path = tmp_path / "sim_data.npz"
+    np.savez(sim_data_path, **_make_sim_data(contacts))
+    split = len(flat_contacts)
+    per_scenario = pd.DataFrame(
+        [
+            {
+                "label": "LEP",
+                "run_name": "median-run",
+                "terrain_condition": "flat",
+                "scenario": "walk_x_flat_terrain_1.0mps",
+                "sim_data_path": str(sim_data_path),
+                "analysis_start_step": 0,
+                "analysis_end_step": split,
+            },
+            {
+                "label": "LEP",
+                "run_name": "median-run",
+                "terrain_condition": "uneven",
+                "scenario": "fast_walk_x_uneven_terrain",
+                "sim_data_path": str(sim_data_path),
+                "analysis_start_step": split,
+                "analysis_end_step": len(contacts),
+            },
+        ]
+    )
+    manifest = pd.DataFrame(
+        [{"label": "LEP", "run_name": "median-run", "status": "analyzed", "warning": ""}]
+    )
+
+    paths = write_terrain_adaptation_outputs(
+        per_scenario_df=per_scenario,
+        paired_df=_three_run_pairs(),
+        manifest_df=manifest,
+        output_dir=tmp_path / "outputs",
+        primary_label="LEP",
+        export_formats=["pdf"],
+        figure_width=7.0,
+        figure_height=4.5,
+        grid_alpha=0.3,
+    )
+
+    assert Path(paths["per_scenario"]).is_file()
+    assert Path(paths["summary"]).is_file()
+    assert Path(paths["figure_pdf"]).is_file()
+    report = Path(paths["report"]).read_text(encoding="utf-8")
+    assert "terrain-conditioned timing modulation" in report
+    assert "discrete gait-family transitions" in report
+    assert "Duty factor" not in report
+    assert "conditional on exactly two" not in report
