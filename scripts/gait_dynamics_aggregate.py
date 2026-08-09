@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -11,6 +10,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from evaluation_discovery import (
+    extract_evaluation_metadata,
+    select_preferred_evaluation,
+)
 from rebuttal_report import REBUTTAL_DYNAMICS_SCENARIOS, build_rebuttal_payload
 
 
@@ -101,49 +104,15 @@ PLOT_COLORS = ("#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00")
 
 
 @dataclass(frozen=True)
-class EvaluationMetadata:
-    checkpoint: int | None
-    action_delay_steps: int
-    evaluation_scope: str
-
-
-@dataclass(frozen=True)
 class RebuttalGaitRunData:
     env_name: str
     run_name: str
     checkpoint: int | None
     action_delay_steps: int
     evaluation_scope: str
+    fixed_scenario_count: int
     json_path: Path
     metrics_summary: dict[str, Any]
-
-
-def _extract_checkpoint_with_suffix(path: Path) -> int | None:
-    for part in reversed(path.parts):
-        match = re.match(r"^eval_checkpoint_(\d+)(?:_.*)?$", part)
-        if match:
-            return int(match.group(1))
-    return None
-
-
-def extract_evaluation_metadata(
-    summary: dict[str, Any],
-    json_path: Path,
-) -> EvaluationMetadata:
-    raw_action_delay = summary.get("action_delay_steps")
-    if raw_action_delay is None:
-        path_match = re.search(r"_action_delay_(\d+)(?:_|$)", str(json_path))
-        action_delay_steps = int(path_match.group(1)) if path_match else 0
-    else:
-        action_delay_steps = int(raw_action_delay)
-    evaluation_scope = (
-        "rebuttal_only" if summary.get("rebuttal_scenarios_only") is True else "full"
-    )
-    return EvaluationMetadata(
-        checkpoint=_extract_checkpoint_with_suffix(json_path),
-        action_delay_steps=action_delay_steps,
-        evaluation_scope=evaluation_scope,
-    )
 
 
 def _is_rebuttal_gait_summary(summary: dict[str, Any]) -> bool:
@@ -151,46 +120,14 @@ def _is_rebuttal_gait_summary(summary: dict[str, Any]) -> bool:
     return isinstance(dynamics, dict) and bool(dynamics)
 
 
-def _has_current_evaluation_metadata(entry: RebuttalGaitRunData) -> bool:
-    return "action_delay_steps" in entry.metrics_summary
-
-
 def _choose_preferred_gait_entry(
     key: tuple[str, str],
     entries: list[RebuttalGaitRunData],
 ) -> tuple[RebuttalGaitRunData | None, str | None]:
-    eligible = [
-        entry
-        for entry in entries
-        if entry.action_delay_steps == 0 and entry.checkpoint is not None
-    ]
-    if not eligible:
+    selected = select_preferred_evaluation(entries)
+    if selected is None:
         return None, None
-
-    full_entries = [entry for entry in eligible if entry.evaluation_scope == "full"]
-    preferred_scope = full_entries if full_entries else eligible
-    max_checkpoint = max(
-        entry.checkpoint for entry in preferred_scope if entry.checkpoint is not None
-    )
-    latest = [entry for entry in preferred_scope if entry.checkpoint == max_checkpoint]
-
-    if len(latest) > 1:
-        current = [entry for entry in latest if _has_current_evaluation_metadata(entry)]
-        if current:
-            latest = current
-    if len(latest) != 1:
-        raise ValueError(
-            "Multiple equally preferred gait-dynamics summaries found for "
-            f"env_name={key[0]!r}, run_name={key[1]!r}: "
-            f"{[str(entry.json_path) for entry in latest]}"
-        )
-
-    selected = latest[0]
-    if selected.evaluation_scope == "full":
-        reason = "highest_checkpoint_full_zero_delay"
-    else:
-        reason = "highest_checkpoint_rebuttal_only_fallback"
-    return selected, reason
+    return selected, "checkpoint_scenario_count_delay_path_rank"
 
 
 def discover_rebuttal_gait_dynamics_files(
@@ -231,6 +168,7 @@ def discover_rebuttal_gait_dynamics_files(
                 checkpoint=metadata.checkpoint,
                 action_delay_steps=metadata.action_delay_steps,
                 evaluation_scope=metadata.evaluation_scope,
+                fixed_scenario_count=metadata.fixed_scenario_count,
                 json_path=json_path,
                 metrics_summary=summary,
             )
@@ -243,15 +181,10 @@ def discover_rebuttal_gait_dynamics_files(
                     "eval_seed": summary.get("seed"),
                     "action_delay_steps": metadata.action_delay_steps,
                     "evaluation_scope": metadata.evaluation_scope,
-                    "eligible": metadata.action_delay_steps == 0 and metadata.checkpoint is not None,
+                    "fixed_scenario_count": metadata.fixed_scenario_count,
+                    "eligible": True,
                     "selected": False,
-                    "selection_reason": (
-                        "excluded_nonzero_action_delay"
-                        if metadata.action_delay_steps != 0
-                        else "excluded_unparseable_checkpoint"
-                        if metadata.checkpoint is None
-                        else "not_selected"
-                    ),
+                    "selection_reason": "not_selected",
                     "json_path": str(json_path),
                 }
             )

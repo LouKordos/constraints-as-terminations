@@ -30,13 +30,20 @@ def _make_summary(
     rebuttal_scenarios_only: bool,
     action_delay_steps: int | None,
     include_gait_dynamics: bool = True,
+    scenario_count: int = 1,
+    selected_fixed_scenario: str | None = None,
 ) -> dict[str, Any]:
+    scenario_tags = [f"scenario_{index}" for index in range(scenario_count)]
     summary: dict[str, Any] = {
         "env_name": ENV_NAME,
         "run_name": RUN_NAME,
         "seed": 46,
         "rebuttal_scenarios_only": rebuttal_scenarios_only,
-        "fixed_command_scenarios_metrics": {},
+        "selected_fixed_scenario": selected_fixed_scenario,
+        "fixed_command_scenarios": [
+            [tag, [1.0, 0.0, 0.0], None] for tag in scenario_tags
+        ],
+        "fixed_command_scenarios_metrics": {tag: {} for tag in scenario_tags},
     }
     if action_delay_steps is not None:
         summary["action_delay_steps"] = action_delay_steps
@@ -66,37 +73,53 @@ def test_full_zero_delay_summary_is_selected_for_existing_gait_outputs(tmp_path:
     assert entry.json_path == json_path
     assert entry.evaluation_scope == "full"
     selected_row = manifest.loc[manifest["selected"]].iloc[0]
-    assert selected_row["selection_reason"] == "highest_checkpoint_full_zero_delay"
+    assert selected_row["selection_reason"] == "checkpoint_scenario_count_delay_path_rank"
 
 
-def test_rebuttal_only_is_fallback_and_delayed_eval_is_ineligible(tmp_path: Path) -> None:
-    rebuttal_path = _write_summary(
-        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_0_rebuttal_scenarios",
-        _make_summary(rebuttal_scenarios_only=True, action_delay_steps=0),
-    )
+def test_higher_checkpoint_wins_even_with_fewer_scenarios(tmp_path: Path) -> None:
     _write_summary(
+        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_0_rebuttal_scenarios",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=0,
+            scenario_count=21,
+        ),
+    )
+    newer_path = _write_summary(
         tmp_path / "run" / "eval_checkpoint_101_seed_46_action_delay_1",
-        _make_summary(rebuttal_scenarios_only=False, action_delay_steps=1),
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=1,
+            scenario_count=1,
+            selected_fixed_scenario="scenario_0",
+        ),
     )
 
     selected, manifest = discover_rebuttal_gait_dynamics_files([tmp_path])
 
     entry = selected[(ENV_NAME, RUN_NAME)]
-    assert entry.json_path == rebuttal_path
-    assert entry.evaluation_scope == "rebuttal_only"
-    delayed = manifest.loc[manifest["action_delay_steps"] == 1].iloc[0]
-    assert not bool(delayed["eligible"])
-    assert delayed["selection_reason"] == "excluded_nonzero_action_delay"
+    assert entry.json_path == newer_path
+    assert entry.evaluation_scope == "single_scenario"
+    selected_row = manifest.loc[manifest["selected"]].iloc[0]
+    assert selected_row["checkpoint"] == 101
 
 
-def test_full_scope_is_preferred_before_checkpoint_for_gait_outputs(tmp_path: Path) -> None:
-    full_path = _write_summary(
-        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_0",
-        _make_summary(rebuttal_scenarios_only=False, action_delay_steps=0),
-    )
+def test_more_scenarios_win_at_the_same_checkpoint(tmp_path: Path) -> None:
     _write_summary(
-        tmp_path / "run" / "eval_checkpoint_101_seed_46_action_delay_0_rebuttal_scenarios",
-        _make_summary(rebuttal_scenarios_only=True, action_delay_steps=0),
+        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_0_rebuttal_scenarios",
+        _make_summary(
+            rebuttal_scenarios_only=True,
+            action_delay_steps=0,
+            scenario_count=4,
+        ),
+    )
+    full_path = _write_summary(
+        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_1",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=1,
+            scenario_count=21,
+        ),
     )
 
     selected, _ = discover_rebuttal_gait_dynamics_files([tmp_path])
@@ -104,7 +127,30 @@ def test_full_scope_is_preferred_before_checkpoint_for_gait_outputs(tmp_path: Pa
     assert selected[(ENV_NAME, RUN_NAME)].json_path == full_path
 
 
-def test_general_discovery_accepts_suffixed_paths_and_prefers_current_full_data(
+def test_zero_delay_wins_after_checkpoint_and_scenario_count(tmp_path: Path) -> None:
+    _write_summary(
+        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_2",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=2,
+            scenario_count=21,
+        ),
+    )
+    zero_delay_path = _write_summary(
+        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_0",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=0,
+            scenario_count=21,
+        ),
+    )
+
+    selected, _ = discover_rebuttal_gait_dynamics_files([tmp_path])
+
+    assert selected[(ENV_NAME, RUN_NAME)].json_path == zero_delay_path
+
+
+def test_general_discovery_accepts_suffixed_paths_and_uses_deterministic_path_tiebreak(
     tmp_path: Path,
 ) -> None:
     old_path = _write_summary(
@@ -131,11 +177,15 @@ def test_general_discovery_accepts_suffixed_paths_and_prefers_current_full_data(
         cot_velocity_range=(0.6, 1.6),
     )
 
-    assert selected[(ENV_NAME, RUN_NAME)].json_path == current_path.resolve()
+    assert selected[(ENV_NAME, RUN_NAME)].json_path == old_path.resolve()
     selected_row = manifest.loc[manifest["selected"]].iloc[0]
-    assert selected_row["json_path"] == str(current_path.resolve())
-    assert selected_row["selection_reason"] == "current_schema_tiebreak"
-    assert not bool(manifest.loc[manifest["json_path"] == str(old_path.resolve()), "selected"].item())
+    assert selected_row["json_path"] == str(old_path.resolve())
+    assert selected_row["selection_reason"] == "checkpoint_scenario_count_delay_path_rank"
+    assert not bool(
+        manifest.loc[
+            manifest["json_path"] == str(current_path.resolve()), "selected"
+        ].item()
+    )
 
 
 def test_selected_full_non_rebuttal_eval_becomes_a_terrain_analysis_source(
