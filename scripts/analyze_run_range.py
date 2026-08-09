@@ -26,7 +26,6 @@ import wandb
 
 from gait_dynamics_aggregate import (
     build_rebuttal_per_run_dataframe,
-    discover_rebuttal_gait_dynamics_files,
     filter_rebuttal_runs_for_series,
     write_rebuttal_aggregate_outputs,
 )
@@ -152,12 +151,19 @@ class SeriesData:
     selected_json_run_names: list[str]
 
 
-def build_terrain_run_sources(series_data: dict[str, SeriesData]) -> list[TerrainRunSource]:
+def build_terrain_run_sources(
+    series_data: dict[str, SeriesData],
+    terrain_json_index: dict[tuple[str, str], JsonRunData] | None = None,
+) -> list[TerrainRunSource]:
     """Convert selected general-analysis JSON runs into offline terrain sources."""
     sources: list[TerrainRunSource] = []
     for label, data in series_data.items():
         for run_name in data.selected_json_run_names:
-            json_run = data.json_runs.get(run_name)
+            json_run = (
+                terrain_json_index.get((data.env_name, run_name))
+                if terrain_json_index is not None
+                else data.json_runs.get(run_name)
+            )
             if json_run is None:
                 continue
             sources.append(
@@ -695,11 +701,11 @@ def parse_json_summary(
     return summary
 
 
-def discover_metrics_summary_files(
+def discover_metrics_summary_candidates(
     root_dir: Path | list[Path],
     cot_scenario_pattern: str,
     cot_velocity_range: tuple[float, float],
-) -> tuple[dict[tuple[str, str], JsonRunData], pd.DataFrame]:
+) -> tuple[dict[tuple[str, str], list[JsonRunData]], pd.DataFrame]:
     pattern = re.compile(cot_scenario_pattern)
     candidates: dict[tuple[str, str], list[JsonRunData]] = {}
     manifest_rows: list[dict[str, Any]] = []
@@ -769,48 +775,147 @@ def discover_metrics_summary_files(
             }
         )
 
-    selected: dict[tuple[str, str], JsonRunData] = {}
-
-    for key, entries in sorted(candidates.items()):
-        selected_entry = select_preferred_evaluation(entries)
-        if selected_entry is None:
-            continue
-
-        logging.warning(
-            "Multiple metrics_summary.json files found for env_name=%s, run_name=%s. Using ranked selection: %s",
-            key[0],
-            key[1],
-            selected_entry.json_path,
-        )
-        selected[key] = selected_entry
-
-        selected_path = str(selected_entry.json_path)
-        for row in manifest_rows:
-            if row["json_path"] == selected_path:
-                row["selected"] = True
-                row["selection_reason"] = "checkpoint_scenario_count_delay_path_rank"
-            elif row["env_name"] == key[0] and row["run_name"] == key[1] and row["eligible"]:
-                row["selection_reason"] = "lower_priority_candidate"
-
-    for key, entry in selected.items():
-        selected_path = str(entry.json_path)
-        if any(row["json_path"] == selected_path and row["selected"] for row in manifest_rows):
-            continue
-        for row in manifest_rows:
-            if row["json_path"] == selected_path:
-                row["selected"] = True
-                row["selection_reason"] = "checkpoint_scenario_count_delay_path_rank"
-            elif row["env_name"] == key[0] and row["run_name"] == key[1] and row["eligible"]:
-                row["selection_reason"] = "lower_priority_candidate"
-
     manifest_df = pd.DataFrame(manifest_rows)
     if not manifest_df.empty:
         manifest_df.sort_values(["env_name", "run_name", "checkpoint", "json_path"], inplace=True)
 
     logging.info("Discovered %d usable metrics_summary.json files.", len(manifest_rows))
-    logging.info("Selected %d unique (env_name, run_name) JSON entries after checkpoint resolution.", len(selected))
+    return candidates, manifest_df
 
-    return selected, manifest_df
+
+def select_json_run_candidates(
+    candidates: dict[tuple[str, str], list[JsonRunData]],
+    capability=None,
+) -> dict[tuple[str, str], JsonRunData]:
+    selected: dict[tuple[str, str], JsonRunData] = {}
+    for key, entries in sorted(candidates.items()):
+        eligible = entries if capability is None else [entry for entry in entries if capability(entry)]
+        selected_entry = select_preferred_evaluation(eligible)
+        if selected_entry is not None:
+            selected[key] = selected_entry
+    return selected
+
+
+def _mark_manifest_selection(
+    manifest: pd.DataFrame,
+    selected: dict[tuple[str, str], JsonRunData],
+    column: str,
+) -> pd.DataFrame:
+    marked = manifest.copy()
+    if marked.empty:
+        marked[column] = pd.Series(dtype=bool)
+        return marked
+    selected_paths = {str(entry.json_path) for entry in selected.values()}
+    marked[column] = marked["json_path"].isin(selected_paths)
+    return marked
+
+
+def _has_gait_dynamics_payload(entry: JsonRunData) -> bool:
+    dynamics = entry.metrics_summary.get("fixed_command_scenarios_gait_dynamics_metrics")
+    return isinstance(dynamics, dict) and bool(dynamics)
+
+
+def _scenario_commands(metrics_summary: dict[str, Any]) -> dict[str, tuple[float, float, float]]:
+    commands: dict[str, tuple[float, float, float]] = {}
+    scenarios = metrics_summary.get("fixed_command_scenarios")
+    if not isinstance(scenarios, list):
+        return commands
+    for scenario in scenarios:
+        if not isinstance(scenario, (list, tuple)) or len(scenario) < 2:
+            continue
+        tag, command = scenario[0], scenario[1]
+        if not isinstance(tag, str) or not isinstance(command, (list, tuple)) or len(command) < 3:
+            continue
+        commands[tag] = (float(command[0]), float(command[1]), float(command[2]))
+    return commands
+
+
+def supports_terrain_analysis(
+    entry: JsonRunData,
+    flat_tag: str,
+    uneven_tag: str,
+) -> bool:
+    commands = _scenario_commands(entry.metrics_summary)
+    return (
+        flat_tag in commands
+        and uneven_tag in commands
+        and commands[flat_tag] == commands[uneven_tag]
+        and (entry.json_path.parent / "plots" / "sim_data.npz").is_file()
+    )
+
+
+def discover_consumer_evaluations(
+    root_dir: Path | list[Path],
+    cot_scenario_pattern: str,
+    cot_velocity_range: tuple[float, float],
+    flat_tag: str,
+    uneven_tag: str,
+) -> tuple[
+    dict[tuple[str, str], JsonRunData],
+    dict[tuple[str, str], JsonRunData],
+    dict[tuple[str, str], JsonRunData],
+    pd.DataFrame,
+]:
+    candidates, manifest = discover_metrics_summary_candidates(
+        root_dir=root_dir,
+        cot_scenario_pattern=cot_scenario_pattern,
+        cot_velocity_range=cot_velocity_range,
+    )
+    primary = select_json_run_candidates(candidates)
+    gait = select_json_run_candidates(candidates, capability=_has_gait_dynamics_payload)
+    terrain = select_json_run_candidates(
+        candidates,
+        capability=lambda entry: supports_terrain_analysis(entry, flat_tag, uneven_tag),
+    )
+    flattened = [entry for entries in candidates.values() for entry in entries]
+    gait_capable_paths = {
+        str(entry.json_path) for entry in flattened if _has_gait_dynamics_payload(entry)
+    }
+    terrain_capable_paths = {
+        str(entry.json_path)
+        for entry in flattened
+        if supports_terrain_analysis(entry, flat_tag, uneven_tag)
+    }
+    if not manifest.empty:
+        manifest["gait_capable"] = manifest["json_path"].isin(gait_capable_paths)
+        manifest["terrain_capable"] = manifest["json_path"].isin(terrain_capable_paths)
+    manifest = _mark_manifest_selection(manifest, primary, "selected_primary")
+    manifest = _mark_manifest_selection(manifest, gait, "selected_gait")
+    manifest = _mark_manifest_selection(manifest, terrain, "selected_terrain")
+    manifest["selected"] = manifest["selected_primary"]
+    if not manifest.empty:
+        manifest.loc[manifest["selected_primary"], "selection_reason"] = (
+            "checkpoint_scenario_count_delay_path_rank"
+        )
+        manifest.loc[~manifest["selected_primary"], "selection_reason"] = (
+            "lower_priority_candidate"
+        )
+    return primary, gait, terrain, manifest
+
+
+def discover_metrics_summary_files(
+    root_dir: Path | list[Path],
+    cot_scenario_pattern: str,
+    cot_velocity_range: tuple[float, float],
+) -> tuple[dict[tuple[str, str], JsonRunData], pd.DataFrame]:
+    candidates, manifest = discover_metrics_summary_candidates(
+        root_dir=root_dir,
+        cot_scenario_pattern=cot_scenario_pattern,
+        cot_velocity_range=cot_velocity_range,
+    )
+    selected = select_json_run_candidates(candidates)
+    manifest = _mark_manifest_selection(manifest, selected, "selected")
+    if not manifest.empty:
+        manifest.loc[manifest["selected"], "selection_reason"] = (
+            "checkpoint_scenario_count_delay_path_rank"
+        )
+        manifest.loc[~manifest["selected"], "selection_reason"] = "lower_priority_candidate"
+    logging.info(
+        "Selected %d unique (env_name, run_name) JSON entries after ranked resolution.",
+        len(selected),
+    )
+
+    return selected, manifest
 
 
 def fetch_wandb_runs(
@@ -2488,16 +2593,31 @@ def main() -> None:
             spec.end_dt if spec.end_dt is not None else ALL_TIME_PLACEHOLDER,
         )
 
-    json_index, discovered_json_manifest = discover_metrics_summary_files(
+    (
+        json_index,
+        rebuttal_json_index,
+        terrain_json_index,
+        discovered_json_manifest,
+    ) = discover_consumer_evaluations(
         root_dir=args.metrics_summary_root_dir,
         cot_scenario_pattern=args.cot_scenario_pattern,
         cot_velocity_range=cot_velocity_range,
+        flat_tag=args.step_height_flat_scenario_tag,
+        uneven_tag=args.step_height_uneven_scenario_tag,
     )
     save_dataframe(discovered_json_manifest, output_dir / "discovered_metrics_summary_files.csv")
 
-    rebuttal_json_index, rebuttal_manifest = discover_rebuttal_gait_dynamics_files(
-        args.metrics_summary_root_dir
-    )
+    rebuttal_manifest = discovered_json_manifest.loc[
+        discovered_json_manifest.get("gait_capable", pd.Series(dtype=bool)).astype(bool)
+    ].copy()
+    if not rebuttal_manifest.empty:
+        rebuttal_manifest["selected"] = rebuttal_manifest["selected_gait"]
+        rebuttal_manifest.loc[rebuttal_manifest["selected"], "selection_reason"] = (
+            "checkpoint_scenario_count_delay_path_rank"
+        )
+        rebuttal_manifest.loc[~rebuttal_manifest["selected"], "selection_reason"] = (
+            "lower_priority_candidate"
+        )
     save_dataframe(
         rebuttal_manifest,
         output_dir / "discovered_rebuttal_gait_dynamics_files.csv",
@@ -2863,7 +2983,7 @@ def main() -> None:
             len(rebuttal_paths),
         )
 
-    terrain_sources = build_terrain_run_sources(series_data)
+    terrain_sources = build_terrain_run_sources(series_data, terrain_json_index)
     terrain_per_scenario_df, terrain_paired_df, terrain_manifest_df = analyze_terrain_sources(
         sources=terrain_sources,
         flat_tag=args.step_height_flat_scenario_tag,

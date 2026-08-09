@@ -12,17 +12,23 @@ SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
+import analyze_run_range
 from analyze_run_range import (
     SeriesData,
     build_terrain_run_sources,
     discover_metrics_summary_files,
     extract_checkpoint_from_path,
 )
-from gait_dynamics_aggregate import discover_rebuttal_gait_dynamics_files
+from gait_dynamics_aggregate import (
+    build_rebuttal_per_run_dataframe,
+    discover_rebuttal_gait_dynamics_files,
+)
 
 
 ENV_NAME = "env"
 RUN_NAME = "2026-01-01-00-00-00"
+FLAT_TAG = "walk_x_flat_terrain_1.0mps"
+UNEVEN_TAG = "fast_walk_x_uneven_terrain"
 
 
 def _make_summary(
@@ -32,8 +38,11 @@ def _make_summary(
     include_gait_dynamics: bool = True,
     scenario_count: int = 1,
     selected_fixed_scenario: str | None = None,
+    scenario_tags: list[str] | None = None,
 ) -> dict[str, Any]:
-    scenario_tags = [f"scenario_{index}" for index in range(scenario_count)]
+    resolved_scenario_tags = scenario_tags or [
+        f"scenario_{index}" for index in range(scenario_count)
+    ]
     summary: dict[str, Any] = {
         "env_name": ENV_NAME,
         "run_name": RUN_NAME,
@@ -41,9 +50,11 @@ def _make_summary(
         "rebuttal_scenarios_only": rebuttal_scenarios_only,
         "selected_fixed_scenario": selected_fixed_scenario,
         "fixed_command_scenarios": [
-            [tag, [1.0, 0.0, 0.0], None] for tag in scenario_tags
+            [tag, [1.0, 0.0, 0.0], None] for tag in resolved_scenario_tags
         ],
-        "fixed_command_scenarios_metrics": {tag: {} for tag in scenario_tags},
+        "fixed_command_scenarios_metrics": {
+            tag: {} for tag in resolved_scenario_tags
+        },
     }
     if action_delay_steps is not None:
         summary["action_delay_steps"] = action_delay_steps
@@ -219,3 +230,167 @@ def test_selected_full_non_rebuttal_eval_becomes_a_terrain_analysis_source(
     assert sources[0].label == "LEP"
     assert sources[0].run_name == RUN_NAME
     assert sources[0].json_path == json_run.json_path
+
+
+def _discover_consumers(tmp_path: Path):
+    discover = getattr(analyze_run_range, "discover_consumer_evaluations", None)
+    assert callable(discover), "discover_consumer_evaluations must be implemented"
+    return discover(
+        root_dir=tmp_path,
+        cot_scenario_pattern=r"^cot_(\d+(?:\.\d+)?)$",
+        cot_velocity_range=(0.6, 1.6),
+        flat_tag=FLAT_TAG,
+        uneven_tag=UNEVEN_TAG,
+    )
+
+
+def test_gait_uses_primary_when_primary_contains_gait_payload(tmp_path: Path) -> None:
+    primary_path = _write_summary(
+        tmp_path / "run" / "eval_checkpoint_101_seed_46_action_delay_0",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=0,
+            include_gait_dynamics=True,
+            scenario_count=21,
+        ),
+    )
+    _write_summary(
+        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_0",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=0,
+            include_gait_dynamics=True,
+            scenario_count=21,
+        ),
+    )
+
+    primary, gait, _, _ = _discover_consumers(tmp_path)
+
+    key = (ENV_NAME, RUN_NAME)
+    assert primary[key].json_path == primary_path.resolve()
+    assert gait[key].json_path == primary[key].json_path
+
+
+def test_gait_uses_highest_ranked_capable_fallback(tmp_path: Path) -> None:
+    primary_path = _write_summary(
+        tmp_path / "run" / "eval_checkpoint_101_seed_46_action_delay_0_scenario_scenario_0",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=0,
+            include_gait_dynamics=False,
+            scenario_count=1,
+            selected_fixed_scenario="scenario_0",
+        ),
+    )
+    fallback_path = _write_summary(
+        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_0",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=0,
+            include_gait_dynamics=True,
+            scenario_count=21,
+        ),
+    )
+
+    primary, gait, _, _ = _discover_consumers(tmp_path)
+
+    key = (ENV_NAME, RUN_NAME)
+    assert primary[key].json_path == primary_path.resolve()
+    assert gait[key].json_path == fallback_path.resolve()
+
+
+def test_terrain_uses_highest_ranked_candidate_with_pair_and_arrays(
+    tmp_path: Path,
+) -> None:
+    primary_path = _write_summary(
+        tmp_path / "run" / "eval_checkpoint_101_seed_46_action_delay_0_scenario_scenario_0",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=0,
+            scenario_count=1,
+            selected_fixed_scenario="scenario_0",
+        ),
+    )
+    fallback_path = _write_summary(
+        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_1",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=1,
+            scenario_tags=[FLAT_TAG, UNEVEN_TAG],
+        ),
+    )
+    plots_dir = fallback_path.parent / "plots"
+    plots_dir.mkdir()
+    (plots_dir / "sim_data.npz").write_bytes(b"saved-array-placeholder")
+
+    primary, _, terrain, _ = _discover_consumers(tmp_path)
+
+    key = (ENV_NAME, RUN_NAME)
+    assert primary[key].json_path == primary_path.resolve()
+    assert terrain[key].json_path == fallback_path.resolve()
+
+
+def test_terrain_sources_use_capable_fallback_for_selected_run(tmp_path: Path) -> None:
+    _write_summary(
+        tmp_path / "run" / "eval_checkpoint_101_seed_46_action_delay_0_scenario_scenario_0",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=0,
+            scenario_count=1,
+            selected_fixed_scenario="scenario_0",
+        ),
+    )
+    fallback_path = _write_summary(
+        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_0",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=0,
+            scenario_tags=[FLAT_TAG, UNEVEN_TAG],
+        ),
+    )
+    plots_dir = fallback_path.parent / "plots"
+    plots_dir.mkdir()
+    (plots_dir / "sim_data.npz").write_bytes(b"saved-array-placeholder")
+    primary, _, terrain, _ = _discover_consumers(tmp_path)
+    primary_run = primary[(ENV_NAME, RUN_NAME)]
+    series_data = {
+        "LEP": SeriesData(
+            label="LEP",
+            env_name=ENV_NAME,
+            wandb_path=ENV_NAME,
+            wandb_runs={},
+            json_runs={RUN_NAME: primary_run},
+            selected_wandb_run_names=[],
+            selected_json_run_names=[RUN_NAME],
+        )
+    }
+
+    try:
+        sources = build_terrain_run_sources(series_data, terrain)
+    except TypeError as exception:
+        pytest.fail(f"build_terrain_run_sources must accept fallback index: {exception}")
+
+    assert len(sources) == 1
+    assert sources[0].json_path == fallback_path.resolve()
+
+
+def test_gait_dataframe_accepts_unified_json_run_selection(tmp_path: Path) -> None:
+    _write_summary(
+        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_0",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=0,
+            include_gait_dynamics=True,
+            scenario_tags=[FLAT_TAG, UNEVEN_TAG],
+        ),
+    )
+    _, gait, _, _ = _discover_consumers(tmp_path)
+    gait_run = gait[(ENV_NAME, RUN_NAME)]
+
+    try:
+        dataframe = build_rebuttal_per_run_dataframe({"LEP": {RUN_NAME: gait_run}})
+    except AttributeError as exception:
+        pytest.fail(f"gait aggregation must accept unified selected entries: {exception}")
+
+    assert len(dataframe) == 1
+    assert dataframe.iloc[0]["json_path"] == str(gait_run.json_path)

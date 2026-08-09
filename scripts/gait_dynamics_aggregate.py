@@ -232,14 +232,14 @@ def filter_rebuttal_runs_for_series(
     return selected
 
 
-def _summary_from_entry(entry: RebuttalGaitRunData | dict[str, Any]) -> tuple[dict[str, Any], Any, Any]:
-    if isinstance(entry, RebuttalGaitRunData):
+def _summary_from_entry(entry: Any) -> tuple[dict[str, Any], Any, Any]:
+    if hasattr(entry, "metrics_summary"):
         return entry.metrics_summary, entry.checkpoint, str(entry.json_path)
     return entry, entry.get("checkpoint"), entry.get("json_path")
 
 
 def build_rebuttal_per_run_dataframe(
-    series_runs: dict[str, dict[str, RebuttalGaitRunData | dict[str, Any]]],
+    series_runs: dict[str, dict[str, Any]],
 ) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     scenario_order = {scenario: index for index, scenario in enumerate(REBUTTAL_DYNAMICS_SCENARIOS)}
