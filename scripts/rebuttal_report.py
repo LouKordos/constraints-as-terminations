@@ -14,6 +14,7 @@ REBUTTAL_DYNAMICS_SCENARIOS = (
     "fast_walk_stairs_up",
     "medium_walk_diagonal_turning_uneven_terrain",
     "fast_walk_diagonal_uneven_terrain",
+    "fast_walk_x_uneven_terrain"
 )
 
 REPORT_PLOT_FILENAMES = (
