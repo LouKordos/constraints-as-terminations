@@ -918,6 +918,84 @@ def discover_metrics_summary_files(
     return selected, manifest
 
 
+def build_evaluation_audit_messages(
+    discovery_manifest: pd.DataFrame,
+    primary_index: dict[tuple[str, str], JsonRunData],
+    gait_index: dict[tuple[str, str], JsonRunData],
+    terrain_index: dict[tuple[str, str], JsonRunData],
+    terrain_manifest: pd.DataFrame,
+) -> list[str]:
+    messages: list[str] = []
+    if not discovery_manifest.empty:
+        for (env_name, run_name), group in discovery_manifest.groupby(
+            ["env_name", "run_name"], sort=True
+        ):
+            if len(group) <= 1:
+                continue
+            primary = primary_index.get((str(env_name), str(run_name)))
+            selected_description = (
+                "none"
+                if primary is None
+                else (
+                    f"{primary.json_path} (checkpoint={primary.checkpoint}, "
+                    f"scenarios={primary.fixed_scenario_count}, "
+                    f"delay={primary.action_delay_steps})"
+                )
+            )
+            messages.append(
+                f"{env_name}/{run_name}: multiple evaluation candidates ({len(group)}); "
+                f"primary={selected_description}. Ranking is checkpoint, scenario count, "
+                "zero delay, then path."
+            )
+
+    consumer_indexes = {
+        "primary": primary_index,
+        "gait-dynamics": gait_index,
+        "terrain-adaptation": terrain_index,
+    }
+    delayed_consumers: dict[tuple[str, str, str, int], list[str]] = {}
+    for consumer, index in consumer_indexes.items():
+        for (env_name, run_name), entry in index.items():
+            if entry.action_delay_steps <= 0:
+                continue
+            delay_key = (
+                env_name,
+                run_name,
+                str(entry.json_path),
+                entry.action_delay_steps,
+            )
+            delayed_consumers.setdefault(delay_key, []).append(consumer)
+    for (env_name, run_name, json_path, delay), consumers in sorted(
+        delayed_consumers.items()
+    ):
+        messages.append(
+            f"{env_name}/{run_name}: selected for {', '.join(consumers)} with action "
+            f"delay {delay}: {json_path}."
+        )
+
+    for consumer, index in (
+        ("gait-dynamics", gait_index),
+        ("terrain-adaptation", terrain_index),
+    ):
+        for key, entry in sorted(index.items()):
+            primary = primary_index.get(key)
+            if primary is None or entry.json_path == primary.json_path:
+                continue
+            messages.append(
+                f"{key[0]}/{key[1]}: {consumer} fallback uses {entry.json_path} instead "
+                f"of primary {primary.json_path}."
+            )
+
+    if not terrain_manifest.empty and "status" in terrain_manifest:
+        skipped = terrain_manifest.loc[terrain_manifest["status"] != "analyzed"]
+        for _, row in skipped.iterrows():
+            messages.append(
+                f"{row.get('env_name', '')}/{row.get('run_name', '')}: terrain-adaptation "
+                f"source skipped: {row.get('warning', 'unspecified reason')}."
+            )
+    return messages
+
+
 def fetch_wandb_runs(
     wandb_path: str,
     start_dt: datetime | None,
@@ -3021,6 +3099,23 @@ def main() -> None:
             "Wrote terrain-adaptation outputs for %d paired trained runs (%d artifacts).",
             len(terrain_paired_df),
             len(terrain_paths),
+        )
+
+    audit_messages = build_evaluation_audit_messages(
+        discovery_manifest=discovered_json_manifest,
+        primary_index=json_index,
+        gait_index=rebuttal_json_index,
+        terrain_index=terrain_json_index,
+        terrain_manifest=terrain_manifest_df,
+    )
+    if audit_messages:
+        logging.warning(
+            "Evaluation selection audit:\n%s",
+            "\n".join(f"- {message}" for message in audit_messages),
+        )
+    else:
+        logging.info(
+            "Evaluation selection audit: no duplicate, delay, fallback, or terrain-skip warnings."
         )
 
     logging.info("Finished. Outputs written to: %s", output_dir)

@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 
 
@@ -394,3 +395,78 @@ def test_gait_dataframe_accepts_unified_json_run_selection(tmp_path: Path) -> No
 
     assert len(dataframe) == 1
     assert dataframe.iloc[0]["json_path"] == str(gait_run.json_path)
+
+
+def test_audit_reports_duplicates_delayed_primary_and_consumer_fallbacks(
+    tmp_path: Path,
+) -> None:
+    primary_path = _write_summary(
+        tmp_path / "run" / "eval_checkpoint_101_seed_46_action_delay_1_scenario_scenario_0",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=1,
+            include_gait_dynamics=False,
+            scenario_count=1,
+            selected_fixed_scenario="scenario_0",
+        ),
+    )
+    fallback_path = _write_summary(
+        tmp_path / "run" / "eval_checkpoint_100_seed_46_action_delay_0",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=0,
+            include_gait_dynamics=True,
+            scenario_tags=[FLAT_TAG, UNEVEN_TAG],
+        ),
+    )
+    plots_dir = fallback_path.parent / "plots"
+    plots_dir.mkdir()
+    (plots_dir / "sim_data.npz").write_bytes(b"saved-array-placeholder")
+    primary, gait, terrain, manifest = _discover_consumers(tmp_path)
+    build_messages = getattr(
+        analyze_run_range, "build_evaluation_audit_messages", None
+    )
+    assert callable(build_messages), "build_evaluation_audit_messages must be implemented"
+
+    messages = build_messages(
+        discovery_manifest=manifest,
+        primary_index=primary,
+        gait_index=gait,
+        terrain_index=terrain,
+        terrain_manifest=pd.DataFrame(),
+    )
+    joined = "\n".join(messages)
+
+    assert "multiple evaluation candidates" in joined
+    assert str(primary_path.resolve()) in joined
+    assert "action delay 1" in joined
+    assert "gait-dynamics fallback" in joined
+    assert "terrain-adaptation fallback" in joined
+
+
+def test_audit_reports_selected_delayed_eval_without_excluding_it(tmp_path: Path) -> None:
+    delayed_path = _write_summary(
+        tmp_path / "run" / "eval_checkpoint_101_seed_46_action_delay_2",
+        _make_summary(
+            rebuttal_scenarios_only=False,
+            action_delay_steps=2,
+            include_gait_dynamics=True,
+            scenario_count=21,
+        ),
+    )
+    primary, gait, terrain, manifest = _discover_consumers(tmp_path)
+    build_messages = getattr(
+        analyze_run_range, "build_evaluation_audit_messages", None
+    )
+    assert callable(build_messages), "build_evaluation_audit_messages must be implemented"
+
+    messages = build_messages(
+        discovery_manifest=manifest,
+        primary_index=primary,
+        gait_index=gait,
+        terrain_index=terrain,
+        terrain_manifest=pd.DataFrame(),
+    )
+
+    assert primary[(ENV_NAME, RUN_NAME)].json_path == delayed_path.resolve()
+    assert any("action delay 2" in message for message in messages)

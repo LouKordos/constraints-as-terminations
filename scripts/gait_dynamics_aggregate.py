@@ -22,6 +22,7 @@ SCENARIO_DISPLAY_NAMES = {
     "fast_walk_stairs_up": "Stairs up",
     "medium_walk_diagonal_turning_uneven_terrain": "Diagonal + turn",
     "fast_walk_diagonal_uneven_terrain": "Fast diagonal",
+    "fast_walk_x_uneven_terrain": "Uneven 1.0 m/s",
 }
 
 AGGREGATE_METRICS = (
@@ -358,13 +359,15 @@ def _render_aggregate_report(
     per_scenario_df: pd.DataFrame,
     overall_df: pd.DataFrame,
 ) -> str:
+    configured_scenario_count = len(REBUTTAL_DYNAMICS_SCENARIOS)
     lines = [
         "# Aggregate Rebuttal Gait-Dynamics Report",
         "",
         "## Seed-level aggregation",
         "",
         "Each timestamped training run is one independent seed. Metrics are first reduced to one "
-        "value per run and scenario. Overall values average the four scenarios within each run "
+        f"value per run and scenario. Overall values average the available values from the "
+        f"{configured_scenario_count} configured scenarios within each run "
         "before computing the across-run mean and 95% confidence interval.",
         "",
     ]
@@ -431,12 +434,27 @@ def _render_aggregate_report(
 
     lines.extend(["## Data-quality warnings", ""])
     warnings: list[str] = []
-    expected_runs = len(per_run_df[["label", "run_name"]].drop_duplicates())
-    expected_rows = expected_runs * len(REBUTTAL_DYNAMICS_SCENARIOS)
-    if len(per_run_df) != expected_rows:
-        warnings.append(
-            f"Expected {expected_rows} run-scenario rows but found {len(per_run_df)}; at least one scenario is missing."
-        )
+    expected_scenarios = set(REBUTTAL_DYNAMICS_SCENARIOS)
+    for (label, run_name), group in per_run_df.groupby(
+        ["label", "run_name"], sort=True
+    ):
+        observed_scenarios = set(group["scenario"].astype(str))
+        missing_scenarios = [
+            scenario
+            for scenario in REBUTTAL_DYNAMICS_SCENARIOS
+            if scenario not in observed_scenarios
+        ]
+        if missing_scenarios:
+            warnings.append(
+                f"{label}/{run_name} is missing configured gait scenario(s): "
+                f"{', '.join(missing_scenarios)}."
+            )
+        unexpected_scenarios = sorted(observed_scenarios - expected_scenarios)
+        if unexpected_scenarios:
+            warnings.append(
+                f"{label}/{run_name} contains unconfigured gait scenario(s): "
+                f"{', '.join(unexpected_scenarios)}."
+            )
     incomplete = per_run_df[per_run_df["completion_percent"] < 100.0]
     if not incomplete.empty:
         warnings.append(f"{len(incomplete)} run-scenario evaluations reset before scenario completion.")
