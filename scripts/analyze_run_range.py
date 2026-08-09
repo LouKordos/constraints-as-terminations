@@ -74,8 +74,12 @@ DEFAULT_SUMMARY_LABEL_MAP = {
     "Episode/MaxAirTime": "Final Max Air Time",
     "Episode/EnergyConsumed": "Final Energy Consumed",
     "mean_cost_of_transport_range": "Mean Cost of Transport (velocity range)",
-    "violation_torque": "Max Constraint Violation (Torque %)",
-    "violation_accel": "Max Constraint Violation (Acceleration %)",
+    "max_constraint_violation_normalized_percent": "Max Normalized Constraint Excess (%)",
+    "max_constraint_violation_frequency_percent": "Max Constraint Exceedance Frequency (%)",
+    "violation_torque_raw_excess": "Max Raw Joint Torque Excess (N·m)",
+    "violation_accel_raw_excess": "Max Raw Joint Acceleration Excess (rad/s²)",
+    "violation_torque": "Max Joint Torque Exceedance Frequency (%)",
+    "violation_accel": "Max Joint Acceleration Exceedance Frequency (%)",
     "rms_error_x": "Base Velocity RMS Error (X)",
     "rms_error_y": "Base Velocity RMS Error (Y)",
     "rms_error_xy_mean": "Mean Base Velocity RMS Error (X,Y)",
@@ -85,6 +89,10 @@ SUMMARY_STATISTICS_METRIC_ORDER = [
     "Curriculum/terrain_levels",
     "rms_error_xy_mean",
     "mean_cost_of_transport_range",
+    "max_constraint_violation_normalized_percent",
+    "max_constraint_violation_frequency_percent",
+    "violation_torque_raw_excess",
+    "violation_accel_raw_excess",
     "violation_torque",
     "violation_accel",
 ]
@@ -664,6 +672,46 @@ def parse_cot_dataframe(metrics_summary: dict[str, Any], cot_scenario_pattern: r
     return df
 
 
+def _maximum_numeric_leaf(value: Any) -> float:
+    values: list[float] = []
+
+    def visit(candidate: Any) -> None:
+        if isinstance(candidate, dict):
+            for child in candidate.values():
+                visit(child)
+        elif isinstance(candidate, (list, tuple)):
+            for child in candidate:
+                visit(child)
+        elif isinstance(candidate, (int, float, np.integer, np.floating)) and not isinstance(
+            candidate, (bool, np.bool_)
+        ):
+            numeric = float(candidate)
+            if np.isfinite(numeric):
+                values.append(numeric)
+
+    visit(value)
+    return max(values) if values else np.nan
+
+
+def _constraint_aggregate_max_excess(
+    violation_magnitudes: Any,
+    constraint: str,
+) -> float:
+    if not isinstance(violation_magnitudes, dict):
+        return np.nan
+    constraint_summary = violation_magnitudes.get(constraint)
+    if not isinstance(constraint_summary, dict):
+        return np.nan
+    aggregate = constraint_summary.get("aggregate")
+    if not isinstance(aggregate, dict):
+        return np.nan
+    value = aggregate.get("max_excess")
+    if not isinstance(value, (int, float, np.integer, np.floating)):
+        return np.nan
+    numeric = float(value)
+    return numeric if np.isfinite(numeric) else np.nan
+
+
 def parse_json_summary(
     metrics_summary: dict[str, Any],
     cot_velocity_range: tuple[float, float],
@@ -687,6 +735,42 @@ def parse_json_summary(
         summary["violation_accel"] = max(accel_dict.values())
     else:
         summary["violation_accel"] = np.nan
+
+    summary["max_constraint_violation_frequency_percent"] = _maximum_numeric_leaf(violations)
+
+    violation_magnitudes = metrics_summary.get("constraint_violation_magnitudes")
+    summary["violation_torque_raw_excess"] = _constraint_aggregate_max_excess(
+        violation_magnitudes,
+        "joint_torque",
+    )
+    summary["violation_accel_raw_excess"] = _constraint_aggregate_max_excess(
+        violation_magnitudes,
+        "joint_acceleration",
+    )
+
+    maximum_violation = metrics_summary.get("maximum_constraint_violation")
+    if isinstance(maximum_violation, dict):
+        normalized_excess = maximum_violation.get("normalized_excess_percent")
+        summary["max_constraint_violation_normalized_percent"] = (
+            float(normalized_excess)
+            if isinstance(normalized_excess, (int, float, np.integer, np.floating))
+            and np.isfinite(normalized_excess)
+            else np.nan
+        )
+        constraint = maximum_violation.get("constraint")
+        summary["max_constraint_violation_constraint"] = (
+            str(constraint) if constraint is not None else "unknown"
+        )
+        element = maximum_violation.get("element")
+        summary["max_constraint_violation_element"] = (
+            str(element) if element is not None else None
+        )
+    else:
+        summary["max_constraint_violation_normalized_percent"] = np.nan
+        summary["max_constraint_violation_constraint"] = (
+            "no violation" if isinstance(violation_magnitudes, dict) else None
+        )
+        summary["max_constraint_violation_element"] = None
 
     min_vel, max_vel = cot_velocity_range
     if cot_df is None or cot_df.empty:
@@ -1173,6 +1257,30 @@ def format_summary_value(mean: float, ci95: float, n: int) -> str:
     return f"{mean:.6f} ± {ci95:.6f} (95% CI, n={int(n)})"
 
 
+def format_constraint_source_counts(per_run_df: pd.DataFrame, label: str) -> str:
+    required_columns = {
+        "label",
+        "selected_for_local_json",
+        "max_constraint_violation_constraint",
+    }
+    if per_run_df.empty or not required_columns.issubset(per_run_df.columns):
+        return "Not available"
+
+    selected = per_run_df.loc[
+        (per_run_df["label"] == label)
+        & per_run_df["selected_for_local_json"].fillna(False).astype(bool)
+    ]
+    if selected.empty:
+        return "Not available"
+
+    sources = selected["max_constraint_violation_constraint"].copy()
+    sources = sources.where(sources.notna(), "unavailable").astype(str)
+    counts = sources.value_counts(sort=False)
+    ordered_sources = sorted(counts.index, key=lambda source: (source == "unavailable", source))
+    total = len(selected)
+    return "; ".join(f"{source}: {int(counts[source])}/{total}" for source in ordered_sources)
+
+
 def compute_wandb_metric_summary_from_history(
     history: pd.DataFrame,
     summary_wandb_metrics: list[str],
@@ -1538,6 +1646,7 @@ def save_text_summary(
     truncate_wandb_timeseries_to_shortest_run: bool,
     wandb_timeseries_truncation_iteration: int | None,
     plot_style: str,
+    per_run_df: pd.DataFrame | None = None,
 ) -> None:
     lines: list[str] = []
     lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -1629,6 +1738,12 @@ def save_text_summary(
                             )
                 else:
                     lines.append(f"  [{source}] {display_name}: {final_value_text}")
+
+            if per_run_df is not None:
+                lines.append(
+                    "  [local_json] Constraint producing maximum normalized excess: "
+                    f"{format_constraint_source_counts(per_run_df, label)}"
+                )
 
             lines.append("")
 
@@ -2844,6 +2959,10 @@ def main() -> None:
 
     summary_json_metrics = [
         "mean_cost_of_transport_range",
+        "max_constraint_violation_normalized_percent",
+        "max_constraint_violation_frequency_percent",
+        "violation_torque_raw_excess",
+        "violation_accel_raw_excess",
         "violation_torque",
         "violation_accel",
         "rms_error_x",
@@ -2867,6 +2986,7 @@ def main() -> None:
         truncate_wandb_timeseries_to_shortest_run=args.truncate_wandb_timeseries_to_shortest_run,
         wandb_timeseries_truncation_iteration=wandb_timeseries_truncation_iteration,
         plot_style=args.plot_style,
+        per_run_df=per_run_df,
     )
 
     for metric_name in ([] if args.skip_wandb else args.wandb_metrics):
