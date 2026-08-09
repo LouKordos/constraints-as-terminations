@@ -3185,7 +3185,7 @@ def _plot_rebuttal_base_excitation_summary(
     valid_mask: np.ndarray,
     output_dir: str,
 ) -> str:
-    """Plot compact RMS/p95 base-excitation statistics used in the report."""
+    """Plot compact RMS/mean-absolute/p95 base-excitation statistics used in the report."""
     linear_velocity = np.asarray(linear_velocity_world, dtype=float)
     angular_velocity = np.asarray(angular_velocity_body, dtype=float)
     linear_acceleration = np.asarray(linear_acceleration_world, dtype=float)
@@ -3200,18 +3200,21 @@ def _plot_rebuttal_base_excitation_summary(
         angular_acceleration[:, 1],
     ]
     rms_values = []
+    mean_abs_values = []
     p95_values = []
     for values in series:
         selected = np.asarray(values[mask], dtype=float)
         selected = selected[np.isfinite(selected)]
         rms_values.append(float(np.sqrt(np.mean(selected ** 2))) if selected.size else np.nan)
+        mean_abs_values.append(float(np.mean(np.abs(selected))) if selected.size else np.nan)
         p95_values.append(float(np.percentile(np.abs(selected), 95)) if selected.size else np.nan)
 
     x = np.arange(len(names))
-    width = 0.38
+    width = 0.25
     fig, ax = plt.subplots(figsize=(8.0, 4.5))
-    ax.bar(x - width / 2.0, rms_values, width, label="RMS", color="C0")
-    ax.bar(x + width / 2.0, p95_values, width, label="absolute p95", color="C1")
+    ax.bar(x - width, rms_values, width, label="RMS", color="C0")
+    ax.bar(x, mean_abs_values, width, label="mean absolute", color="C2")
+    ax.bar(x + width, p95_values, width, label="absolute p95", color="C1")
     ax.set_xticks(x)
     ax.set_xticklabels(names)
     ax.set_ylabel("Magnitude (native axis units)")

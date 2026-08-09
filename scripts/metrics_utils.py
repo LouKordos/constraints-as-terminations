@@ -389,6 +389,7 @@ def compute_gait_dynamics_metrics(
 
     gravity = 9.81
     vertical_acceleration_g = linear_acceleration_world[:, 2] / gravity
+    vertical_acceleration_summary = summarize_dynamics(vertical_acceleration_g)
     joint_demand = {
         "joint_acceleration": summarize_dynamics(selected("joint_accelerations")),
         "joint_velocity": summarize_dynamics(selected("joint_velocities")),
@@ -402,11 +403,15 @@ def compute_gait_dynamics_metrics(
         "support_dynamics": support_dynamics,
         "base_excitation": {
             "vertical_velocity_rms_m_s": linear_velocity_summary["z"]["rms"],
-            "vertical_acceleration_rms_g": summarize_dynamics(vertical_acceleration_g)["rms"],
-            "vertical_acceleration_abs_p95_g": summarize_dynamics(vertical_acceleration_g)["abs_p95"],
-            "vertical_acceleration_abs_p99_g": summarize_dynamics(vertical_acceleration_g)["abs_p99"],
+            "vertical_velocity_mean_abs_m_s": linear_velocity_summary["z"]["mean_abs"],
+            "vertical_acceleration_rms_g": vertical_acceleration_summary["rms"],
+            "vertical_acceleration_mean_abs_g": vertical_acceleration_summary["mean_abs"],
+            "vertical_acceleration_abs_p95_g": vertical_acceleration_summary["abs_p95"],
+            "vertical_acceleration_abs_p99_g": vertical_acceleration_summary["abs_p99"],
             "pitch_rate_rms_rad_s": angular_velocity_summary["y"]["rms"],
+            "pitch_rate_mean_abs_rad_s": angular_velocity_summary["y"]["mean_abs"],
             "pitch_acceleration_rms_rad_s2": angular_acceleration_summary["y"]["rms"],
+            "pitch_acceleration_mean_abs_rad_s2": angular_acceleration_summary["y"]["mean_abs"],
             "linear_velocity_world": linear_velocity_summary,
             "angular_velocity_body": angular_velocity_summary,
             "linear_acceleration_world": linear_acceleration_summary,
@@ -538,9 +543,15 @@ def compute_summary_metrics(
         cost_of_transport = None
 
     # ---------- tracking / heading errors ---------------------------------
-    linear_vel_x_rms = np.sqrt(np.mean((commanded_velocity[:, 0] - base_linear_velocity_body[:, 0])**2))
-    linear_vel_y_rms = np.sqrt(np.mean((commanded_velocity[:, 1] - base_linear_velocity_body[:, 1])**2))
-    yaw_rms = np.sqrt(np.mean((commanded_velocity[:, 2] - base_angular_velocity_body[:, 2])**2))
+    linear_vel_x_error = commanded_velocity[:, 0] - base_linear_velocity_body[:, 0]
+    linear_vel_y_error = commanded_velocity[:, 1] - base_linear_velocity_body[:, 1]
+    yaw_error = commanded_velocity[:, 2] - base_angular_velocity_body[:, 2]
+    linear_vel_x_rms = np.sqrt(np.mean(linear_vel_x_error**2))
+    linear_vel_y_rms = np.sqrt(np.mean(linear_vel_y_error**2))
+    yaw_rms = np.sqrt(np.mean(yaw_error**2))
+    linear_vel_x_mean_abs = np.mean(np.abs(linear_vel_x_error))
+    linear_vel_y_mean_abs = np.mean(np.abs(linear_vel_y_error))
+    yaw_mean_abs = np.mean(np.abs(yaw_error))
 
     # ---------- constraint violations ------------------------------------
     violations = {}
@@ -651,8 +662,11 @@ def compute_summary_metrics(
             if cost_of_transport is not None else None
         ),
         "base_linear_velocity_x_rms_error": float(linear_vel_x_rms),
+        "base_linear_velocity_x_mean_abs_error": float(linear_vel_x_mean_abs),
         "base_linear_velocity_y_rms_error": float(linear_vel_y_rms),
+        "base_linear_velocity_y_mean_abs_error": float(linear_vel_y_mean_abs),
         "base_angular_velocity_z_rms_error": float(yaw_rms),
+        "base_angular_velocity_z_mean_abs_error": float(yaw_mean_abs),
         "per_joint_summary": per_joint_summary,
         "swing_duration_summary": swing_duration_summary,
         "stance_duration_summary": stance_duration_summary,

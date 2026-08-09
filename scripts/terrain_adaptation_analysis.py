@@ -24,6 +24,7 @@ PAIRED_METRICS = (
     "swing_duration_iqr_s",
     "mean_swing_height_m",
     "planar_velocity_rmse_m_s",
+    "planar_velocity_mae_m_s",
     "analyzed_duration_s",
 )
 
@@ -184,6 +185,7 @@ def compute_scenario_contact_metrics(
     ]
 
     planar_velocity_rmse = None
+    planar_velocity_mae = None
     if "base_linear_velocity_array" in sim_data and "commanded_velocity_array" in sim_data:
         measured = np.asarray(sim_data["base_linear_velocity_array"], dtype=float)[selection, :2]
         commanded = np.asarray(sim_data["commanded_velocity_array"], dtype=float)[selection, :2]
@@ -193,7 +195,9 @@ def compute_scenario_contact_metrics(
                 f"planar shapes, got {measured.shape} and {commanded.shape}"
             )
         if measured.size:
-            planar_velocity_rmse = float(np.sqrt(np.mean(np.sum((measured - commanded) ** 2, axis=1))))
+            planar_error_magnitude = np.linalg.norm(measured - commanded, axis=1)
+            planar_velocity_rmse = float(np.sqrt(np.mean(planar_error_magnitude**2)))
+            planar_velocity_mae = float(np.mean(planar_error_magnitude))
 
     return {
         "diagonal_support_occupancy": diagonal_support_occupancy,
@@ -201,6 +205,7 @@ def compute_scenario_contact_metrics(
         "swing_duration_iqr_s": _iqr_or_none(swing_durations),
         "mean_swing_height_m": _mean_or_none(swing_heights),
         "planar_velocity_rmse_m_s": planar_velocity_rmse,
+        "planar_velocity_mae_m_s": planar_velocity_mae,
         "stance_event_count": len(stance_durations),
         "swing_event_count": len(swing_durations),
         "swing_height_event_count": len(swing_heights),
@@ -540,7 +545,8 @@ def _render_terrain_report(
         "`FL+RR` or `FR+RL` contact state. This is a post-hoc statistic, not a prescribed contact pattern.",
         "- **Stance-duration IQR:** within-run interquartile range of complete stance durations after "
         "the 1 s warm-up and reset truncation.",
-        "- Supporting exports include swing-duration IQR and maximum swing height above local terrain.",
+        "- Supporting exports include swing-duration IQR, maximum swing height above local terrain, "
+        "and planar velocity RMSE and MAE.",
         "",
         f"Representative contact raster for **{primary_label}**: `{representative_run}` "
         "(selected deterministically as the run nearest the median headline changes).",
@@ -553,6 +559,8 @@ def _render_terrain_report(
         ("Stance-duration IQR (s)", "stance_duration_iqr_s"),
         ("Swing-duration IQR (s)", "swing_duration_iqr_s"),
         ("Mean maximum swing height (m)", "mean_swing_height_m"),
+        ("Planar velocity RMSE (m/s)", "planar_velocity_rmse_m_s"),
+        ("Planar velocity MAE (m/s)", "planar_velocity_mae_m_s"),
     )
     for display_name, metric in metric_rows:
         lines.append(

@@ -33,18 +33,25 @@ AGGREGATE_METRICS = (
     "mean_duty_factor",
     "contact_transitions_per_second",
     "vertical_velocity_rms_m_s",
+    "vertical_velocity_mean_abs_m_s",
     "vertical_acceleration_rms_g",
+    "vertical_acceleration_mean_abs_g",
     "vertical_acceleration_abs_p95_g",
     "vertical_acceleration_abs_p99_g",
     "pitch_rate_rms_rad_s",
+    "pitch_rate_mean_abs_rad_s",
     "pitch_acceleration_rms_rad_s2",
+    "pitch_acceleration_mean_abs_rad_s2",
     "total_vertical_grf_p95_body_weight",
     "total_vertical_grf_p99_body_weight",
     "joint_acceleration_rms_rad_s2",
+    "joint_acceleration_mean_abs_rad_s2",
     "joint_acceleration_abs_p95_rad_s2",
     "joint_acceleration_abs_p99_rad_s2",
     "linear_velocity_x_rmse_m_s",
+    "linear_velocity_x_mae_m_s",
     "linear_velocity_y_rmse_m_s",
+    "linear_velocity_y_mae_m_s",
     "cost_of_transport",
     "max_operational_limit_violation_percent",
 )
@@ -57,18 +64,25 @@ METRIC_DISPLAY_NAMES = {
     "mean_duty_factor": "Mean duty factor",
     "contact_transitions_per_second": "Contact transitions (s$^{-1}$)",
     "vertical_velocity_rms_m_s": "Vertical velocity RMS (m/s)",
+    "vertical_velocity_mean_abs_m_s": "Vertical velocity mean absolute (m/s)",
     "vertical_acceleration_rms_g": "Vertical acceleration RMS (g)",
+    "vertical_acceleration_mean_abs_g": "Vertical acceleration mean absolute (g)",
     "vertical_acceleration_abs_p95_g": "Vertical acceleration p95 (g)",
     "vertical_acceleration_abs_p99_g": "Vertical acceleration p99 (g)",
     "pitch_rate_rms_rad_s": "Pitch rate RMS (rad/s)",
+    "pitch_rate_mean_abs_rad_s": "Pitch rate mean absolute (rad/s)",
     "pitch_acceleration_rms_rad_s2": "Pitch acceleration RMS (rad/s$^2$)",
+    "pitch_acceleration_mean_abs_rad_s2": "Pitch acceleration mean absolute (rad/s$^2$)",
     "total_vertical_grf_p95_body_weight": "Vertical GRF p95 (BW)",
     "total_vertical_grf_p99_body_weight": "Vertical GRF p99 (BW)",
     "joint_acceleration_rms_rad_s2": "Joint acceleration RMS (rad/s$^2$)",
+    "joint_acceleration_mean_abs_rad_s2": "Joint acceleration mean absolute (rad/s$^2$)",
     "joint_acceleration_abs_p95_rad_s2": "Joint acceleration p95 (rad/s$^2$)",
     "joint_acceleration_abs_p99_rad_s2": "Joint acceleration p99 (rad/s$^2$)",
     "linear_velocity_x_rmse_m_s": "$v_x$ RMSE (m/s)",
+    "linear_velocity_x_mae_m_s": "$v_x$ MAE (m/s)",
     "linear_velocity_y_rmse_m_s": "$v_y$ RMSE (m/s)",
+    "linear_velocity_y_mae_m_s": "$v_y$ MAE (m/s)",
     "cost_of_transport": "Cost of transport",
     "max_operational_limit_violation_percent": "Max. operational-limit violation (%)",
 }
@@ -77,8 +91,10 @@ PLOT_FAMILIES = {
     "plot_rebuttal_headline_dynamics": (
         "aerial_phase_percent",
         "vertical_acceleration_rms_g",
+        "vertical_acceleration_mean_abs_g",
         "total_vertical_grf_p95_body_weight",
         "joint_acceleration_rms_rad_s2",
+        "joint_acceleration_mean_abs_rad_s2",
     ),
     "plot_rebuttal_support_dynamics": (
         "aerial_phase_percent",
@@ -88,14 +104,19 @@ PLOT_FAMILIES = {
     ),
     "plot_rebuttal_base_excitation": (
         "vertical_velocity_rms_m_s",
+        "vertical_velocity_mean_abs_m_s",
         "vertical_acceleration_rms_g",
+        "vertical_acceleration_mean_abs_g",
         "pitch_rate_rms_rad_s",
+        "pitch_rate_mean_abs_rad_s",
         "pitch_acceleration_rms_rad_s2",
+        "pitch_acceleration_mean_abs_rad_s2",
     ),
     "plot_rebuttal_impact_and_joint_demand": (
         "total_vertical_grf_p95_body_weight",
         "total_vertical_grf_p99_body_weight",
         "joint_acceleration_rms_rad_s2",
+        "joint_acceleration_mean_abs_rad_s2",
         "joint_acceleration_abs_p95_rad_s2",
     ),
     "plot_rebuttal_completion_rate": ("completion_percent",),
@@ -384,15 +405,18 @@ def _render_aggregate_report(
             "## Overall headline metrics",
             "",
             "| Variant | Aerial time (%) | Vertical acceleration RMS (g) | "
-            "Vertical GRF p95 (BW) | Joint acceleration RMS (rad/s²) | Completion (%) |",
-            "|---|---:|---:|---:|---:|---:|",
+            "Vertical acceleration mean abs (g) | Vertical GRF p95 (BW) | "
+            "Joint acceleration RMS (rad/s²) | Joint acceleration mean abs (rad/s²) | Completion (%) |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     headline = (
         "aerial_phase_percent",
         "vertical_acceleration_rms_g",
+        "vertical_acceleration_mean_abs_g",
         "total_vertical_grf_p95_body_weight",
         "joint_acceleration_rms_rad_s2",
+        "joint_acceleration_mean_abs_rad_s2",
         "completion_percent",
     )
     for label in per_run_df["label"].drop_duplicates():
@@ -412,8 +436,10 @@ def _render_aggregate_report(
             [
                 f"### {SCENARIO_DISPLAY_NAMES.get(scenario, scenario)}",
                 "",
-                "| Variant | Aerial (%) | Vertical acceleration RMS (g) | GRF p95 (BW) | Joint acceleration RMS | Completion (%) |",
-                "|---|---:|---:|---:|---:|---:|",
+                "| Variant | Aerial (%) | Vertical acceleration RMS (g) | "
+                "Vertical acceleration mean abs (g) | GRF p95 (BW) | "
+                "Joint acceleration RMS | Joint acceleration mean abs | Completion (%) |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|",
             ]
         )
         for label in per_run_df["label"].drop_duplicates():
@@ -489,7 +515,8 @@ def _resolve_family_figure_size(
 ) -> tuple[float, float]:
     if metric_count <= 1:
         return requested_width, requested_height
-    return max(7.0, requested_width), max(4.4, requested_height)
+    subplot_rows = int(np.ceil(metric_count / 2))
+    return max(7.0, requested_width), max(2.4 * subplot_rows, requested_height)
 
 
 def _plot_metric_family(

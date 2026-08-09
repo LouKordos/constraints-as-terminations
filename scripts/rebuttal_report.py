@@ -36,18 +36,25 @@ CSV_FIELDS = (
     "low_support_percent",
     "mean_duty_factor",
     "vertical_velocity_rms_m_s",
+    "vertical_velocity_mean_abs_m_s",
     "vertical_acceleration_rms_g",
+    "vertical_acceleration_mean_abs_g",
     "vertical_acceleration_abs_p95_g",
     "vertical_acceleration_abs_p99_g",
     "pitch_rate_rms_rad_s",
+    "pitch_rate_mean_abs_rad_s",
     "pitch_acceleration_rms_rad_s2",
+    "pitch_acceleration_mean_abs_rad_s2",
     "total_vertical_grf_p95_body_weight",
     "total_vertical_grf_p99_body_weight",
     "joint_acceleration_rms_rad_s2",
+    "joint_acceleration_mean_abs_rad_s2",
     "joint_acceleration_abs_p95_rad_s2",
     "joint_acceleration_abs_p99_rad_s2",
     "linear_velocity_x_rmse_m_s",
+    "linear_velocity_x_mae_m_s",
     "linear_velocity_y_rmse_m_s",
+    "linear_velocity_y_mae_m_s",
     "cost_of_transport",
     "max_operational_limit_violation_percent",
     "base_acceleration_fidelity",
@@ -88,8 +95,14 @@ def _scenario_row(scenario: str, entry: dict[str, Any]) -> dict[str, Any]:
         "vertical_velocity_rms_m_s": _nested(
             dynamics, "base_excitation", "vertical_velocity_rms_m_s"
         ),
+        "vertical_velocity_mean_abs_m_s": _nested(
+            dynamics, "base_excitation", "vertical_velocity_mean_abs_m_s"
+        ),
         "vertical_acceleration_rms_g": _nested(
             dynamics, "base_excitation", "vertical_acceleration_rms_g"
+        ),
+        "vertical_acceleration_mean_abs_g": _nested(
+            dynamics, "base_excitation", "vertical_acceleration_mean_abs_g"
         ),
         "vertical_acceleration_abs_p95_g": _nested(
             dynamics, "base_excitation", "vertical_acceleration_abs_p95_g"
@@ -100,8 +113,14 @@ def _scenario_row(scenario: str, entry: dict[str, Any]) -> dict[str, Any]:
         "pitch_rate_rms_rad_s": _nested(
             dynamics, "base_excitation", "pitch_rate_rms_rad_s"
         ),
+        "pitch_rate_mean_abs_rad_s": _nested(
+            dynamics, "base_excitation", "pitch_rate_mean_abs_rad_s"
+        ),
         "pitch_acceleration_rms_rad_s2": _nested(
             dynamics, "base_excitation", "pitch_acceleration_rms_rad_s2"
+        ),
+        "pitch_acceleration_mean_abs_rad_s2": _nested(
+            dynamics, "base_excitation", "pitch_acceleration_mean_abs_rad_s2"
         ),
         "total_vertical_grf_p95_body_weight": _nested(
             dynamics, "impact_loading", "total_vertical_grf_body_weight", "abs_p95"
@@ -112,6 +131,9 @@ def _scenario_row(scenario: str, entry: dict[str, Any]) -> dict[str, Any]:
         "joint_acceleration_rms_rad_s2": _nested(
             dynamics, "joint_demand", "joint_acceleration", "rms"
         ),
+        "joint_acceleration_mean_abs_rad_s2": _nested(
+            dynamics, "joint_demand", "joint_acceleration", "mean_abs"
+        ),
         "joint_acceleration_abs_p95_rad_s2": _nested(
             dynamics, "joint_demand", "joint_acceleration", "abs_p95"
         ),
@@ -119,7 +141,13 @@ def _scenario_row(scenario: str, entry: dict[str, Any]) -> dict[str, Any]:
             dynamics, "joint_demand", "joint_acceleration", "abs_p99"
         ),
         "linear_velocity_x_rmse_m_s": context.get("base_linear_velocity_x_rms_error"),
+        "linear_velocity_x_mae_m_s": context.get(
+            "base_linear_velocity_x_mean_abs_error"
+        ),
         "linear_velocity_y_rmse_m_s": context.get("base_linear_velocity_y_rms_error"),
+        "linear_velocity_y_mae_m_s": context.get(
+            "base_linear_velocity_y_mean_abs_error"
+        ),
         "cost_of_transport": context.get("cost_of_transport"),
         "max_operational_limit_violation_percent": context.get(
             "max_operational_limit_violation_percent"
@@ -228,7 +256,8 @@ def render_rebuttal_markdown(payload: dict[str, Any]) -> str:
         "## Headline dynamics metrics",
         "",
         "| Scenario | Complete | Valid (s) | Aerial (%) | <=1 support (%) | Duty factor | "
-        "Vertical velocity RMS (m/s) | Vertical acceleration RMS (g) | GRF p95 / p99 (BW) |",
+        "Vertical velocity RMS / mean abs (m/s) | Vertical acceleration RMS / mean abs (g) | "
+        "GRF p95 / p99 (BW) |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for scenario in payload["requested_scenarios"]:
@@ -240,8 +269,10 @@ def render_rebuttal_markdown(payload: dict[str, Any]) -> str:
         lines.append(
             f"| `{scenario}` | {_format(row['completed'])} | {_format(row['valid_duration_seconds'])} | "
             f"{_format(row['aerial_phase_percent'], 2)} | {_format(row['low_support_percent'], 2)} | "
-            f"{_format(row['mean_duty_factor'])} | {_format(row['vertical_velocity_rms_m_s'])} | "
-            f"{_format(row['vertical_acceleration_rms_g'])} | "
+            f"{_format(row['mean_duty_factor'])} | {_format(row['vertical_velocity_rms_m_s'])} / "
+            f"{_format(row['vertical_velocity_mean_abs_m_s'])} | "
+            f"{_format(row['vertical_acceleration_rms_g'])} / "
+            f"{_format(row['vertical_acceleration_mean_abs_g'])} | "
             f"{_format(row['total_vertical_grf_p95_body_weight'])} / "
             f"{_format(row['total_vertical_grf_p99_body_weight'])} |"
         )
@@ -254,20 +285,27 @@ def render_rebuttal_markdown(payload: dict[str, Any]) -> str:
             "Joint acceleration is included as supporting actuator-bandwidth evidence; the existing "
             "per-joint acceleration plots remain the detailed source and are not duplicated here.",
             "",
-            "| Scenario | Pitch rate RMS (rad/s) | Pitch acceleration RMS (rad/s^2) | "
-            "Joint acceleration RMS / p95 / p99 (rad/s^2) | vx RMSE | vy RMSE | COT | Max limit viol. (%) |",
+            "| Scenario | Pitch rate RMS / mean abs (rad/s) | "
+            "Pitch acceleration RMS / mean abs (rad/s^2) | "
+            "Joint acceleration RMS / mean abs / p95 / p99 (rad/s^2) | "
+            "vx RMSE / MAE | vy RMSE / MAE | COT | Max limit viol. (%) |",
             "|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for row in payload["rows"]:
         lines.append(
-            f"| `{row['scenario']}` | {_format(row['pitch_rate_rms_rad_s'])} | "
-            f"{_format(row['pitch_acceleration_rms_rad_s2'])} | "
+            f"| `{row['scenario']}` | {_format(row['pitch_rate_rms_rad_s'])} / "
+            f"{_format(row['pitch_rate_mean_abs_rad_s'])} | "
+            f"{_format(row['pitch_acceleration_rms_rad_s2'])} / "
+            f"{_format(row['pitch_acceleration_mean_abs_rad_s2'])} | "
             f"{_format(row['joint_acceleration_rms_rad_s2'])} / "
+            f"{_format(row['joint_acceleration_mean_abs_rad_s2'])} / "
             f"{_format(row['joint_acceleration_abs_p95_rad_s2'])} / "
             f"{_format(row['joint_acceleration_abs_p99_rad_s2'])} | "
-            f"{_format(row['linear_velocity_x_rmse_m_s'])} | "
-            f"{_format(row['linear_velocity_y_rmse_m_s'])} | {_format(row['cost_of_transport'])} | "
+            f"{_format(row['linear_velocity_x_rmse_m_s'])} / "
+            f"{_format(row['linear_velocity_x_mae_m_s'])} | "
+            f"{_format(row['linear_velocity_y_rmse_m_s'])} / "
+            f"{_format(row['linear_velocity_y_mae_m_s'])} | {_format(row['cost_of_transport'])} | "
             f"{_format(row['max_operational_limit_violation_percent'])} |"
         )
 

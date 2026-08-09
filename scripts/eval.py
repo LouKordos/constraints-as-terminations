@@ -1627,8 +1627,17 @@ def main():
             "context": {
                 "mean_achieved_base_linear_velocity_body_m_s": mean_achieved_velocity,
                 "base_linear_velocity_x_rms_error": general_metrics.get("base_linear_velocity_x_rms_error"),
+                "base_linear_velocity_x_mean_abs_error": general_metrics.get(
+                    "base_linear_velocity_x_mean_abs_error"
+                ),
                 "base_linear_velocity_y_rms_error": general_metrics.get("base_linear_velocity_y_rms_error"),
+                "base_linear_velocity_y_mean_abs_error": general_metrics.get(
+                    "base_linear_velocity_y_mean_abs_error"
+                ),
                 "base_angular_velocity_z_rms_error": general_metrics.get("base_angular_velocity_z_rms_error"),
+                "base_angular_velocity_z_mean_abs_error": general_metrics.get(
+                    "base_angular_velocity_z_mean_abs_error"
+                ),
                 "cost_of_transport": general_metrics.get("cost_of_transport"),
                 "max_operational_limit_violation_percent": maximum_numeric_value(
                     general_metrics.get("constraint_violations_percent", {})
