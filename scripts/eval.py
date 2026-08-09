@@ -1617,6 +1617,9 @@ def main():
             },
         )
         general_metrics = scenario_metrics[scenario_tag]
+        maximum_constraint_violation = general_metrics.get("maximum_constraint_violation")
+        if not isinstance(maximum_constraint_violation, dict):
+            maximum_constraint_violation = {}
         achieved_velocity = base_linear_velocity_body_array[dynamics_mask]
         mean_achieved_velocity = (
             achieved_velocity.mean(axis=0).tolist() if achieved_velocity.shape[0] > 0 else None
@@ -1639,9 +1642,22 @@ def main():
                     "base_angular_velocity_z_mean_abs_error"
                 ),
                 "cost_of_transport": general_metrics.get("cost_of_transport"),
-                "max_operational_limit_violation_percent": maximum_numeric_value(
+                "max_operational_limit_violation_frequency_percent": maximum_numeric_value(
                     general_metrics.get("constraint_violations_percent", {})
                 ),
+                "max_operational_limit_violation_percent": maximum_constraint_violation.get(
+                    "normalized_excess_percent"
+                ),
+                "max_operational_limit_violation_constraint": maximum_constraint_violation.get(
+                    "constraint"
+                ),
+                "max_operational_limit_violation_element": maximum_constraint_violation.get(
+                    "element"
+                ),
+                "max_operational_limit_violation_absolute_excess": maximum_constraint_violation.get(
+                    "absolute_excess"
+                ),
+                "maximum_constraint_violation": maximum_constraint_violation or None,
             },
         }
     scenario_completion = compute_scenario_completion(

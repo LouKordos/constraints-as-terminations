@@ -489,6 +489,163 @@ def compute_swing_lengths(contact_state: np.ndarray, foot_positions_world: np.nd
     return step_lengths
 
 
+def _constraint_normalization_scale(
+    lower_bound: float | None,
+    upper_bound: float | None,
+) -> float | None:
+    """Return the approved reference scale for cross-constraint excess percentages."""
+    finite_lower = None if lower_bound is None else float(lower_bound)
+    finite_upper = None if upper_bound is None else float(upper_bound)
+    if finite_lower is not None and not np.isfinite(finite_lower):
+        raise ValueError(f"lower_bound must be finite or None, got {lower_bound}.")
+    if finite_upper is not None and not np.isfinite(finite_upper):
+        raise ValueError(f"upper_bound must be finite or None, got {upper_bound}.")
+    if finite_lower is None and finite_upper is None:
+        return None
+
+    if finite_lower is not None and finite_upper is not None:
+        if finite_lower > finite_upper:
+            raise ValueError(
+                f"lower_bound must not exceed upper_bound, got {finite_lower} > {finite_upper}."
+            )
+        width = finite_upper - finite_lower
+        if np.isclose(finite_lower, 0.0) or np.isclose(finite_upper, 0.0):
+            scale = width
+        elif width > 0.0:
+            scale = width / 2.0
+        else:
+            scale = abs(finite_upper)
+    else:
+        finite_bound = finite_lower if finite_lower is not None else finite_upper
+        scale = abs(float(finite_bound))
+
+    return float(scale) if scale > 0.0 else None
+
+
+def _summarize_constraint_violations(
+    values: np.ndarray,
+    lower_bound: float | None,
+    upper_bound: float | None,
+    element_labels: list[str],
+    global_timestep_indices: np.ndarray,
+) -> tuple[float | dict[str, float], dict[str, Any], dict[str, Any] | None]:
+    """Summarize frequency and severity for one bounded constraint array."""
+    array = np.asarray(values, dtype=np.float64)
+    input_was_one_dimensional = array.ndim == 1
+    if input_was_one_dimensional:
+        array = array[:, None]
+    if array.ndim != 2:
+        raise ValueError(f"Constraint values must have shape (T,) or (T, E), got {array.shape}.")
+    if array.shape[1] != len(element_labels):
+        raise ValueError(
+            f"Constraint values contain {array.shape[1]} elements but received "
+            f"{len(element_labels)} labels."
+        )
+    timestep_indices = np.asarray(global_timestep_indices, dtype=np.int64)
+    if timestep_indices.ndim != 1 or len(timestep_indices) != array.shape[0]:
+        raise ValueError(
+            "global_timestep_indices must match the constraint time dimension, got "
+            f"{timestep_indices.shape} and {array.shape[0]}."
+        )
+
+    finite = np.isfinite(array)
+    lower_excess = np.zeros_like(array)
+    upper_excess = np.zeros_like(array)
+    if lower_bound is not None:
+        lower_excess = np.where(finite, np.maximum(float(lower_bound) - array, 0.0), 0.0)
+    if upper_bound is not None:
+        upper_excess = np.where(finite, np.maximum(array - float(upper_bound), 0.0), 0.0)
+    absolute_excess = np.maximum(lower_excess, upper_excess)
+    violation = finite & (absolute_excess > 0.0)
+    normalization_scale = _constraint_normalization_scale(lower_bound, upper_bound)
+
+    def severity_statistics(
+        finite_mask: np.ndarray,
+        violation_mask: np.ndarray,
+        excess: np.ndarray,
+    ) -> dict[str, float | None]:
+        if not np.any(finite_mask):
+            return {
+                "mean_excess_when_violating": None,
+                "max_excess": None,
+                "mean_normalized_excess_percent_when_violating": None,
+                "max_normalized_excess_percent": None,
+            }
+        violating_excess = excess[violation_mask]
+        if violating_excess.size == 0:
+            mean_excess = 0.0
+            max_excess = 0.0
+        else:
+            mean_excess = float(violating_excess.mean())
+            max_excess = float(violating_excess.max())
+        if normalization_scale is None:
+            mean_normalized = None
+            max_normalized = None
+        else:
+            mean_normalized = float(100.0 * mean_excess / normalization_scale)
+            max_normalized = float(100.0 * max_excess / normalization_scale)
+        return {
+            "mean_excess_when_violating": mean_excess,
+            "max_excess": max_excess,
+            "mean_normalized_excess_percent_when_violating": mean_normalized,
+            "max_normalized_excess_percent": max_normalized,
+        }
+
+    percentages: dict[str, float] = {}
+    per_element: dict[str, dict[str, float | None]] = {}
+    for element_index, element_label in enumerate(element_labels):
+        element_finite = finite[:, element_index]
+        element_violation = violation[:, element_index]
+        finite_count = int(element_finite.sum())
+        percentages[element_label] = (
+            100.0 * float(element_violation.sum()) / float(finite_count)
+            if finite_count > 0
+            else 0.0
+        )
+        per_element[element_label] = severity_statistics(
+            element_finite,
+            element_violation,
+            absolute_excess[:, element_index],
+        )
+
+    magnitude_summary = {
+        "lower_bound": None if lower_bound is None else float(lower_bound),
+        "upper_bound": None if upper_bound is None else float(upper_bound),
+        "normalization_scale": normalization_scale,
+        "aggregate": severity_statistics(finite, violation, absolute_excess),
+        "per_element": per_element,
+    }
+
+    maximum_violation = None
+    if np.any(violation):
+        flat_index = int(np.argmax(absolute_excess))
+        timestep_index, element_index = np.unravel_index(flat_index, absolute_excess.shape)
+        violates_lower = lower_excess[timestep_index, element_index] > 0.0
+        violated_bound = lower_bound if violates_lower else upper_bound
+        raw_excess = float(absolute_excess[timestep_index, element_index])
+        maximum_violation = {
+            "element": element_labels[element_index],
+            "timestep": int(timestep_indices[timestep_index]),
+            "analysis_sample_index": int(timestep_index),
+            "observed_value": float(array[timestep_index, element_index]),
+            "violated_bound": float(violated_bound),
+            "direction": "lower" if violates_lower else "upper",
+            "absolute_excess": raw_excess,
+            "normalized_excess_percent": (
+                None
+                if normalization_scale is None
+                else float(100.0 * raw_excess / normalization_scale)
+            ),
+        }
+
+    frequency: float | dict[str, float]
+    if input_was_one_dimensional:
+        frequency = percentages[element_labels[0]]
+    else:
+        frequency = percentages
+    return frequency, magnitude_summary, maximum_violation
+
+
 def compute_summary_metrics(
     mask: np.ndarray,
     manual_reset_steps: List[int],
@@ -555,29 +712,60 @@ def compute_summary_metrics(
 
     # ---------- constraint violations ------------------------------------
     violations = {}
+    violation_magnitudes = {}
+    maximum_constraint_violation = None
     constraint_metric_map = {
-        "joint_velocity": joint_velocities,
-        "joint_torque": joint_torques,
-        "joint_acceleration": joint_accelerations,
-        "action_rate": action_rates,
-        "foot_contact_force": contact_force.reshape(contact_force.shape[0], -1).mean(axis=1),
-        "joint_position": joint_positions,
-        "air_time": (1 - contact_state).astype(float),
+        "joint_velocity": (joint_velocities, joint_names),
+        "joint_torque": (joint_torques, joint_names),
+        "joint_acceleration": (joint_accelerations, joint_names),
+        "action_rate": (action_rates, joint_names),
+        "foot_contact_force": (contact_force, foot_labels),
+        "joint_position": (joint_positions, joint_names),
+        "air_time": ((1 - contact_state).astype(float), foot_labels),
     }
+    joint_index_by_name = {joint_name: index for index, joint_name in enumerate(joint_names)}
     for term, (lb, ub) in constraint_bounds.items():
-        m = constraint_metric_map.get(term)
-        if m is None:
+        metric_entry = constraint_metric_map.get(term)
+        if metric_entry is None and term in joint_index_by_name:
+            metric_entry = (joint_positions[:, joint_index_by_name[term]], [term])
+        if metric_entry is None:
             continue
-        if m.ndim == 2: # per-joint term
-            above = (ub is not None) & (m > ub)
-            below = (lb is not None) & (m < lb)
-            vmask = above | below
-            violations[term] = dict(zip(joint_names, (vmask.mean(axis=0) * 100).tolist()))
-        else: # global term
-            above = (ub is not None) & (m > ub)
-            below = (lb is not None) & (m < lb)
-            vmask = above | below
-            violations[term] = float(vmask.mean() * 100)
+        metric_values, element_labels = metric_entry
+        frequency, magnitude_summary, term_maximum = _summarize_constraint_violations(
+            metric_values,
+            lb,
+            ub,
+            list(element_labels),
+            mask_indices,
+        )
+        violations[term] = frequency
+        violation_magnitudes[term] = magnitude_summary
+        if term_maximum is not None:
+            term_maximum = {"constraint": term, **term_maximum}
+            normalized_excess = term_maximum["normalized_excess_percent"]
+            term_maximum["selection_basis"] = (
+                "normalized_excess_percent"
+                if normalized_excess is not None
+                else "absolute_excess_fallback"
+            )
+            current_normalized_excess = (
+                None
+                if maximum_constraint_violation is None
+                else maximum_constraint_violation["normalized_excess_percent"]
+            )
+            replace_maximum = maximum_constraint_violation is None
+            if normalized_excess is not None:
+                replace_maximum = (
+                    current_normalized_excess is None
+                    or normalized_excess > current_normalized_excess
+                )
+            elif current_normalized_excess is None and maximum_constraint_violation is not None:
+                replace_maximum = (
+                    term_maximum["absolute_excess"]
+                    > maximum_constraint_violation["absolute_excess"]
+                )
+            if replace_maximum:
+                maximum_constraint_violation = term_maximum
 
     # ---------- per-joint descriptive stats -------------
     summary_metric_map = {
@@ -680,6 +868,8 @@ def compute_summary_metrics(
         "cost_of_transport": cost_of_transport,
         "cumulative_power": summarize_metric(np.abs(power_array).sum(axis=1).tolist()),
         "constraint_violations_percent": violations,
+        "constraint_violation_magnitudes": violation_magnitudes,
+        "maximum_constraint_violation": maximum_constraint_violation,
         "gait_symmetry_tvd_by_joint": gait_symmetry_summary_per_dof,
         "aggregate_joint_symmetry_tvd": average_symmetry_tvd,
         "axis_symmetry_tvd": axis_symmetry_tvd,

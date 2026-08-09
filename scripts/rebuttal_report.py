@@ -57,6 +57,10 @@ CSV_FIELDS = (
     "linear_velocity_y_mae_m_s",
     "cost_of_transport",
     "max_operational_limit_violation_percent",
+    "max_operational_limit_violation_frequency_percent",
+    "max_operational_limit_violation_constraint",
+    "max_operational_limit_violation_element",
+    "max_operational_limit_violation_absolute_excess",
     "base_acceleration_fidelity",
     "vertical_grf_fidelity",
 )
@@ -79,6 +83,11 @@ def _scenario_row(scenario: str, entry: dict[str, Any]) -> dict[str, Any]:
     window = entry.get("analysis_window", {})
     dynamics = entry.get("gait_dynamics", {})
     context = entry.get("context", {})
+    uses_severity_schema = (
+        "max_operational_limit_violation_frequency_percent" in context
+        or isinstance(context.get("maximum_constraint_violation"), dict)
+    )
+    legacy_maximum_frequency = context.get("max_operational_limit_violation_percent")
     return {
         "scenario": scenario,
         "status": "evaluated",
@@ -149,8 +158,24 @@ def _scenario_row(scenario: str, entry: dict[str, Any]) -> dict[str, Any]:
             "base_linear_velocity_y_mean_abs_error"
         ),
         "cost_of_transport": context.get("cost_of_transport"),
-        "max_operational_limit_violation_percent": context.get(
-            "max_operational_limit_violation_percent"
+        "max_operational_limit_violation_percent": (
+            context.get("max_operational_limit_violation_percent")
+            if uses_severity_schema
+            else None
+        ),
+        "max_operational_limit_violation_frequency_percent": (
+            context.get("max_operational_limit_violation_frequency_percent")
+            if uses_severity_schema
+            else legacy_maximum_frequency
+        ),
+        "max_operational_limit_violation_constraint": context.get(
+            "max_operational_limit_violation_constraint"
+        ),
+        "max_operational_limit_violation_element": context.get(
+            "max_operational_limit_violation_element"
+        ),
+        "max_operational_limit_violation_absolute_excess": context.get(
+            "max_operational_limit_violation_absolute_excess"
         ),
         "base_acceleration_fidelity": _nested(
             dynamics, "data_fidelity", "base_acceleration"
@@ -235,6 +260,14 @@ def _format(value: Any, digits: int = 3) -> str:
     return str(value)
 
 
+def _format_constraint_identity(row: dict[str, Any]) -> str:
+    constraint = row.get("max_operational_limit_violation_constraint")
+    element = row.get("max_operational_limit_violation_element")
+    if constraint is None:
+        return "N/A"
+    return str(constraint) if element is None else f"{constraint}:{element}"
+
+
 def render_rebuttal_markdown(payload: dict[str, Any]) -> str:
     """Render the focused payload as a self-contained Markdown report."""
     run = payload["run"]
@@ -288,8 +321,9 @@ def render_rebuttal_markdown(payload: dict[str, Any]) -> str:
             "| Scenario | Pitch rate RMS / mean abs (rad/s) | "
             "Pitch acceleration RMS / mean abs (rad/s^2) | "
             "Joint acceleration RMS / mean abs / p95 / p99 (rad/s^2) | "
-            "vx RMSE / MAE | vy RMSE / MAE | COT | Max limit viol. (%) |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|",
+            "vx RMSE / MAE | vy RMSE / MAE | COT | "
+            "Max normalized excess (%) / source | Max exceedance frequency (%) |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for row in payload["rows"]:
@@ -306,7 +340,9 @@ def render_rebuttal_markdown(payload: dict[str, Any]) -> str:
             f"{_format(row['linear_velocity_x_mae_m_s'])} | "
             f"{_format(row['linear_velocity_y_rmse_m_s'])} / "
             f"{_format(row['linear_velocity_y_mae_m_s'])} | {_format(row['cost_of_transport'])} | "
-            f"{_format(row['max_operational_limit_violation_percent'])} |"
+            f"{_format(row['max_operational_limit_violation_percent'])} / "
+            f"{_format_constraint_identity(row)} | "
+            f"{_format(row['max_operational_limit_violation_frequency_percent'])} |"
         )
 
     lines.extend(["", "## Plots", ""])

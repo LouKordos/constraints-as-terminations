@@ -54,6 +54,7 @@ AGGREGATE_METRICS = (
     "linear_velocity_y_mae_m_s",
     "cost_of_transport",
     "max_operational_limit_violation_percent",
+    "max_operational_limit_violation_frequency_percent",
 )
 
 METRIC_DISPLAY_NAMES = {
@@ -84,7 +85,8 @@ METRIC_DISPLAY_NAMES = {
     "linear_velocity_y_rmse_m_s": "$v_y$ RMSE (m/s)",
     "linear_velocity_y_mae_m_s": "$v_y$ MAE (m/s)",
     "cost_of_transport": "Cost of transport",
-    "max_operational_limit_violation_percent": "Max. operational-limit violation (%)",
+    "max_operational_limit_violation_percent": "Max. normalized operational-limit excess (%)",
+    "max_operational_limit_violation_frequency_percent": "Max. operational-limit exceedance frequency (%)",
 }
 
 PLOT_FAMILIES = {
