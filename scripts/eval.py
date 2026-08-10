@@ -288,6 +288,11 @@ def parse_arguments():
     parser.add_argument("--random_sim_step_length", type=int, default=4000, help="Number of steps to run with random commands and spawn points. Standardized tests like standing and walking forward will always run.")
     parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate. If you change this, hell will break loose")
     parser.add_argument("--task", type=str, default="Isaac-Velocity-Rough-Unitree-Go2-Play-v0", help="Name of the task/environment.")
+    parser.add_argument(
+        "--use_training_go2_config",
+        action="store_true",
+        help="Temporarily evaluate custom CaT Go2 tasks with UNITREE_GO2_CFG_TRAIN instead of the PLAY task's eval robot config.",
+    )
     parser.add_argument("--policy_backend", choices=["auto", "clean_rl", "rsl_rl"], default="auto", help="Policy checkpoint backend. Use auto unless debugging.")
     parser.add_argument("--agent_entry_point", type=str, default="rsl_rl_cfg_entry_point", help="Gym registry entry point key for the RSL-RL agent config.")
     parser.add_argument("--downscale_upstream_go2_tracking_rewards", action=argparse.BooleanOptionalAction, default=True, help="Evaluate upstream Go2 tracking rewards with the custom-env common scale: 1.5->1.0 and 0.75->0.5.")
@@ -867,6 +872,13 @@ def main():
         )
 
     env_cfg = parse_env_cfg(args.task, device=args.device, num_envs=args.num_envs, use_fabric=not args.disable_fabric)
+    if args.use_training_go2_config:
+        if "cat-go2" not in args.task.lower() and "cat_go2" not in args.task.lower():
+            raise ValueError("--use_training_go2_config requires a custom CaT Go2 task.")
+        from cat_envs.assets.go2_config import UNITREE_GO2_CFG_TRAIN
+
+        env_cfg.scene.robot = UNITREE_GO2_CFG_TRAIN.replace(prim_path="{ENV_REGEX_NS}/Robot")
+        print("[INFO] Replaced the PLAY robot config with UNITREE_GO2_CFG_TRAIN for this evaluation.")
     apply_common_eval_reward_scale_if_needed(
         env_cfg=env_cfg,
         task_name=args.task,
