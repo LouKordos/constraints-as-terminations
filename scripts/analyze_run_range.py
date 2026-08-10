@@ -76,25 +76,51 @@ DEFAULT_SUMMARY_LABEL_MAP = {
     "mean_cost_of_transport_range": "Mean Cost of Transport (velocity range)",
     "max_constraint_violation_normalized_percent": "Max Normalized Constraint Excess (%)",
     "max_constraint_violation_frequency_percent": "Max Constraint Exceedance Frequency (%)",
-    "violation_torque_raw_excess": "Max Raw Joint Torque Excess (N·m)",
-    "violation_accel_raw_excess": "Max Raw Joint Acceleration Excess (rad/s²)",
     "violation_torque": "Max Joint Torque Exceedance Frequency (%)",
+    "violation_torque_mean_raw_excess": "Mean Raw Joint Torque Excess When Violating (N·m)",
+    "violation_torque_raw_excess": "Max Raw Joint Torque Excess (N·m)",
+    "violation_torque_mean_normalized_excess_percent": "Mean Normalized Joint Torque Excess When Violating (%)",
+    "violation_torque_max_normalized_excess_percent": "Max Normalized Joint Torque Excess (%)",
     "violation_accel": "Max Joint Acceleration Exceedance Frequency (%)",
+    "violation_accel_mean_raw_excess": "Mean Raw Joint Acceleration Excess When Violating (rad/s²)",
+    "violation_accel_raw_excess": "Max Raw Joint Acceleration Excess (rad/s²)",
+    "violation_accel_mean_normalized_excess_percent": "Mean Normalized Joint Acceleration Excess When Violating (%)",
+    "violation_accel_max_normalized_excess_percent": "Max Normalized Joint Acceleration Excess (%)",
+    "violation_contact_force": "Max Foot Contact Force Exceedance Frequency (%)",
+    "violation_contact_force_mean_raw_excess": "Mean Raw Foot Contact Force Excess When Violating (N)",
+    "violation_contact_force_raw_excess": "Max Raw Foot Contact Force Excess (N)",
+    "violation_contact_force_mean_normalized_excess_percent": "Mean Normalized Foot Contact Force Excess When Violating (%)",
+    "violation_contact_force_max_normalized_excess_percent": "Max Normalized Foot Contact Force Excess (%)",
     "rms_error_x": "Base Velocity RMS Error (X)",
     "rms_error_y": "Base Velocity RMS Error (Y)",
     "rms_error_xy_mean": "Mean Base Velocity RMS Error (X,Y)",
 }
 
+CONSTRAINT_SUMMARY_METRIC_ORDER = [
+    "max_constraint_violation_normalized_percent",
+    "max_constraint_violation_frequency_percent",
+    "violation_torque",
+    "violation_torque_mean_raw_excess",
+    "violation_torque_raw_excess",
+    "violation_torque_mean_normalized_excess_percent",
+    "violation_torque_max_normalized_excess_percent",
+    "violation_accel",
+    "violation_accel_mean_raw_excess",
+    "violation_accel_raw_excess",
+    "violation_accel_mean_normalized_excess_percent",
+    "violation_accel_max_normalized_excess_percent",
+    "violation_contact_force",
+    "violation_contact_force_mean_raw_excess",
+    "violation_contact_force_raw_excess",
+    "violation_contact_force_mean_normalized_excess_percent",
+    "violation_contact_force_max_normalized_excess_percent",
+]
+
 SUMMARY_STATISTICS_METRIC_ORDER = [
     "Curriculum/terrain_levels",
     "rms_error_xy_mean",
     "mean_cost_of_transport_range",
-    "max_constraint_violation_normalized_percent",
-    "max_constraint_violation_frequency_percent",
-    "violation_torque_raw_excess",
-    "violation_accel_raw_excess",
-    "violation_torque",
-    "violation_accel",
+    *CONSTRAINT_SUMMARY_METRIC_ORDER,
 ]
 
 DEFAULT_STEP_HEIGHT_FLAT_SCENARIO_TAG = "walk_x_flat_terrain_1.0mps"
@@ -693,9 +719,10 @@ def _maximum_numeric_leaf(value: Any) -> float:
     return max(values) if values else np.nan
 
 
-def _constraint_aggregate_max_excess(
+def _constraint_aggregate_metric(
     violation_magnitudes: Any,
     constraint: str,
+    metric: str,
 ) -> float:
     if not isinstance(violation_magnitudes, dict):
         return np.nan
@@ -705,7 +732,7 @@ def _constraint_aggregate_max_excess(
     aggregate = constraint_summary.get("aggregate")
     if not isinstance(aggregate, dict):
         return np.nan
-    value = aggregate.get("max_excess")
+    value = aggregate.get(metric)
     if not isinstance(value, (int, float, np.integer, np.floating)):
         return np.nan
     numeric = float(value)
@@ -723,30 +750,43 @@ def parse_json_summary(
     summary["rms_error_y"] = metrics_summary.get("base_linear_velocity_y_rms_error", np.nan)
 
     violations = metrics_summary.get("constraint_violations_percent", {})
-    torque_dict = violations.get("joint_torque") if isinstance(violations, dict) else None
-    accel_dict = violations.get("joint_acceleration") if isinstance(violations, dict) else None
-
-    if isinstance(torque_dict, dict) and torque_dict:
-        summary["violation_torque"] = max(torque_dict.values())
-    else:
-        summary["violation_torque"] = np.nan
-
-    if isinstance(accel_dict, dict) and accel_dict:
-        summary["violation_accel"] = max(accel_dict.values())
-    else:
-        summary["violation_accel"] = np.nan
-
     summary["max_constraint_violation_frequency_percent"] = _maximum_numeric_leaf(violations)
 
     violation_magnitudes = metrics_summary.get("constraint_violation_magnitudes")
-    summary["violation_torque_raw_excess"] = _constraint_aggregate_max_excess(
-        violation_magnitudes,
-        "joint_torque",
+    constraint_specs = (
+        ("violation_torque", "joint_torque"),
+        ("violation_accel", "joint_acceleration"),
+        ("violation_contact_force", "foot_contact_force"),
     )
-    summary["violation_accel_raw_excess"] = _constraint_aggregate_max_excess(
-        violation_magnitudes,
-        "joint_acceleration",
-    )
+    for metric_prefix, constraint_name in constraint_specs:
+        constraint_frequencies = (
+            violations.get(constraint_name) if isinstance(violations, dict) else None
+        )
+        summary[metric_prefix] = _maximum_numeric_leaf(constraint_frequencies)
+        summary[f"{metric_prefix}_mean_raw_excess"] = _constraint_aggregate_metric(
+            violation_magnitudes,
+            constraint_name,
+            "mean_excess_when_violating",
+        )
+        summary[f"{metric_prefix}_raw_excess"] = _constraint_aggregate_metric(
+            violation_magnitudes,
+            constraint_name,
+            "max_excess",
+        )
+        summary[f"{metric_prefix}_mean_normalized_excess_percent"] = (
+            _constraint_aggregate_metric(
+                violation_magnitudes,
+                constraint_name,
+                "mean_normalized_excess_percent_when_violating",
+            )
+        )
+        summary[f"{metric_prefix}_max_normalized_excess_percent"] = (
+            _constraint_aggregate_metric(
+                violation_magnitudes,
+                constraint_name,
+                "max_normalized_excess_percent",
+            )
+        )
 
     maximum_violation = metrics_summary.get("maximum_constraint_violation")
     if isinstance(maximum_violation, dict):
@@ -2959,12 +2999,7 @@ def main() -> None:
 
     summary_json_metrics = [
         "mean_cost_of_transport_range",
-        "max_constraint_violation_normalized_percent",
-        "max_constraint_violation_frequency_percent",
-        "violation_torque_raw_excess",
-        "violation_accel_raw_excess",
-        "violation_torque",
-        "violation_accel",
+        *CONSTRAINT_SUMMARY_METRIC_ORDER,
         "rms_error_x",
         "rms_error_y",
         "rms_error_xy_mean",
