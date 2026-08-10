@@ -4,7 +4,7 @@ export OMNI_KIT_ACCEPT_EULA := "Y"
 export CUBLAS_WORKSPACE_CONFIG := ":4096:8"
 export PYTHONUNBUFFERED := "1"
 
-train num_envs="7500" task="CaT-Go2-Rough-Terrain-v0" seed="46":
+train num_envs="7500" task="CaT-Go2-Rough-Terrain-Joint-State-History-v0" seed="46":
     tmpdir="${SLURM_TMPDIR:-$(pwd)/logs/tmp}"; \
     mkdir -p ./logs/clean_rl "$tmpdir" "$tmpdir/isaaclab/logs"; \
     echo "TMPDIR=$tmpdir"; \
