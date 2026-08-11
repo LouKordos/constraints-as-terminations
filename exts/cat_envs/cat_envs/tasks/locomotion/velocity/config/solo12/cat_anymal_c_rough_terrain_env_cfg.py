@@ -83,7 +83,6 @@ class AnymalCRoughTerrainEnvCfg(Go2RoughTerrainEnvCfg):
             getattr(self.constraints, term_name).params["names"] = list(ANYMAL_C_JOINT_PATTERNS)
         self.constraints.joint_torque.params["limit"] = 80.0
         self.constraints.joint_velocity.params["limit"] = 12.0
-        self.constraints.joint_acceleration.params["limit"] = 600.0
         self.constraints.joint_acceleration.params["limit"] = 800.0
         # Action rate depends on action scale, so lower action rate for ANYMAL makes this constraint more restrictive!
         # Thus we scale by the ratio of original Go2 action scale 0.8/0.5=1.6
