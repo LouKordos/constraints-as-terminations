@@ -90,6 +90,7 @@ class AnymalCRoughTerrainEnvCfg(Go2RoughTerrainEnvCfg):
         self.constraints.foot_contact_force.params.update(limit=1000.0, names=[".*_FOOT"])
         self.constraints.front_hfe_position.params.update(limit=1.5, names=[".*HFE"])
         self.constraints.hip_position.params["names"] = [".*HAA"]
+        self.constraints.hip_position.params["limit"] = 0.8
         self.constraints.no_move.params.update(
             names=list(ANYMAL_C_JOINT_PATTERNS),
             joint_vel_limit=2.0,
