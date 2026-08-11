@@ -1,107 +1,156 @@
-# Constraints As Terminations (CaT)
+# LoComposition
 
-[Website](https://constraints-as-terminations.github.io) | [Technical Paper](https://arxiv.org/abs/2403.18765) | [Videos](https://www.youtube.com/watch?v=crWoYTb8QvU)
+### Terrain-Adaptive Energy-Efficient Quadruped Locomotion without Gait Priors
 
-![](assets/teaser.png)
+[Project page](https://sites.google.com/view/locomposition) · [Paper](https://arxiv.org/abs/2606.15896) · [Project video (on the project page)](https://sites.google.com/view/locomposition)
 
-## About this repository
+![LoComposition separates task specification, operational limits, gait preference, and terrain adaptation.](assets/locomposition-overview.png)
 
-This repository contains an Isaaclab implementation of the article **CaT: Constraints as Terminations for Legged Locomotion Reinforcement Learning** by Elliot Chane-Sane\*, Pierre-Alexandre Leziart\*, Thomas Flayols, Olivier Stasse, Philippe Souères, and Nicolas Mansard.
+LoComposition learns efficient rough-terrain locomotion without air-time targets, contact-count objectives, foot-clearance rewards, or a prescribed gait. The training formulation gives each concern one clear role: rewards specify the task, constraints encode operational limits, mechanical-energy minimization provides a gait preference, and exteroceptive perception makes that preference terrain-aware.
 
-This implementation was built by Constant Roux and Maciej Stępień.
+## Why LoComposition
 
-This paper has been accepted for the 2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS 2024).
+Quadruped locomotion rewards often mix command tracking, actuator limits, smoothness, foot timing, clearance, and terrain handling into one weighted objective. LoComposition separates them:
 
-This code relies on the [CleanRL](https://github.com/vwxyzjn/cleanrl) library and [IsaacLab](https://isaac-sim.github.io/IsaacLab/v1.4.1/index.html) (version 1.4.1).
+- **Task specification:** rewards track commanded planar and yaw velocity.
+- **Operational limits:** [Constraints as Terminations (CaT)](https://arxiv.org/abs/2403.18765) encodes actuator, action-rate, and posture limits.
+- **Gait preference:** mechanical-power minimization favors economical motion without naming a contact pattern.
+- **Terrain adaptation:** a robot-centric elevation map lets the policy spend energy where obstacles require it.
 
-Implementation of the constraints manager and modification of the environment can be found in the [CaT directory](exts/cat_envs/cat_envs/tasks/utils/cat/). The modified PPO implementation can be found in the [CleanRL directory](exts/cat_envs/cat_envs/tasks/utils/cleanrl/).
+The result is a low-cost trotting gait that emerges during training and increases clearance when the terrain calls for it. CaT remains an important component of the method; LoComposition is the complete formulation built around it, not a replacement name for the constraint mechanism.
 
-`ConstraintsManager` follows the manager-based Isaac Lab approach, allowing easy integration just like other managers. For a full example, check out [cat_flat_env_cfg.py](exts/cat_envs/cat_envs/tasks/locomotion/velocity/config/solo12/cat_flat_env_cfg.py).
+## Results at a glance
 
-```python
-@configclass
-class ConstraintsCfg:
-    # Safety Soft Constraints
-    joint_torque = ConstraintTerm(
-        func=constraints.joint_torque,
-        max_p=0.25,
-        params={"limit": 3.0, "names": [".*_HAA", ".*_HFE", ".*_KFE"]},
-    )
-    # Safety Hard Constraints
-    contact = ConstraintTerm(
-        func=constraints.contact,
-        max_p=1.0,
-        params={"names": ["base_link", ".*_UPPER_LEG"]},
-    )
+Against a conventional complex-reward locomotion baseline, LoComposition provides:
+
+- **56% lower Cost of Transport** with comparable rough-terrain progression;
+- **96% fewer operational-limit violations** under the same evaluation thresholds;
+- **zero-shot deployment on a Unitree Go2**, using an online LiDAR elevation map and no hardware retraining; and
+- **no explicit gait-style priors** in the final policy.
+
+![Cost of Transport and learned contact patterns.](assets/cot-and-contact-patterns.png)
+
+The paper contains the controlled ablations, 12-seed aggregate results, and hardware protocol. The [project page](https://sites.google.com/view/locomposition) is the best place to watch the full qualitative comparison.
+
+## Additional evidence
+
+Follow-up analyses help explain what the headline metrics leave out. On uneven terrain, mean swing height increases from **2.28 cm to 5.72 cm**, while simultaneous diagonal contact decreases from **81% to 56%**. With a 20 ms action delay, planar velocity RMSE changes from 0.19 to 0.26 m/s for LoComposition, compared with 0.17 to 0.47 m/s without energy minimization. In a matched reward-penalty study using the same PPO settings and action scale, the best tested penalty coefficient still produces roughly **15× more torque-limit violations** than the CaT formulation.
+
+These are supporting analyses beyond the current preprint's main headline results; they are kept separate here to avoid presenting them as part of the original comparison.
+
+![Contact timing changes across terrain conditions.](assets/terrain-contact-adaptation.png)
+
+## Installation
+
+The setup script creates a pinned Python 3.11 environment, installs Isaac Sim 5.1.0 and the matching Isaac Lab revision, clones LoComposition, and installs its dependencies. It requires Linux, an NVIDIA GPU with a compatible driver, Git, and enough disk space for Isaac Sim.
+
+```bash
+./create-isaac-lab-env-uv.sh locomposition
+source ~/mamba_env_data/locomposition/.venv/bin/activate
+cd ~/mamba_env_data/locomposition/LoComposition
 ```
 
+Use `--root PATH` to place the environment elsewhere, or `--repo-source URL_OR_PATH` to install from a fork or local checkout. The script refuses to merge into a non-empty target directory.
 
-## Running CaT (fork, follow this)
+If you already have the pinned Isaac Lab environment, install only this extension and its Python dependencies:
 
-### Training and Isaac Lab Simulation
+```bash
+uv pip install --no-build-isolation --no-deps --editable ./exts/locomposition
+uv pip install --requirement requirements.txt
+```
 
-Training and Isaac lab-related tasks were tested without docker, by using `create-isaac-lab-env-uv.py`. Check the slurm config and the `justfile` for available commands, as well as the `scripts` directory.
+## Quick start
 
-## Sim2Real
-For deploying on the real robot, the `sim2real` directory is relevant. It uses docker for ROS to make it reproducible and easy to run cross-platform. 
+Train the main Go2 policy:
 
-### Architectural notes and design philosophy: 
+```bash
+python scripts/clean_rl/train.py \
+  --task=LoComposition-Go2-Rough-Terrain-Joint-State-History-v0 \
+  --seed=46 --headless --num_envs=7500
+```
 
-I generally prefer thin ROS node wrappers around independently testable logic so that input-output behavior of each module can be tested easily. In practice, that means pushing validation, state-transition, and transformation logic into components that can be exercised with deterministic unit tests, and using ROS-level integration/E2E tests to verify timing, messaging, and end-to-end behavior.
+Evaluate a checkpoint and record the standard diagnostics:
 
-The controller is designed for soft real-time operation rather than hard real-time guarantees. The design intentionally favors bounded waiting, message freshness checks, and safe shutdown over unnecessary lock-free complexity because the robot API shuts down the hardware on missed commands anyway. The 500 Hz command loop and 50 Hz policy loop are isolated, and stale state/map thresholds are enforced so that scheduling delays degrade into safe stop behavior rather than reusing old data, which would potentially be dangerous. 
+```bash
+python scripts/eval.py \
+  --run_dir=/absolute/path/to/training/run \
+  --task=LoComposition-Go2-Rough-Terrain-Joint-State-History-Play-v0 \
+  --seed=46 --headless
+```
 
-The elevation map processing node updates at a much higher frequency than the policy (configurable in its parameter yaml) so that outdated observations due to the asynchronous setup are reduced. This way, even if the policy inference callback runs "1ms too early" (i.e. before the latest processed elevation map arrives), the induced delay is still only a fraction of a policy time step. The map processing is also completely decoupled from the update frequency of the raw global map, because it being in world frame and much larger than the body-centric local observation grid for the policy allows the assumption of slow changes relative to robot movement. Using the latest tf lookup at a high frequency thus produces accurate processed map observations for the policy.
+Regenerate plots from a saved evaluation:
 
-### Initial setup
+```bash
+python scripts/generate_plots.py \
+  --data_file=/absolute/path/to/evaluation/plots/sim_data.npz \
+  --output_dir=/absolute/path/to/output/plots
+```
 
-You should use `build-and-run.sh` for setup, check the options inside the script. Initial setup steps:
-1. Run `xhost +local:docker` on the host (outside docker) so that GUI applications such as RViz2 work through docker.
-2. Set up your network interface and ensure you can ping the robot: [https://support.unitree.com/home/en/developer/Quick_start](https://support.unitree.com/home/en/developer/Quick_start). You can run the sim2real code on either a connected workstation or the Go2 itself, but the latter is recommended for latency reasons.
+The former `CaT-*` task IDs and `cat_envs` Python imports remain available as compatibility aliases. New scripts should use the `LoComposition-*` IDs and `locomposition` package. See the [migration guide](docs/migration.md) for the exact mapping.
 
-**Ensure the time between Go2 and your workstation are synced!** This is crucial for the ROS computations to work properly:
-1. On the workstation connected to Go2: Add `allow 192.168.123.0/24` in `/etc/chrony/chrony.conf`
-2. Allow NTP through the firewall (if enabled)
-3. On the Go2: Add `server [YOUR_WORKSTATION_IP] iburst prefer minpoll 0 maxpoll` to `/etc/chrony/chrony.conf`
-4. Confirm time is sufficiently accurate using `chronyc tracking`. Then, ensure you somehow have internet access on the Go2, e.g. using something like `sshuttle`.
+## Supported robots
 
-To set up the MID360 LIDAR (used for elevation mapping), ensure the LIDAR is on the same subnet as the robot (`192.168.123.xxx`, can be done with [Livox Viewer 2](https://www.livoxtech.com/downloads)) and that you can ping it. Then, ensure data readouts work properly using [Livox Viewer 2](https://www.livoxtech.com/downloads).
+Each embodiment uses a separately trained policy. The formulation and training recipe stay the same; action scaling and actuator limits follow the robot, while mass randomization, disturbances, and the energy coefficient are scaled deterministically by the robot's mass ratio. This normalization is not a per-robot hyperparameter search and should not be read as one policy transferring between embodiments.
 
-### CycloneDDS and network configuration
-There might be connectivity issues between workstation and robot depending on how your network interfaces are set up:
-1. Edit the network interface in `sim2real/cyclone_config.xml` to the one that is connected to your Go2, so that CycloneDDS only sends traffic on this interface. 
-2. Set `export CYCLONEDDS_URI=file://[PATH_TO_PROVIDED_CYCLONEDDS_CONFIG_IN_THIS_REPO]`
-3. Ensure you have a multicast route on the network interface being used for robot communication (e.g. using `sudo ip route add 224.0.0.0/4 dev [YOUR_NETWORK_INTERFACE]`)
-4. Ensure that `MULTICAST` shows up for the network interface you are using under `ip link show`
-6. `ros2 daemon stop && ros2 daemon start`
+| Robot | Current evidence | Canonical task prefix |
+| --- | --- | --- |
+| Unitree Go2 | Simulation and zero-shot hardware deployment | `LoComposition-Go2-*` |
+| ANYmal C | Rough-terrain simulation, same formulation | `LoComposition-Anymal-C-*` |
+| Boston Dynamics Spot | Rough-terrain simulation, same formulation | `LoComposition-Spot-*` |
 
-To check if everything is set up properly: 
-1. Ensure `ros2 multicast send` on workstation results in a received message when running `ros2 multicast receive` on the Go2. 
-2. Check if `ros2 topic echo /lowstate` and other topics are printing out the robot's state correctly, or at least receiving messages.
+The following GIFs are deliberately labelled placeholders until the final website clips are exported:
 
-### Run the policy
-The `build-and-run.sh` script is responsible for building both the docker container and the actual code base, so you simply run it on the host after cloning the repository and then once more inside the container. The script will automatically enter a shell inside the container and it is recommended to use `tmux` so that OSC-52 can be used for copying via SSH. After `build-and-run.sh` has dropped you into the container shell:
+![Placeholder for the Unitree Go2 hardware demonstration.](assets/demos/go2-hardware.gif)
 
-1. Execute `build-and-run.sh --clean-build` inside the docker shell.
-2. Adjust `/app/ros2_ws/src/third_party/livox_ros_driver2/config/MID360_config.json`: The host IP entries should be set to the machine that is running the docker container, the LIDAR IP should be the one you set in Livox Viewer (same subnet as robot).
-3. Adjust extrinsics in `/app/ros2_ws/src/cat_bringup/config/robot_real_go2.yaml`, depending on how and where you mounted your LIDAR. This will create a static transform publisher to define where the lidar is relative to the base link.
+![Placeholder for the ANYmal C simulation demonstration.](assets/demos/anymal-c.gif)
 
-Now you can launch the ROS nodes.
-1. `/app/sim2real/bootstrap_ros2_ws.sh`
-2. `export ROS_DOMAIN_ID=0` so that Go2 topics become visible
-3. `source /app/ros2_ws/install/setup.bash`
-4. Ensure you see `/lowstate` under `ros2 topic list`
+![Placeholder for the Boston Dynamics Spot simulation demonstration.](assets/demos/spot.gif)
 
-To start the ROS setup, either run `/app/sim2real/build-and-run.sh`, or `ros2 launch cat_bringup bringup.launch.py | grep -v "Failed to parse type hash for topic"`. Odom uses vicon by default (adjustable in the launch arg file of cat_bringup), and requires [https://github.com/dasc-lab/ros2-vicon-bridge](https://github.com/dasc-lab/ros2-vicon-bridge). Lastly, open `ros2_ws/src/cat_bringup/rviz/go2_elevation_mapping.rviz` to inspect elevation map, pointcloud and tf tree.
+The requested crops and replacement checklist are in [the asset inventory](docs/assets.md).
 
-### Elevation Mapping
-This repo expects that you run [elevation_mapping_cupy](github.com/leggedrobotics/elevation_mapping_cupy/tree/ros2), specifically the `ros2` branch in a **separate container**. The reasoning behind this is a separation of dependencies, as the package relies on CUDA, but `cat_controller` does not. Simply follow their setup steps to get the container running with host network and cyclonedds, and ensure you can see the published elevation map topics from the controller container. As long as that is given, the map processing in this repo can be configured using `cat_elevation_map_processing_node.yaml` and convert the map into a format the policy was trained with.
-### Important notes:
-- `elevation_mapping_cupy` works best with a deskewed lidar topic, as dynamic motion during the scan can severely degrade the accuracy of the produced map. It does not perform any point aggregation before processing the lidar pointcloud, so full, deskewed, potentially less frequent scans are desirable.
-- Ensure that your odometry and lidar data is highly reliable and accurate.
-- You can visualize the resulting map using `cat_bringup/rviz/go2_elevation_mapping.rviz`, let the robot walk around and change orientation and check if the ground stays perfectly flat.
-- Accurate and synced time is crucial for this stack, ideally you run everything on one machine. If not, confirm using `chronyc tracking` that you are below 1ms of drift.
-- Configure the parameters inside of `elevation_mapping_cupy` to use the highest map update frequency possible on your hardware, same for any other `_fps` params.
-- Use plugins such as `min_filter` `inpainting` to clean up cells before passing to the procesisng node. While NaN/inf are checked, using these plugins will produce much more reliable results if neighboring cells can be used to improve the overall map.
+## Repository layout
 
-Example command for starting elevation_mapping_cupy: `./src/elevation_mapping_cupy/docker/build.sh && source install/setup.bash && ros2 launch elevation_mapping_cupy elevation_mapping_go2.launch.py use_python_node:=false`
+- `exts/locomposition/`: Isaac Lab environments, robot configurations, CaT constraint manager, and CleanRL PPO implementation.
+- `scripts/clean_rl/train.py`: training entry point.
+- `scripts/eval.py`: checkpoint evaluation, scenario rollouts, and metric collection.
+- `scripts/generate_plots.py`: plot regeneration from saved evaluation arrays.
+- `sim2real/`: ROS 2 controller, elevation-map processing, launch stack, and traced policies for the Go2.
+- `tests/`: naming, compatibility, setup, ROS, plotting, and metric contracts.
+
+## Sim-to-real deployment
+
+The Go2 stack runs policy inference at 50 Hz and republishes the latest PD target from a 500 Hz low-level loop. A Livox MID-360 and `elevation_mapping_cupy` produce the online map; the LoComposition processing node converts it to the same yaw-aligned 13×11 observation used in simulation. The controller includes state/map freshness checks and safe-stop behavior, but it is a soft-real-time research stack—not a formal runtime safety system.
+
+Start with the [sim-to-real deployment guide](docs/sim2real.md) before connecting to hardware.
+
+![Go2 obstacle sequences and the LiDAR elevation-mapping pipeline.](assets/sim2real-overview.png)
+
+## Citation and attribution
+
+If LoComposition is useful in your work, please cite:
+
+```bibtex
+@article{kordos2026locomposition,
+  title   = {LoComposition: Terrain-Adaptive Energy-Efficient Quadruped Locomotion without Gait Priors},
+  author  = {Kordos, Loukas and Franz, Leonard T. and Rappenecker, Simon and Hausd{\"o}rfer, Oliver and Schoellig, Angela P. and Kolev, Pavel and Martius, Georg},
+  journal = {arXiv preprint arXiv:2606.15896},
+  year    = {2026}
+}
+```
+
+LoComposition uses **Constraints as Terminations** as the mechanism for operational-limit constraints. Please also cite the original CaT paper when using that part of the code:
+
+```bibtex
+@inproceedings{chane_sane2024cat,
+  title     = {{CaT}: Constraints as Terminations for Legged Locomotion Reinforcement Learning},
+  author    = {Chane-Sane, Elliot and Leziart, Pierre-Alexandre and Flayols, Thomas and Stasse, Olivier and Sou{\`e}res, Philippe and Mansard, Nicolas},
+  booktitle = {2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
+  year      = {2024}
+}
+```
+
+The CaT/Isaac Lab foundation of this fork was originally implemented by Constant Roux and Maciej Stępień. The [original repository](https://github.com/Gepetto/constraints-as-terminations), [CaT paper](https://arxiv.org/abs/2403.18765), and [CaT project page](https://constraints-as-terminations.github.io) remain the authoritative sources for that prior work. Machine-readable LoComposition citation metadata is available in [CITATION.cff](CITATION.cff).
+
+## License
+
+This repository does not yet declare one project-wide license. Existing source files retain their file-level notices (predominantly BSD-3-Clause, with Apache-2.0 in the ROS controller package). Check the relevant file or package before reuse. Selecting and adding the final top-level license is listed in the [migration checklist](docs/migration.md#repository-owner-checklist).

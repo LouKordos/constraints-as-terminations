@@ -1,0 +1,45 @@
+cff-version: 1.2.0
+message: "If you use LoComposition in your work, please cite the paper below."
+title: LoComposition
+type: software
+authors:
+  - given-names: Loukas
+    family-names: Kordos
+    email: loukas.kordos@tum.de
+  - given-names: Leonard T.
+    family-names: Franz
+  - given-names: Simon
+    family-names: Rappenecker
+  - given-names: Oliver
+    family-names: Hausdörfer
+  - given-names: Angela P.
+    family-names: Schoellig
+  - given-names: Pavel
+    family-names: Kolev
+  - given-names: Georg
+    family-names: Martius
+repository-code: https://github.com/LouKordos/LoComposition
+url: https://sites.google.com/view/locomposition
+preferred-citation:
+  type: article
+  title: "LoComposition: Terrain-Adaptive Energy-Efficient Quadruped Locomotion without Gait Priors"
+  authors:
+    - given-names: Loukas
+      family-names: Kordos
+    - given-names: Leonard T.
+      family-names: Franz
+    - given-names: Simon
+      family-names: Rappenecker
+    - given-names: Oliver
+      family-names: Hausdörfer
+    - given-names: Angela P.
+      family-names: Schoellig
+    - given-names: Pavel
+      family-names: Kolev
+    - given-names: Georg
+      family-names: Martius
+  year: 2026
+  identifiers:
+    - type: other
+      value: "arXiv:2606.15896"
+  url: https://arxiv.org/abs/2606.15896
