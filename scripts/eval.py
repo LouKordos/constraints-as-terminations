@@ -1,4 +1,5 @@
 import argparse
+import atexit
 import os
 import inspect
 import glob
@@ -26,6 +27,7 @@ import os
 import re
 import yaml
 import uuid
+from dataclasses import dataclass
 from typing import Dict, Tuple, Optional, List, Any
 from metrics_utils import (
     build_scenario_analysis_mask,
@@ -134,6 +136,150 @@ def compute_scenario_completion(
     return completion
 
 
+MATCHED_BASELINE_CONSTRAINT_BOUNDS: Dict[
+    str, Dict[str, Tuple[Optional[float], Optional[float]]]
+] = {
+    "go2": dict(UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS),
+    "anymal_c": {
+        "joint_torque": (-80.0, 80.0),
+        "joint_velocity": (-12.0, 12.0),
+        "joint_acceleration": (-800.0, 800.0),
+        "action_rate": (-128.0, 128.0),
+        "foot_contact_force": (0.0, 1000.0),
+    },
+    "spot": {
+        "joint_torque": (-80.0, 80.0),
+        "joint_velocity": (-20.0, 20.0),
+        "joint_acceleration": (-800.0, 800.0),
+        "action_rate": (-320.0, 320.0),
+        "foot_contact_force": (0.0, 1000.0),
+    },
+}
+
+MATCHED_BASELINE_TASK_PROFILES = {
+    "baseline-go2-rough-terrain-v0": "go2",
+    "baseline-go2-rough-terrain-play-v0": "go2",
+    "baseline-anymal-c-rough-terrain-v0": "anymal_c",
+    "baseline-anymal-c-rough-terrain-play-v0": "anymal_c",
+    "baseline-spot-rough-terrain-v0": "spot",
+    "baseline-spot-rough-terrain-play-v0": "spot",
+    "baseline-go2-anymal-c-tuning-rough-terrain-v0": "go2",
+    "baseline-go2-anymal-c-tuning-rough-terrain-play-v0": "go2",
+    "baseline-anymal-c-go2-tuning-rough-terrain-v0": "anymal_c",
+    "baseline-anymal-c-go2-tuning-rough-terrain-play-v0": "anymal_c",
+}
+MATCHED_BASELINE_TASK_IDS = set(MATCHED_BASELINE_TASK_PROFILES)
+
+
+@dataclass(frozen=True)
+class RobotEvalProfile:
+    """The small set of geometry/name facts evaluation cannot infer generically."""
+
+    name: str
+    root_link: str
+    foot_links: tuple[str, str, str, str]
+    spawn_height: float
+    sole_offset: float
+    joint_role_mapping: dict[str, dict[str, str]]
+
+
+ROBOT_EVAL_PROFILES = {
+    "go2": RobotEvalProfile(
+        name="go2",
+        root_link="base",
+        foot_links=("FL_foot", "FR_foot", "RL_foot", "RR_foot"),
+        spawn_height=0.4,
+        sole_offset=0.0228,
+        joint_role_mapping={
+            "hip_joint": {
+                "FL": "FL_hip_joint", "FR": "FR_hip_joint",
+                "RL": "RL_hip_joint", "RR": "RR_hip_joint",
+            },
+            "thigh_joint": {
+                "FL": "FL_thigh_joint", "FR": "FR_thigh_joint",
+                "RL": "RL_thigh_joint", "RR": "RR_thigh_joint",
+            },
+            "calf_joint": {
+                "FL": "FL_calf_joint", "FR": "FR_calf_joint",
+                "RL": "RL_calf_joint", "RR": "RR_calf_joint",
+            },
+        },
+    ),
+    "anymal_c": RobotEvalProfile(
+        name="anymal_c",
+        root_link="base",
+        foot_links=("LF_FOOT", "RF_FOOT", "LH_FOOT", "RH_FOOT"),
+        spawn_height=0.6,
+        sole_offset=0.0,
+        joint_role_mapping={
+            "HAA": {"FL": "LF_HAA", "FR": "RF_HAA", "RL": "LH_HAA", "RR": "RH_HAA"},
+            "HFE": {"FL": "LF_HFE", "FR": "RF_HFE", "RL": "LH_HFE", "RR": "RH_HFE"},
+            "KFE": {"FL": "LF_KFE", "FR": "RF_KFE", "RL": "LH_KFE", "RR": "RH_KFE"},
+        },
+    ),
+    "spot": RobotEvalProfile(
+        name="spot",
+        root_link="body",
+        foot_links=("fl_foot", "fr_foot", "hl_foot", "hr_foot"),
+        spawn_height=0.5,
+        sole_offset=0.0,
+        joint_role_mapping={
+            "hx": {"FL": "fl_hx", "FR": "fr_hx", "RL": "hl_hx", "RR": "hr_hx"},
+            "hy": {"FL": "fl_hy", "FR": "fr_hy", "RL": "hl_hy", "RR": "hr_hy"},
+            "kn": {"FL": "fl_kn", "FR": "fr_kn", "RL": "hl_kn", "RR": "hr_kn"},
+        },
+    ),
+}
+
+
+def resolve_robot_eval_profile(task_name: str) -> RobotEvalProfile:
+    """Resolve explicit new embodiments and default unknown legacy runs to Go2."""
+    task_name_lower = task_name.lower()
+    matched_baseline_profile = MATCHED_BASELINE_TASK_PROFILES.get(task_name_lower)
+    if matched_baseline_profile is not None:
+        return ROBOT_EVAL_PROFILES[matched_baseline_profile]
+    if "anymal" in task_name_lower:
+        return ROBOT_EVAL_PROFILES["anymal_c"]
+    if "spot" in task_name_lower:
+        return ROBOT_EVAL_PROFILES["spot"]
+    if "go2" in task_name_lower:
+        return ROBOT_EVAL_PROFILES["go2"]
+
+    print(
+        f"[WARN] Task '{task_name}' has no recognized embodiment marker; "
+        "assuming legacy Go2 for backward compatibility."
+    )
+    return ROBOT_EVAL_PROFILES["go2"]
+
+
+def adjust_fixed_command_spawn_heights(fixed_command_scenarios, profile: RobotEvalProfile):
+    """Preserve terrain-relative scenario placement while changing robot height."""
+    if profile.name == "go2":
+        # Preserve the exact legacy tensors and object structure for regression.
+        return fixed_command_scenarios
+
+    height_delta = profile.spawn_height - ROBOT_EVAL_PROFILES["go2"].spawn_height
+    adjusted_scenarios = []
+    for scenario_tag, command, (spawn_position, spawn_orientation) in fixed_command_scenarios:
+        adjusted_position = spawn_position.clone()
+        adjusted_position[2] += height_delta
+        adjusted_scenarios.append(
+            (scenario_tag, command, (adjusted_position, spawn_orientation))
+        )
+    return adjusted_scenarios
+
+
+def resolve_root_body_index(body_names: list[str], profile: RobotEvalProfile) -> int:
+    """Return the profile's root-body index or fail before collecting wrong telemetry."""
+    try:
+        return body_names.index(profile.root_link)
+    except ValueError as exception:
+        raise ValueError(
+            f"Evaluation profile '{profile.name}' requires root body '{profile.root_link}', "
+            f"but the articulation exposes {body_names}."
+        ) from exception
+
+
 def set_global_seed(seed: int):
     import random
 
@@ -181,6 +327,21 @@ def is_upstream_go2_rough_task(task_name: str) -> bool:
     mentions_unitree_go2 = "unitree-go2" in task_name_lower or "unitree_go2" in task_name_lower
 
     return mentions_rough and mentions_unitree_go2
+
+
+def is_matched_baseline_task(task_name: str) -> bool:
+    """Return whether ``task_name`` is one of this repository's matched baselines."""
+    return task_name.lower() in MATCHED_BASELINE_TASK_IDS
+
+
+def get_matched_baseline_constraint_bounds(
+    profile_name: str,
+) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
+    """Return CaT-equivalent thresholds used only to summarize baseline rollouts."""
+    try:
+        return dict(MATCHED_BASELINE_CONSTRAINT_BOUNDS[profile_name])
+    except KeyError as exception:
+        raise ValueError(f"No matched-baseline constraint bounds for profile '{profile_name}'") from exception
 
 
 def get_hardcoded_upstream_go2_constraint_bounds() -> Dict[str, Tuple[Optional[float], Optional[float]]]:
@@ -286,6 +447,15 @@ def parse_arguments():
     parser.add_argument("--run_dir", type=str, required=True, help="ABSOLUTE path to directory containing model checkpoints and params.")
     parser.add_argument("--eval_checkpoint", type=str, default=None, help="Optionally specify the model save checkpoint number instead of automatically using the last saved one.")
     parser.add_argument("--random_sim_step_length", type=int, default=4000, help="Number of steps to run with random commands and spawn points. Standardized tests like standing and walking forward will always run.")
+    parser.add_argument(
+        "--fixed_command_sim_steps",
+        type=int,
+        default=500,
+        help=(
+            "Steps per standardized fixed-command scenario. Keep the default for reported metrics; "
+            "shorter values are intended only for evaluation-pipeline smoke tests."
+        ),
+    )
     parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate. If you change this, hell will break loose")
     parser.add_argument("--task", type=str, default="Isaac-Velocity-Rough-Unitree-Go2-Play-v0", help="Name of the task/environment.")
     parser.add_argument(
@@ -320,6 +490,10 @@ def parse_arguments():
     cli_args.add_clean_rl_args(parser)
     AppLauncher.add_app_launcher_args(parser)
     arguments = parser.parse_args()
+    if arguments.random_sim_step_length < 0:
+        parser.error("--random_sim_step_length must be non-negative")
+    if arguments.fixed_command_sim_steps <= 0:
+        parser.error("--fixed_command_sim_steps must be positive")
     arguments.enable_cameras = True  # Video
     return arguments
 
@@ -466,10 +640,12 @@ def resolve_constraint_bounds_for_eval(
     Priority:
     1. Custom CaT-style envs with env_cfg.constraints:
        load the saved training/eval bounds from params/env.yaml.
-    2. Upstream rough Unitree Go2 envs without custom constraints:
+    2. Repository matched baselines without custom constraints:
+       use embodiment-specific CaT thresholds for reporting only.
+    3. Upstream rough Unitree Go2 envs without custom constraints:
        use hardcoded eval-only bounds so their metrics_summary.json contains
        comparable constraint_violations_percent entries.
-    3. Everything else:
+    4. Everything else:
        return an empty bounds dict.
 
     This function deliberately does not modify metrics_utils.py. It only supplies
@@ -486,9 +662,20 @@ def resolve_constraint_bounds_for_eval(
             if hasattr(env_cfg.constraints, "foot_contact_force") and "foot_contact_force" in constraint_bounds:
                 env_cfg.constraints.foot_contact_force.params["limit"] = constraint_bounds["foot_contact_force"][1]
 
-            if hasattr(env_cfg.constraints, "front_hfe_position") and "RL_thigh_joint" in constraint_bounds:
-                # For runs that do not use style constraints.
-                env_cfg.constraints.front_hfe_position.params["limit"] = constraint_bounds["RL_thigh_joint"][1]
+            if hasattr(env_cfg.constraints, "front_hfe_position"):
+                # This hard term accepts one scalar even though the saved metrics
+                # bounds are expanded per matching joint. Use the least restrictive
+                # matching upper bound so eval never invents a tighter termination.
+                position_term = env_cfg.constraints.front_hfe_position
+                position_patterns = position_term.params.get("names", [])
+                matching_upper_bounds = [
+                    upper_bound
+                    for joint_name, (_, upper_bound) in constraint_bounds.items()
+                    if upper_bound is not None
+                    and any(re.fullmatch(pattern, joint_name) for pattern in position_patterns)
+                ]
+                if matching_upper_bounds:
+                    position_term.params["limit"] = max(matching_upper_bounds)
 
             if constraint_bounds:
                 print("[INFO] Loaded eval constraint bounds from params/env.yaml:")
@@ -503,7 +690,16 @@ def resolve_constraint_bounds_for_eval(
     else:
         print("[INFO] env_cfg has no custom constraints block. Constraint-bound loading skipped.")
 
-    if not constraint_bounds: # and is_upstream_go2_rough_task(task_name):
+    if not constraint_bounds and is_matched_baseline_task(task_name):
+        profile = resolve_robot_eval_profile(task_name)
+        constraint_bounds = get_matched_baseline_constraint_bounds(profile.name)
+        constraint_bounds_source = f"hardcoded_matched_baseline_{profile.name}_eval_thresholds"
+        print(
+            "[INFO] Using CaT-equivalent eval-only constraint bounds for "
+            f"matched {profile.name} baseline reporting:"
+        )
+        print(format_constraint_bounds_for_logging(constraint_bounds))
+    elif not constraint_bounds and is_upstream_go2_rough_task(task_name):
         constraint_bounds = get_hardcoded_upstream_go2_constraint_bounds()
         constraint_bounds_source = "hardcoded_upstream_go2_rough_eval_thresholds"
         print("[INFO] Using hardcoded eval constraint bounds for upstream rough Unitree Go2 task:")
@@ -623,7 +819,12 @@ def scene_entity_exists(env, entity_name: str) -> bool:
         return False
 
 
-def add_eval_foot_sensors_to_env_cfg(env_cfg, foot_links: list[str], sim_dt: float):
+def add_eval_foot_sensors_to_env_cfg(
+    env_cfg,
+    foot_links: tuple[str, str, str, str] | list[str],
+    root_link: str,
+    sim_dt: float,
+):
     from isaaclab.sensors.ray_caster import RayCasterCfg, patterns
     from isaaclab.sensors.frame_transformer import FrameTransformerCfg
 
@@ -646,7 +847,7 @@ def add_eval_foot_sensors_to_env_cfg(env_cfg, foot_links: list[str], sim_dt: flo
 
     if not hasattr(env_cfg.scene, "foot_frame_transformer"):
         env_cfg.scene.foot_frame_transformer = FrameTransformerCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/base",
+            prim_path=f"{{ENV_REGEX_NS}}/Robot/{root_link}",
             target_frames=[
                 FrameTransformerCfg.FrameCfg(prim_path=f"{{ENV_REGEX_NS}}/Robot/{link_name}")
                 for link_name in foot_links
@@ -757,13 +958,18 @@ def add_eval_only_metrics_to_summary(
     return enriched_metrics
 
 
-def apply_common_eval_reward_scale_if_needed(env_cfg, task_name: str, enabled: bool):
+def apply_common_eval_reward_scale_if_needed(env_cfg, task_name: str, enabled: bool) -> bool:
     if not enabled:
-        return
+        return False
+
+    # Matched baselines must retain the exact upstream training reward stack.
+    # Their comparable tracking metrics are computed separately from raw state.
+    if is_matched_baseline_task(task_name):
+        return False
 
     task_name_lower = task_name.lower()
     if "isaac-velocity-rough-unitree-go2" not in task_name_lower:
-        return
+        return False
 
     if hasattr(env_cfg, "rewards") and hasattr(env_cfg.rewards, "track_lin_vel_xy_exp"):
         env_cfg.rewards.track_lin_vel_xy_exp.weight = 1.0
@@ -772,6 +978,7 @@ def apply_common_eval_reward_scale_if_needed(env_cfg, task_name: str, enabled: b
         env_cfg.rewards.track_ang_vel_z_exp.weight = 0.5
 
     print("[INFO] Applied common eval reward scale for upstream Go2: track_lin_vel_xy_exp=1.0, track_ang_vel_z_exp=0.5")
+    return True
 
 
 def get_current_terrain_level(env) -> float:
@@ -804,6 +1011,7 @@ def maximum_numeric_value(nested_value: Any) -> Optional[float]:
 def main():
     args = parse_arguments()
     args.run_dir = os.path.abspath(args.run_dir)
+    robot_profile = resolve_robot_eval_profile(args.task)
 
     seed = args.seed
     set_global_seed(seed)
@@ -827,13 +1035,17 @@ def main():
     if policy_backend == "clean_rl":
         model_state = extract_cleanrl_state_dict(checkpoint_object)
         observation_dim = infer_checkpoint_input_dimensions(model_state)
-        if observation_dim == 236:
-            args.task = "CaT-Go2-Rough-Terrain-Joint-State-History-Play-v0"
-        elif observation_dim == 558:
-            args.task = "CaT-Go2-Rough-Terrain-Full-State-History-Play-v0"
+        if robot_profile.name == "go2":
+            if observation_dim == 236:
+                args.task = "CaT-Go2-Rough-Terrain-Joint-State-History-Play-v0"
+            elif observation_dim == 558:
+                args.task = "CaT-Go2-Rough-Terrain-Full-State-History-Play-v0"
         print(f"Observation dimension={observation_dim}, selected task={args.task}")
     else:
         print(f"[INFO] RSL-RL checkpoint selected, using task={args.task}")
+
+    robot_profile = resolve_robot_eval_profile(args.task)
+    print(f"[INFO] Resolved evaluation robot profile={robot_profile.name}")
 
     if not "play" in args.task.lower():
         input("\n\n-------------------------------------------------------------------\nKeyword 'Play' not found in task name, are you sure you are using the correct task/environment?\n-------------------------------------------------------------------\n\n")
@@ -845,6 +1057,42 @@ def main():
         sys.argv.append("--/rtx/verifyDriverVersion/enabled=false")
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
+    env = None
+    ffmpeg_process = None
+    cleanup_complete = False
+
+    def cleanup_runtime_resources():
+        """Release evaluator subprocess, environment, and Kit even after exceptions."""
+        nonlocal cleanup_complete
+        if cleanup_complete:
+            return
+        cleanup_complete = True
+
+        if ffmpeg_process is not None and ffmpeg_process.poll() is None:
+            try:
+                if ffmpeg_process.stdin is not None and not ffmpeg_process.stdin.closed:
+                    ffmpeg_process.stdin.close()
+                ffmpeg_process.wait(timeout=5)
+            except (BrokenPipeError, OSError, subprocess.TimeoutExpired):
+                ffmpeg_process.terminate()
+                try:
+                    ffmpeg_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    ffmpeg_process.kill()
+                    ffmpeg_process.wait()
+
+        if env is not None:
+            try:
+                env.close()
+            except Exception as exception:
+                print(f"[WARN] Failed to close evaluation environment: {exception}")
+
+        try:
+            simulation_app.close()
+        except Exception as exception:
+            print(f"[WARN] Failed to close Isaac Sim application: {exception}")
+
+    atexit.register(cleanup_runtime_resources)
     from isaaclab_tasks.utils import parse_env_cfg
     from isaaclab_tasks.utils.parse_cfg import load_cfg_from_registry
     from isaaclab.managers import EventTermCfg
@@ -864,7 +1112,7 @@ def main():
         matching_registered_tasks = sorted(
             task_id
             for task_id in gym.envs.registry.keys()
-            if "cat-go2" in task_id.lower() or "unitree-go2" in task_id.lower()
+            if any(name in task_id.lower() for name in ("cat-go2", "unitree-go2", "anymal", "spot"))
         )
         raise RuntimeError(
             f"Task '{args.task}' is not registered after importing the custom CaT task package. "
@@ -879,7 +1127,7 @@ def main():
 
         env_cfg.scene.robot = UNITREE_GO2_CFG_TRAIN.replace(prim_path="{ENV_REGEX_NS}/Robot")
         print("[INFO] Replaced the PLAY robot config with UNITREE_GO2_CFG_TRAIN for this evaluation.")
-    apply_common_eval_reward_scale_if_needed(
+    eval_reward_scale_override_applied = apply_common_eval_reward_scale_if_needed(
         env_cfg=env_cfg,
         task_name=args.task,
         enabled=args.downscale_upstream_go2_tracking_rewards,
@@ -943,9 +1191,14 @@ def main():
     env_cfg.viewer.resolution = (frame_width, frame_height)
     device = torch.device(args.device)
 
-    foot_links = ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'] if "go2" in args.task.lower() else ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
+    foot_links = list(robot_profile.foot_links)
     foot_labels = ['front left', 'front right', 'rear left', 'rear right']
-    add_eval_foot_sensors_to_env_cfg(env_cfg, foot_links=foot_links, sim_dt=env_cfg.sim.dt)
+    add_eval_foot_sensors_to_env_cfg(
+        env_cfg,
+        foot_links=robot_profile.foot_links,
+        root_link=robot_profile.root_link,
+        sim_dt=env_cfg.sim.dt,
+    )
 
     run_path = Path(args.run_dir).resolve()
     run_name = run_path.name
@@ -967,7 +1220,9 @@ def main():
     plots_directory = os.path.join(eval_base_dir, "plots")
     os.makedirs(plots_directory, exist_ok=True)
 
-    fixed_command_sim_steps = 500  # If you want to increase this you also need to increase episode length otherwise env will reset mid-way
+    # The 500-step default exactly fills one 10 s episode. The CLI override is
+    # diagnostic-only and lets checkpoint/eval integration be tested quickly.
+    fixed_command_sim_steps = args.fixed_command_sim_steps
     fixed_command_scenarios = [  # Scenario positions depend on seed!
         ("stand_still", torch.tensor([0.0, 0.0, 0.0], device=device), (torch.tensor([30, 30.0, 0.4], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
         ("fast_walk_stairs_up", torch.tensor([1, 0.0, 0.0], device=device), (torch.tensor([-8, 16, -0.1], device=device), torch.tensor([0.0, 0.0, 0.0, 1.0], device=device))),
@@ -1002,6 +1257,10 @@ def main():
         fixed_command_scenarios,
         args.fixed_scenario,
         REBUTTAL_DYNAMICS_SCENARIOS if args.rebuttal_scenarios_only else None,
+    )
+    fixed_command_scenarios = adjust_fixed_command_spawn_heights(
+        fixed_command_scenarios,
+        robot_profile,
     )
 
     # See main training loop for detailed explanation, but in summary, hard constraints terminate the environment or at least return terminated = 1
@@ -1088,7 +1347,7 @@ def main():
         raise ValueError(f"Unsupported policy_backend={policy_backend}")
 
     robot = env.unwrapped.scene["robot"]
-    base_body_index = robot.data.body_names.index("base") if "base" in robot.data.body_names else 0
+    base_body_index = resolve_root_body_index(robot.data.body_names, robot_profile)
     base_body_name = robot.data.body_names[base_body_index]
     print(f"[INFO] Recording base COM acceleration from body index {base_body_index}: {base_body_name}")
     vel_term = env.unwrapped.command_manager.get_term("base_velocity")
@@ -1367,7 +1626,9 @@ def main():
         foot_positions_body_frame_buffer.append(foot_positions_body)
 
         # Calculate foot height above ground using raycaster sensor in each foot (sole/contact frame)
-        foot_com_toe_tip_offset = 0.0228  # This makes swing height more intuitive, without the offset, standing still reports a positive stance height
+        # Apply a robot-specific sole offset only when it has been audited.
+        # Unknown offsets remain zero instead of inheriting Go2 geometry.
+        foot_com_toe_tip_offset = robot_profile.sole_offset
         terrain_offset_feet = np.array([
             [
                 0,
@@ -1468,6 +1729,7 @@ def main():
         env_name=env_name,
         run_name=run_name,
         task_name=task_name,
+        robot_profile=robot_profile.name,
         action_scale=np.array(action_scale, dtype=object),
         eval_action_scale_before_override=np.array(eval_action_scale_before_override, dtype=object),
         sim_times=sim_times,
@@ -1563,6 +1825,7 @@ def main():
         "foot_labels": foot_labels,
         "constraint_bounds": constraint_bounds,
         "total_robot_mass": total_robot_mass,
+        "joint_role_mapping": robot_profile.joint_role_mapping,
     }
 
     # --- masks ---
@@ -1688,9 +1951,11 @@ def main():
         "env_name": env_name,
         "run_name": run_name,
         "task_name": task_name,
+        "robot_profile": robot_profile.name,
         "run_dir": str(run_path),
         "eval_base_dir": eval_base_dir,
         "random_sim_steps": args.random_sim_step_length,
+        "fixed_command_sim_steps": fixed_command_sim_steps,
         "total_sim_steps": total_sim_steps,
         "seed": env_cfg.seed,
         "action_scale": action_scale,
@@ -1715,11 +1980,20 @@ def main():
         "hardcoded_upstream_go2_constraint_bounds_used": (
             constraint_bounds_source == "hardcoded_upstream_go2_rough_eval_thresholds"
         ),
+        "matched_baseline_constraint_bounds": MATCHED_BASELINE_CONSTRAINT_BOUNDS,
+        "matched_baseline_constraint_bounds_used": constraint_bounds_source.startswith(
+            "hardcoded_matched_baseline_"
+        ),
         "eval_tracking_reward_common_scale": {
             "track_lin_vel_xy_exp_weight": 1.0,
             "track_ang_vel_z_exp_weight": 0.5,
             "std_squared": 0.25,
-            "note": "Common eval tracking scale matching the custom env. Upstream Go2 training uses 1.5 and 0.75, so this records downscaled fair-comparison tracking rewards.",
+            "environment_reward_weights_modified": eval_reward_scale_override_applied,
+            "note": (
+                "These common tracking metrics are computed separately from raw command/state data. "
+                "Matched baseline environment reward weights remain upstream and unchanged; only the "
+                "legacy upstream Go2 task may be reweighted when its compatibility flag is enabled."
+            ),
         },
         "downscale_upstream_go2_tracking_rewards": args.downscale_upstream_go2_tracking_rewards,
     })
@@ -1770,8 +2044,8 @@ def main():
     for report_format, report_path in report_paths.items():
         print(f"[INFO]   {report_format}: {report_path}")
 
-    env.close()
-    simulation_app.close()
+    cleanup_runtime_resources()
+    atexit.unregister(cleanup_runtime_resources)
 
 
 if __name__ == "__main__":

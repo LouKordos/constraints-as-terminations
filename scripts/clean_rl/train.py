@@ -49,6 +49,12 @@ parser.add_argument(
 parser.add_argument(
     "--num_iterations", type=int, default=None, help="RL Policy training iterations."
 )
+parser.add_argument(
+    "--energy_end_weight",
+    type=float,
+    default=None,
+    help="Override curriculum.power.params['end_weight']; defaults to the task configuration.",
+)
 cli_args.add_clean_rl_args(parser)
 AppLauncher.add_app_launcher_args(parser)
 args_cli, hydra_args = parser.parse_known_args()
@@ -117,6 +123,46 @@ def get_ground_hash(env):
     
     raise ValueError(f"No usable mesh or height-field found under {root.GetPath()}")
 
+
+def print_resolved_training_config(env_cfg, task_name: str) -> None:
+    """Print the embodiment-dependent values that most often invalidate a long run."""
+    robot_cfg = env_cfg.scene.robot
+    usd_path = getattr(getattr(robot_cfg, "spawn", None), "usd_path", None)
+    power_term = getattr(getattr(env_cfg, "curriculum", None), "power", None)
+    power_end_weight = None if power_term is None else power_term.params.get("end_weight")
+
+    print("[INFO] Resolved training embodiment/configuration:")
+    print(f"[INFO] task={task_name}")
+    print(f"[INFO] robot_usd={usd_path}")
+    print(f"[INFO] action_joint_names={env_cfg.actions.joint_pos.joint_names}")
+    print(f"[INFO] action_scale={env_cfg.actions.joint_pos.scale}")
+    print(f"[INFO] control_step_dt={env_cfg.sim.dt * env_cfg.decimation}")
+    print(f"[INFO] episode_length_s={env_cfg.episode_length_s}")
+    print(f"[INFO] energy_end_weight={power_end_weight}")
+
+    constraints_cfg = getattr(env_cfg, "constraints", None)
+    if constraints_cfg is not None:
+        for term_name in (
+            "joint_torque",
+            "joint_velocity",
+            "joint_acceleration",
+            "action_rate",
+            "foot_contact_force",
+            "front_hfe_position",
+            "hip_position",
+            "no_move",
+        ):
+            term_cfg = getattr(constraints_cfg, term_name, None)
+            if term_cfg is not None:
+                print(f"[INFO] constraint.{term_name}={term_cfg.params}")
+
+    events_cfg = getattr(env_cfg, "events", None)
+    if events_cfg is not None:
+        for term_name in ("randomize_mass", "push_robot", "push_base_wrench"):
+            term_cfg = getattr(events_cfg, term_name, None)
+            if term_cfg is not None:
+                print(f"[INFO] event.{term_name}={term_cfg.params}")
+
 @hydra_task_config(args_cli.task, "clean_rl_cfg_entry_point")
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg,):
 
@@ -134,6 +180,14 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         if args_cli.num_iterations is not None
         else agent_cfg.num_iterations
     )
+
+    if args_cli.energy_end_weight is not None:
+        power_term = getattr(getattr(env_cfg, "curriculum", None), "power", None)
+        if power_term is None:
+            raise ValueError("--energy_end_weight requires an active curriculum.power term")
+        if args_cli.energy_end_weight < 0.0:
+            raise ValueError("--energy_end_weight must be non-negative")
+        power_term.params["end_weight"] = args_cli.energy_end_weight
 
     seed = args_cli.seed
     agent_cfg.seed = seed
@@ -153,6 +207,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     print(f"[INFO] env_cfg.sim.random_seed={env_cfg.sim.random_seed}")
     if env_cfg.scene.terrain.terrain_generator is not None:
         print(f"[INFO] terrain_generator.seed={env_cfg.scene.terrain.terrain_generator.seed}")
+
+    print_resolved_training_config(env_cfg, args_cli.task)
 
     env_cfg.sim.device = (args_cli.device if args_cli.device is not None else env_cfg.sim.device)
 

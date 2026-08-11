@@ -5,6 +5,8 @@
 
 import gymnasium as gym
 
+from isaaclab.envs import ManagerBasedRLEnv
+
 from . import agents
 from cat_envs.tasks.utils.cat.cat_env import CaTEnv
 
@@ -12,6 +14,144 @@ from cat_envs.tasks.utils.cat.cat_env import CaTEnv
 ##
 # Register Gym environments.
 ##
+
+_GO2_RSL_RL_CFG = (
+    "isaaclab_tasks.manager_based.locomotion.velocity.config.go2.agents."
+    "rsl_rl_ppo_cfg:UnitreeGo2RoughPPORunnerCfg"
+)
+_ANYMAL_C_RSL_RL_CFG = (
+    "isaaclab_tasks.manager_based.locomotion.velocity.config.anymal_c.agents."
+    "rsl_rl_ppo_cfg:AnymalCRoughPPORunnerCfg"
+)
+_SPOT_RSL_RL_CFG = (
+    "isaaclab_tasks.manager_based.locomotion.velocity.config.spot.agents."
+    "rsl_rl_ppo_cfg:SpotFlatPPORunnerCfg"
+)
+_GO2_ANYMAL_C_TUNING_RSL_RL_CFG = (
+    f"{agents.__name__}.rsl_rl_ppo_cfg:Go2AnymalCTuningPPORunnerCfg"
+)
+_ANYMAL_C_GO2_TUNING_RSL_RL_CFG = (
+    f"{agents.__name__}.rsl_rl_ppo_cfg:AnymalCGo2TuningPPORunnerCfg"
+)
+
+
+gym.register(
+    id="Baseline-Go2-Rough-Terrain-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.baseline_go2_rough_env_cfg:BaselineGo2RoughEnvCfg",
+        "rsl_rl_cfg_entry_point": _GO2_RSL_RL_CFG,
+    },
+)
+
+gym.register(
+    id="Baseline-Go2-Rough-Terrain-Play-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.baseline_go2_rough_env_cfg:BaselineGo2RoughEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": _GO2_RSL_RL_CFG,
+    },
+)
+
+gym.register(
+    id="Baseline-Anymal-C-Rough-Terrain-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": (
+            f"{__name__}.baseline_anymal_c_rough_env_cfg:BaselineAnymalCRoughEnvCfg"
+        ),
+        "rsl_rl_cfg_entry_point": _ANYMAL_C_RSL_RL_CFG,
+    },
+)
+
+gym.register(
+    id="Baseline-Anymal-C-Rough-Terrain-Play-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": (
+            f"{__name__}.baseline_anymal_c_rough_env_cfg:BaselineAnymalCRoughEnvCfg_PLAY"
+        ),
+        "rsl_rl_cfg_entry_point": _ANYMAL_C_RSL_RL_CFG,
+    },
+)
+
+gym.register(
+    id="Baseline-Go2-Anymal-C-Tuning-Rough-Terrain-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": (
+            f"{__name__}.baseline_cross_tuning_env_cfg:"
+            "BaselineGo2AnymalCTuningRoughEnvCfg"
+        ),
+        "rsl_rl_cfg_entry_point": _GO2_ANYMAL_C_TUNING_RSL_RL_CFG,
+    },
+)
+
+gym.register(
+    id="Baseline-Go2-Anymal-C-Tuning-Rough-Terrain-Play-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": (
+            f"{__name__}.baseline_cross_tuning_env_cfg:"
+            "BaselineGo2AnymalCTuningRoughEnvCfg_PLAY"
+        ),
+        "rsl_rl_cfg_entry_point": _GO2_ANYMAL_C_TUNING_RSL_RL_CFG,
+    },
+)
+
+gym.register(
+    id="Baseline-Anymal-C-Go2-Tuning-Rough-Terrain-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": (
+            f"{__name__}.baseline_cross_tuning_env_cfg:"
+            "BaselineAnymalCGo2TuningRoughEnvCfg"
+        ),
+        "rsl_rl_cfg_entry_point": _ANYMAL_C_GO2_TUNING_RSL_RL_CFG,
+    },
+)
+
+gym.register(
+    id="Baseline-Anymal-C-Go2-Tuning-Rough-Terrain-Play-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": (
+            f"{__name__}.baseline_cross_tuning_env_cfg:"
+            "BaselineAnymalCGo2TuningRoughEnvCfg_PLAY"
+        ),
+        "rsl_rl_cfg_entry_point": _ANYMAL_C_GO2_TUNING_RSL_RL_CFG,
+    },
+)
+
+gym.register(
+    id="Baseline-Spot-Rough-Terrain-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.baseline_spot_rough_env_cfg:BaselineSpotRoughEnvCfg",
+        "rsl_rl_cfg_entry_point": _SPOT_RSL_RL_CFG,
+    },
+)
+
+gym.register(
+    id="Baseline-Spot-Rough-Terrain-Play-v0",
+    entry_point=ManagerBasedRLEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": (
+            f"{__name__}.baseline_spot_rough_env_cfg:BaselineSpotRoughEnvCfg_PLAY"
+        ),
+        "rsl_rl_cfg_entry_point": _SPOT_RSL_RL_CFG,
+    },
+)
 
 gym.register(
     id="Isaac-Velocity-CaT-Flat-Solo12-v0",
@@ -39,6 +179,26 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{__name__}.cat_go2_rough_terrain_env_cfg:Go2RoughTerrainEnvCfg",
+        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="CaT-Anymal-C-Rough-Terrain-v0",
+    entry_point=CaTEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.cat_anymal_c_rough_terrain_env_cfg:AnymalCRoughTerrainEnvCfg",
+        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="CaT-Spot-Rough-Terrain-v0",
+    entry_point=CaTEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.cat_spot_rough_terrain_env_cfg:SpotRoughTerrainEnvCfg",
         "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
     },
 )
@@ -89,6 +249,26 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{__name__}.cat_go2_rough_terrain_env_cfg:Go2RoughTerrainEnvCfg_PLAY",
+        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="CaT-Anymal-C-Rough-Terrain-Play-v0",
+    entry_point=CaTEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.cat_anymal_c_rough_terrain_env_cfg:AnymalCRoughTerrainEnvCfg_PLAY",
+        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="CaT-Spot-Rough-Terrain-Play-v0",
+    entry_point=CaTEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.cat_spot_rough_terrain_env_cfg:SpotRoughTerrainEnvCfg_PLAY",
         "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
     },
 )

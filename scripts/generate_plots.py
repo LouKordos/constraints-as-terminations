@@ -669,29 +669,19 @@ def plot_gait_diagram(
     )
     return fig
 
-def get_leg_linestyle(joint_name):
-    if joint_name.startswith("FL"):
-        return "solid"
-    elif joint_name.startswith("FR"):
-        return "dotted"
-    elif joint_name.startswith("RL") or joint_name.startswith("HL"):
-        return "dashed"
-    elif joint_name.startswith("RR") or joint_name.startswith("HR"):
-        return "dashdot"
-
 # recognised prefixes for the four legs
 _leg_prefixes = [
-    ("FL_",),                     	# 0 = front-left
-    ("FR_",),                     	# 1 = front-right
-    ("RL_", "HL_"),               	# 2 = rear/​hind-left
-    ("RR_", "HR_"),               	# 3 = rear/​hind-right
+    ("FL_", "LF_"),              	# 0 = front-left
+    ("FR_", "RF_"),              	# 1 = front-right
+    ("RL_", "HL_", "LH_"),        	# 2 = rear/​hind-left
+    ("RR_", "HR_", "RH_"),        	# 3 = rear/​hind-right
 ]
 
 # -- accepted substrings for each joint "column" --------
 JOINT_TYPE_SYNONYMS = {
-    0: ("hip",  "haa"),      	# 0th column  = hip  / HAA  (ab-ad)
-    1: ("thigh","hfe"),      	# 1st column  = thigh/ HFE  (flex-ext)
-    2: ("calf", "kfe"),      	# 2nd column  = calf / KFE  (knee flex-ext)
+    0: ("hip",  "haa", "hx"),      	# 0th column  = hip  / HAA  (ab-ad)
+    1: ("thigh","hfe", "hy"),      	# 1st column  = thigh/ HFE  (flex-ext)
+    2: ("calf", "kfe", "kn"),      	# 2nd column  = calf / KFE  (knee flex-ext)
 }
 
 def _column_from_name(jname: str) -> int | None:
@@ -703,6 +693,32 @@ def _column_from_name(jname: str) -> int | None:
         if any(k in low for k in keys):
             return col
     raise ValueError("Could not determine joint row/col for plotting based on names")
+
+
+def _row_from_name(jname: str) -> int | None:
+    upper_name = jname.upper()
+    for row, prefixes in enumerate(_leg_prefixes):
+        if any(upper_name.startswith(prefix) for prefix in prefixes):
+            return row
+    return None
+
+
+def _build_joint_layout(joint_names: list[str]) -> tuple[list[int], list[int], list[int]]:
+    leg_rows = [_row_from_name(name) for name in joint_names]
+    unknown_leg_names = [name for name, row in zip(joint_names, leg_rows) if row is None]
+    if unknown_leg_names:
+        raise ValueError(f"Could not determine joint row for plotting: {unknown_leg_names}")
+
+    leg_cols = [_column_from_name(name) for name in joint_names]
+    resolved_leg_rows = [int(row) for row in leg_rows]
+    return resolved_leg_rows, leg_cols, resolved_leg_rows.copy()
+
+
+def get_leg_linestyle(joint_name):
+    row = _row_from_name(joint_name)
+    if row is None:
+        return None
+    return ("solid", "dotted", "dashed", "dashdot")[row]
 
 def _plot_body_frame_foot_position_heatmap(foot_positions_body_frame: np.ndarray, output_dir: str, pickle_dir: str, gridsize: int = 100, FIGSIZE: tuple[int, int] = (20, 20)):
     """
@@ -3448,20 +3464,7 @@ def generate_plots(
     step_lengths = compute_swing_lengths(contact_state=contact_state_array, foot_positions_world=foot_positions_world_frame, reset_steps=reset_timesteps, foot_labels=foot_labels)
     swing_durations = compute_swing_durations(contact_state=contact_state_array, sim_env_step_dt=step_dt, foot_labels=foot_labels)
 
-    # build two look-up tables
-    leg_row: list = [None] * len(joint_names) # index 0-3
-    leg_col: list = [None] * len(joint_names) # index 0-2
-    foot_from_joint: list = [None] * len(joint_names)
-
-    for j, name in enumerate(joint_names):
-        # find which leg
-        for row, prefixes in enumerate(_leg_prefixes):
-            if any(name.startswith(p) for p in prefixes):
-                leg_row[j] = row
-                foot_from_joint[j] = row # same index as contact_state columns
-                break
-        # find column inside that leg
-        leg_col[j] = _column_from_name(name)
+    leg_row, leg_col, foot_from_joint = _build_joint_layout(joint_names)
 
     print("joint names: ", joint_names)
     print("leg_row:", leg_row)
@@ -3500,15 +3503,6 @@ def generate_plots(
         'cost_of_transport': r'$-$',
         'power': r'$\text{W}$'
     }
-
-    # Helper for mapping joints to feet
-    foot_from_joint = []
-    for name in joint_names:
-        if   name.startswith('FL_'): foot_from_joint.append(0)
-        elif name.startswith('FR_'): foot_from_joint.append(1)
-        elif name.startswith('RL_') or name.startswith('HL_'): foot_from_joint.append(2)
-        elif name.startswith('RR_') or name.startswith('HR_'): foot_from_joint.append(3)
-        else: foot_from_joint.append(None)
 
     # --- Prepare for Joint Phase Plots ---
     joint_type_map = {0: "hip", 1: "thigh", 2: "calf"}
