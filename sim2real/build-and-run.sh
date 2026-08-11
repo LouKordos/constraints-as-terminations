@@ -9,7 +9,7 @@ CLEAN_BUILD=false
 SKIP_MULTIARCH_DOCKER_BUILD=true
 BUILD_DIR="${SCRIPT_DIR}/build"
 LOG_FILE="${SCRIPT_DIR}/build.log"
-CONTAINER_NAME="constraints-as-terminations-cat_sim2real-1"
+CONTAINER_NAME="${LOCOMPOSITION_CONTAINER_NAME:-locomposition-locomposition_sim2real-1}"
 export CLICOLOR=1
 export CLICOLOR_FORCE=1
 
@@ -59,7 +59,7 @@ if [[ -z "${DOCKER_FLAG_FOR_RUN_SCRIPT}" ]]; then
         echo "Starting non-multiarch build."
         docker compose --progress plain -f "${REPO_ROOT}/compose.yml" -f "${REPO_ROOT}/compose.no-multiarch.yml" --project-directory "${REPO_ROOT}" build
         # Should the compose build fail, this is likely because stupid buildkit does not respect network=host option. So just comment out the line above and uncomment the line below:
-        # docker build .. -t loukordos/cat-sim2real:latest --network=host
+        # docker build .. -t "${LOCOMPOSITION_SIM2REAL_IMAGE:-loukordos/cat-sim2real:latest}" --network=host
     fi
     rm -rf "${SCRIPT_DIR}/build" || true # Reset build to a clean state, as build cache can cause confusing issues when changing installed deps in the Dockerfile.
     rm -rf "${SCRIPT_DIR}/ros2_ws/{build,install,log}" || true # Same for ROS workspace
@@ -99,7 +99,7 @@ else
 
     echo "Note that the following will fail if you have not followed the README.md setup steps! Just follow them and re-run this script in that case."
     source ${SCRIPT_DIR}/ros2_ws/install/setup.bash
-    ros2 launch cat_bringup bringup.launch.py | grep -v "Failed to parse type hash for topic"
+    ros2 launch locomposition_bringup bringup.launch.py | grep -v "Failed to parse type hash for topic"
     
     echo "Remember to source /app/sim2real/ros2_ws/install/setup.bash if you are working with ROS custom packages! bashrc already sources /opt/ros/$ROS_DISTRO/setup.bash"
     echo "Also remember to export ROS_DOMAIN_ID=0 if you want to communicate with the Go2."

@@ -5,7 +5,7 @@ if(POLICY CMP0135)
   cmake_policy(SET CMP0135 NEW)
 endif()
 
-project(cat_controller)
+project(locomposition_controller)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -14,7 +14,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-find_package(ament_index_cpp)
+find_package(ament_index_cpp REQUIRED)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(tf2 REQUIRED)
@@ -23,7 +23,7 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(grid_map_msgs REQUIRED)
-find_package(cat_perception_msgs REQUIRED)
+find_package(locomposition_perception_msgs REQUIRED)
 find_package(unitree_go REQUIRED)
 find_package(unitree_api REQUIRED)
 find_package(grid_map_core REQUIRED)
@@ -42,9 +42,9 @@ add_library(inference_engine STATIC src/inference_engine.cpp)
 target_include_directories(inference_engine PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
 target_link_libraries(inference_engine PUBLIC ${TORCH_LIBRARIES})
 
-add_executable(cat_controller src/cat_control_node.cpp src/motor_crc.cpp src/low_level_mode_enabler.cpp)
-target_include_directories(cat_controller PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
-target_link_libraries(cat_controller PUBLIC 
+add_executable(locomposition_controller src/locomposition_control_node.cpp src/motor_crc.cpp src/low_level_mode_enabler.cpp)
+target_include_directories(locomposition_controller PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
+target_link_libraries(locomposition_controller PUBLIC
   inference_engine 
   rclcpp::rclcpp 
   tf2::tf2 
@@ -52,7 +52,7 @@ target_link_libraries(cat_controller PUBLIC
   ${std_msgs_TARGETS}
   ${unitree_go_TARGETS}
   ${unitree_api_TARGETS}
-  ${cat_perception_msgs_TARGETS}
+  ${locomposition_perception_msgs_TARGETS}
   fmt::fmt
 )
 
@@ -68,7 +68,7 @@ target_link_libraries(
   ${std_msgs_TARGETS}
   ${geometry_msgs_TARGETS}
   ${grid_map_msgs_TARGETS}
-  ${cat_perception_msgs_TARGETS}
+  ${locomposition_perception_msgs_TARGETS}
   grid_map_core::grid_map_core
   fmt::fmt
   nlohmann_json::nlohmann_json
@@ -97,7 +97,7 @@ target_link_libraries(
   ${unitree_go_TARGETS}
   ${unitree_api_TARGETS}
   ${grid_map_msgs_TARGETS}
-  ${cat_perception_msgs_TARGETS}
+  ${locomposition_perception_msgs_TARGETS}
   grid_map_core::grid_map_core
   fmt::fmt
   nlohmann_json::nlohmann_json
@@ -122,7 +122,7 @@ target_link_libraries(release_motion_mode PRIVATE unitree_sdk2 Threads::Threads)
 
 # This makes ros2 run find the executable when the ws is sourced
 install(TARGETS
-  cat_controller
+  locomposition_controller
   elevation_map_processing_node
   elevation_map_comparison_node
   projected_gravity_equivalence_test_node

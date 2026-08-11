@@ -23,9 +23,9 @@ Disregard it entirely when looking at the code base, it is deprecated and outdat
 #include <vector>
 #include <zmq.hpp>
 
-#include "cat_controller/shutdown_coordinator.hpp"
-#include "cat_controller/stamped_robot_state.hpp"
-#include "cat_controller/timed_atomic.hpp"
+#include "locomposition_controller/shutdown_coordinator.hpp"
+#include "locomposition_controller/stamped_robot_state.hpp"
+#include "locomposition_controller/timed_atomic.hpp"
 
 using json = nlohmann::json;
 

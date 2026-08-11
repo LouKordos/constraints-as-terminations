@@ -13,12 +13,12 @@
 #include <string>
 #include <vector>
 
-#include "cat_controller/old_elevation_map_processor.hpp"
-#include "cat_controller/shutdown_coordinator.hpp"
-#include "cat_controller/stamped_robot_state.hpp"
-#include "cat_controller/timed_atomic.hpp"
-#include "cat_controller/unitree_msg_utils.hpp"
-#include "cat_perception_msgs/msg/processed_elevation_map.hpp"
+#include "locomposition_controller/old_elevation_map_processor.hpp"
+#include "locomposition_controller/shutdown_coordinator.hpp"
+#include "locomposition_controller/stamped_robot_state.hpp"
+#include "locomposition_controller/timed_atomic.hpp"
+#include "locomposition_controller/unitree_msg_utils.hpp"
+#include "locomposition_perception_msgs/msg/processed_elevation_map.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "unitree_go/msg/low_state.hpp"
 
@@ -87,7 +87,7 @@ public:
         lowstate_subscriber_ = this->create_subscription<unitree_go::msg::LowState>(
             "/lowstate", rclcpp::SensorDataQoS(), std::bind(&ElevationMapComparisonNode::lowstate_callback, this, std::placeholders::_1));
 
-        processed_map_subscriber_ = this->create_subscription<cat_perception_msgs::msg::ProcessedElevationMap>(processed_map_topic_name_,
+        processed_map_subscriber_ = this->create_subscription<locomposition_perception_msgs::msg::ProcessedElevationMap>(processed_map_topic_name_,
             rclcpp::SensorDataQoS().keep_last(50), std::bind(&ElevationMapComparisonNode::processed_map_callback, this, std::placeholders::_1));
 
         comparison_timer_ =
@@ -133,7 +133,7 @@ private:
         global_robot_state_.try_store_for(stamped_state, atomic_op_timeout_);
     }
 
-    void processed_map_callback(const cat_perception_msgs::msg::ProcessedElevationMap::SharedPtr msg)
+    void processed_map_callback(const locomposition_perception_msgs::msg::ProcessedElevationMap::SharedPtr msg)
     {
         ProcessedMapSample sample;
         sample.seq = msg->seq;
@@ -310,7 +310,7 @@ private:
     std::unique_ptr<ElevationMapProcessor> legacy_processor_;
 
     rclcpp::Subscription<unitree_go::msg::LowState>::SharedPtr lowstate_subscriber_;
-    rclcpp::Subscription<cat_perception_msgs::msg::ProcessedElevationMap>::SharedPtr processed_map_subscriber_;
+    rclcpp::Subscription<locomposition_perception_msgs::msg::ProcessedElevationMap>::SharedPtr processed_map_subscriber_;
     rclcpp::TimerBase::SharedPtr comparison_timer_;
 
     std::mutex processed_samples_mutex_;

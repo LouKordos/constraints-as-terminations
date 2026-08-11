@@ -4,7 +4,7 @@ import os
 from setuptools import setup
 
 
-package_name = "cat_state_estimation"
+package_name = "cat_controller"
 
 setup(
     name=package_name,
@@ -25,6 +25,6 @@ setup(
     zip_safe=True,
     maintainer="Loukas Kordos",
     maintainer_email="loukas.kordos@tum.de",
-    description="Compatibility launches forwarding to locomposition_state_estimation",
-    license="TODO: License declaration",
+    description="Compatibility launches forwarding to locomposition_controller",
+    license="Apache-2.0",
 )

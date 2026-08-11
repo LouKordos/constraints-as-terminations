@@ -1,4 +1,4 @@
 services:
-  cat_sim2real:
+  locomposition_sim2real:
     build:
       platforms: !reset []

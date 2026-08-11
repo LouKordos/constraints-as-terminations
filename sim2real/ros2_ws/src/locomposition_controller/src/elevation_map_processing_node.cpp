@@ -19,9 +19,9 @@ Disclaimer: This code was proudly written without LLMs :)
 #include <vector>
 
 #include "Eigen/Dense"
-#include "cat_controller/shutdown_coordinator.hpp"
-#include "cat_controller/time_utils.hpp"
-#include "cat_perception_msgs/msg/processed_elevation_map.hpp"
+#include "locomposition_controller/shutdown_coordinator.hpp"
+#include "locomposition_controller/time_utils.hpp"
+#include "locomposition_perception_msgs/msg/processed_elevation_map.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "grid_map_core/GridMap.hpp"
@@ -221,7 +221,7 @@ public:
 
         RCLCPP_INFO(this->get_logger(), "Starting processed elevation map publisher.");
         processed_map_publisher_ =
-            this->create_publisher<cat_perception_msgs::msg::ProcessedElevationMap>(processed_map_topic_name_, rclcpp::SensorDataQoS().keep_last(1));
+            this->create_publisher<locomposition_perception_msgs::msg::ProcessedElevationMap>(processed_map_topic_name_, rclcpp::SensorDataQoS().keep_last(1));
         RCLCPP_INFO(this->get_logger(), "Successfully started processed elevation map publisher.");
 
         RCLCPP_INFO(this->get_logger(), "Starting processing timer.");
@@ -273,7 +273,7 @@ private:
             base_to_world_tf = tf_buffer_->lookupTransform(
                 latest_map->getFrameId(), robot_base_frame_name_, tf2::TimePointZero, tf2::durationFromSec(tf_lookup_timeout_));
         } catch (const tf2::TransformException & e) {
-            // We just log and return if that happens, and let the upstream subscriber (cat_control_node in this case) handle the lack of messages how
+            // We just log and return if that happens, and let the upstream subscriber (locomposition_control_node in this case) handle the lack of messages how
             RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 100,
                 std::format("Tf lookup failed after {}sec, skipping callback. Error: {}", tf_lookup_timeout_, e.what()).c_str());
             return;
@@ -326,7 +326,7 @@ private:
             }
         }
 
-        cat_perception_msgs::msg::ProcessedElevationMap processed_msg;
+        locomposition_perception_msgs::msg::ProcessedElevationMap processed_msg;
         processed_msg.header.frame_id = latest_map->getFrameId();
         processed_msg.header.stamp = processing_start_stamp;
         processed_msg.source_pose_stamp = base_to_world_tf.header.stamp;
@@ -412,12 +412,12 @@ private:
     const double max_allowed_base_height_;
 
     rclcpp::Subscription<grid_map_msgs::msg::GridMap>::SharedPtr map_subscriber_;
-    rclcpp::Publisher<cat_perception_msgs::msg::ProcessedElevationMap>::SharedPtr processed_map_publisher_;
+    rclcpp::Publisher<locomposition_perception_msgs::msg::ProcessedElevationMap>::SharedPtr processed_map_publisher_;
     rclcpp::TimerBase::SharedPtr map_processing_timer_;
     rclcpp::CallbackGroup::SharedPtr map_sub_cbg_;
     rclcpp::CallbackGroup::SharedPtr processing_timer_cbg_;
 
-    // Usually, I would use my custom timed_atomic here to avoid blocking indefinitely in a safety critical thread, but since cat_control_node will
+    // Usually, I would use my custom timed_atomic here to avoid blocking indefinitely in a safety critical thread, but since locomposition_control_node will
     // have an age check on the received message and simply stop the robot if no new messages arrive, it is acceptable to use a atomic shared pointer.
     std::atomic<std::shared_ptr<grid_map::GridMap>> global_grid_map_;
     // List of sample positions in base frame for elevation map. These stay constant in base frame but we need to transform them into world frame

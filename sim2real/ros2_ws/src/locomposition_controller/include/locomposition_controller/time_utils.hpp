@@ -9,7 +9,7 @@ Disclaimer: This code was proudly written without LLMs :)
 #include <rclcpp/rclcpp.hpp>
 #include <string>
 
-#include "cat_controller/shutdown_coordinator.hpp"
+#include "locomposition_controller/shutdown_coordinator.hpp"
 
 namespace time_utils {
 inline bool shutdown_if_deadline_exceeded(const std::string & caller, std::chrono::steady_clock::time_point & last_call_time,

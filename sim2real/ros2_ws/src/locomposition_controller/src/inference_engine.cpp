@@ -3,7 +3,7 @@ Author: Loukas Kordos
 Disclaimer: This code was proudly written without LLMs :)
 */
 
-#include "cat_controller/inference_engine.hpp"
+#include "locomposition_controller/inference_engine.hpp"
 
 InferenceEngine::InferenceEngine(const std::filesystem::path & checkpoint_path, const int num_joints)
     : num_joints_(num_joints),

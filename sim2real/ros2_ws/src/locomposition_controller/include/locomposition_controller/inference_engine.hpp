@@ -14,7 +14,7 @@ Disclaimer: This code was proudly written without LLMs :)
 #include <format>
 #include <string>
 
-#include "cat_controller/stamped_robot_state.hpp"
+#include "locomposition_controller/stamped_robot_state.hpp"
 
 struct HistoryBuffer
 {

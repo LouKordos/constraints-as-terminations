@@ -1,5 +1,5 @@
 services:
-  cat_sim2real:
+  locomposition_sim2real:
     pull_policy: build
     build:
       context: .
@@ -8,7 +8,7 @@ services:
       platforms:
         - linux/amd64
         - linux/arm64
-    image: loukordos/cat-sim2real:latest
+    image: ${LOCOMPOSITION_SIM2REAL_IMAGE:-loukordos/cat-sim2real:latest}
     environment:
       - DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
       - DISPLAY=${DISPLAY}

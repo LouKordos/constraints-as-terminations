@@ -1,33 +1,20 @@
+"""Compatibility entry point for the former map-processing launch name."""
+
 from launch import LaunchDescription
-from launch.actions import (
-    DeclareLaunchArgument,
-    EmitEvent,
-    ExecuteProcess,
-    LogInfo,
-    RegisterEventHandler,
-)
-from launch.event_handlers import OnProcessExit
-from launch.events import Shutdown
-from launch.substitutions import FindExecutable, LaunchConfiguration, PathJoinSubstitution
-from launch_ros.actions import Node
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 
+
 def generate_launch_description():
-    config_path = PathJoinSubstitution([
-        FindPackageShare("cat_controller"),
-        "config",
-        "cat_elevation_map_processing_node.yaml"
-    ])
-
-    elevation_map_processing_node = Node(
-        package="cat_controller",
-        executable="elevation_map_processing_node",
-        name="elevation_map_processing_node",
-        output="both",
-        # ros_arguments=["--log-level", "debug"],
-        parameters=[config_path]
+    canonical_launch = PathJoinSubstitution(
+        [
+            FindPackageShare("locomposition_controller"),
+            "launch",
+            "locomposition_elevation_map_processing.launch.py",
+        ]
     )
-
-    return LaunchDescription([
-        elevation_map_processing_node
-    ])
+    return LaunchDescription(
+        [IncludeLaunchDescription(PythonLaunchDescriptionSource(canonical_launch))]
+    )

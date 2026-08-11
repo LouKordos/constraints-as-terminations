@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>locomposition_bringup</name>
+  <version>0.0.1</version>
+  <description>High-level launch orchestration for LoComposition hardware deployment</description>
+  <maintainer email="loukas.kordos@tum.de">Loukas Kordos</maintainer>
+  <license>TODO: License declaration</license>
+
+  <depend>ament_index_python</depend>
+  <depend>launch</depend>
+  <depend>launch_ros</depend>
+  <depend>rclpy</depend>
+  <depend>tf2_ros</depend>
+  <depend>livox_ros_driver2</depend>
+  <depend>go2_odometry</depend>
+
+  <depend>grid_map_core</depend>
+  <depend>grid_map_ros</depend>
+  <depend>grid_map_msgs</depend>
+  <depend>locomposition_perception_msgs</depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <exec_depend>locomposition_controller</exec_depend>
+  <exec_depend>locomposition_state_estimation</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
