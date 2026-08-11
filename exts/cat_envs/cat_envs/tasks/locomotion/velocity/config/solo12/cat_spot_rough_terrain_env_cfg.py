@@ -177,7 +177,7 @@ class SpotRoughTerrainEnvCfg(Go2RoughTerrainEnvCfg):
         self.constraints.action_rate.params["limit"] = 80.0 * (0.8 / 0.2)
 
         self.constraints.contact.params["names"] = ["body", ".*_uleg"]
-        self.constraints.foot_contact_force.params.update(limit=800.0, names=[".*_foot"])
+        self.constraints.foot_contact_force.params.update(limit=1000.0, names=[".*_foot"])
         self.constraints.front_hfe_position.params.update(limit=2.0, names=[".*_hy"])
         self.constraints.hip_position.params["names"] = [".*_hx"]
         self.constraints.no_move.params.update(
