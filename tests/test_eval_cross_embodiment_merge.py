@@ -197,3 +197,128 @@ def test_upstream_go2_reward_override_keeps_main_behavior() -> None:
     assert changed is True
     assert rewards.track_lin_vel_xy_exp.weight == 1.0
     assert rewards.track_ang_vel_z_exp.weight == 0.5
+
+
+def test_legacy_rsl_rl_actor_reconstructs_deterministic_policy() -> None:
+    eval_module = _load_eval_module()
+    checkpoint = {
+        "model_state_dict": {
+            "std": torch.ones(1),
+            "actor.0.weight": torch.eye(2),
+            "actor.0.bias": torch.zeros(2),
+            "actor.2.weight": torch.tensor([[4.0, 5.0]]),
+            "actor.2.bias": torch.tensor([1.0]),
+            "critic.0.weight": torch.full((1, 2), 99.0),
+            "critic.0.bias": torch.full((1,), 99.0),
+        }
+    }
+
+    policy = eval_module.build_legacy_rsl_rl_policy(
+        checkpoint,
+        activation_name="elu",
+        expected_observation_dim=2,
+        expected_action_dim=1,
+        device=torch.device("cpu"),
+    )
+
+    output = policy({"policy": torch.tensor([[2.0, 3.0]])})
+    torch.testing.assert_close(output, torch.tensor([[24.0]]))
+
+
+def test_legacy_rsl_rl_actor_rejects_incomplete_linear_layer() -> None:
+    eval_module = _load_eval_module()
+    checkpoint = {"model_state_dict": {"actor.0.weight": torch.eye(2)}}
+
+    with pytest.raises(ValueError, match="weight and bias"):
+        eval_module.build_legacy_rsl_rl_policy(
+            checkpoint,
+            activation_name="elu",
+            expected_observation_dim=2,
+            expected_action_dim=2,
+            device=torch.device("cpu"),
+        )
+
+
+@pytest.mark.parametrize(
+    ("expected_observation_dim", "expected_action_dim", "expected_message"),
+    [
+        (3, 2, "observation dimension 3"),
+        (2, 3, "action dimension 3"),
+    ],
+)
+def test_legacy_rsl_rl_actor_rejects_runtime_dimension_mismatch(
+    expected_observation_dim: int,
+    expected_action_dim: int,
+    expected_message: str,
+) -> None:
+    eval_module = _load_eval_module()
+    checkpoint = {
+        "model_state_dict": {
+            "actor.0.weight": torch.eye(2),
+            "actor.0.bias": torch.zeros(2),
+        }
+    }
+
+    with pytest.raises(ValueError, match=expected_message):
+        eval_module.build_legacy_rsl_rl_policy(
+            checkpoint,
+            activation_name="elu",
+            expected_observation_dim=expected_observation_dim,
+            expected_action_dim=expected_action_dim,
+            device=torch.device("cpu"),
+        )
+
+
+def test_legacy_rsl_rl_actor_rejects_unknown_activation() -> None:
+    eval_module = _load_eval_module()
+    checkpoint = {
+        "model_state_dict": {
+            "actor.0.weight": torch.eye(2),
+            "actor.0.bias": torch.zeros(2),
+            "actor.2.weight": torch.eye(2),
+            "actor.2.bias": torch.zeros(2),
+        }
+    }
+
+    with pytest.raises(ValueError, match="Unsupported legacy RSL-RL activation"):
+        eval_module.build_legacy_rsl_rl_policy(
+            checkpoint,
+            activation_name="swish",
+            expected_observation_dim=2,
+            expected_action_dim=2,
+            device=torch.device("cpu"),
+        )
+
+
+def test_legacy_rsl_rl_actor_rejects_unrecognized_actor_state() -> None:
+    eval_module = _load_eval_module()
+    checkpoint = {
+        "model_state_dict": {
+            "actor.0.weight": torch.eye(2),
+            "actor.0.bias": torch.zeros(2),
+            "actor.normalizer.running_mean": torch.zeros(2),
+        }
+    }
+
+    with pytest.raises(ValueError, match="unsupported actor parameter"):
+        eval_module.build_legacy_rsl_rl_policy(
+            checkpoint,
+            activation_name="elu",
+            expected_observation_dim=2,
+            expected_action_dim=2,
+            device=torch.device("cpu"),
+        )
+
+
+@pytest.mark.parametrize("modern_actor_key", ["actor_state_dict", "student_state_dict"])
+def test_modern_rsl_rl_backend_detection_remains_reachable(modern_actor_key: str) -> None:
+    eval_module = _load_eval_module()
+    checkpoint = {modern_actor_key: {"model.0.weight": torch.eye(2)}}
+
+    assert eval_module.detect_policy_backend_from_checkpoint(checkpoint) == "rsl_rl"
+
+
+def test_cleanrl_backend_detection_remains_unchanged() -> None:
+    eval_module = _load_eval_module()
+
+    assert eval_module.detect_policy_backend_from_checkpoint({"actor.weight": torch.eye(2)}) == "clean_rl"

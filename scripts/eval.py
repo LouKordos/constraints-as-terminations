@@ -404,12 +404,17 @@ def detect_policy_backend_from_checkpoint(checkpoint_object: dict) -> str:
     if "model_state_dict" in checkpoint_object:
         return "rsl_rl"
 
+    modern_rsl_rl_actor_keys = ("actor_state_dict", "student_state_dict")
+    if any(isinstance(checkpoint_object.get(key), dict) for key in modern_rsl_rl_actor_keys):
+        return "rsl_rl"
+
     if any(isinstance(value, torch.Tensor) for value in checkpoint_object.values()):
         return "clean_rl"
 
     raise RuntimeError(
-        "Could not infer checkpoint backend. Expected either an RSL-RL checkpoint with "
-        "'model_state_dict' or a CleanRL-style plain state_dict."
+        "Could not infer checkpoint backend. Expected an RSL-RL checkpoint with "
+        "'model_state_dict', 'actor_state_dict', or 'student_state_dict', or a "
+        "CleanRL-style plain state_dict."
     )
 
 
@@ -422,6 +427,128 @@ def extract_cleanrl_state_dict(checkpoint_object: dict) -> dict[str, torch.Tenso
         raise RuntimeError("CleanRL checkpoint does not appear to contain tensor parameters.")
 
     return checkpoint_object
+
+
+class LegacyRslRlPolicy(torch.nn.Module):
+    """Inference-only wrapper for actors saved by older RSL-RL versions."""
+
+    def __init__(self, actor: torch.nn.Sequential):
+        super().__init__()
+        self.actor = actor
+
+    def forward(self, observations: dict[str, torch.Tensor]) -> torch.Tensor:
+        if "policy" not in observations:
+            raise ValueError("Legacy RSL-RL policy requires a 'policy' observation group.")
+        return self.actor(observations["policy"])
+
+
+def build_legacy_rsl_rl_policy(
+    checkpoint_object: dict,
+    *,
+    activation_name: str,
+    expected_observation_dim: int,
+    expected_action_dim: int,
+    device: torch.device | str,
+) -> LegacyRslRlPolicy:
+    """Reconstruct a deterministic actor from a legacy RSL-RL checkpoint."""
+    model_state = checkpoint_object.get("model_state_dict")
+    if not isinstance(model_state, dict):
+        raise ValueError("Legacy RSL-RL checkpoint is missing a model_state_dict.")
+
+    unsupported_actor_keys = [
+        key
+        for key in model_state
+        if isinstance(key, str)
+        and key.startswith("actor.")
+        and re.fullmatch(r"actor\.\d+\.(weight|bias)", key) is None
+    ]
+    if unsupported_actor_keys:
+        raise ValueError(
+            "Legacy RSL-RL checkpoint contains unsupported actor parameter(s): "
+            f"{sorted(unsupported_actor_keys)}."
+        )
+
+    actor_layers: dict[int, dict[str, torch.Tensor]] = {}
+    for key, value in model_state.items():
+        match = re.fullmatch(r"actor\.(\d+)\.(weight|bias)", key)
+        if match is not None:
+            actor_layers.setdefault(int(match.group(1)), {})[match.group(2)] = value
+
+    layer_indices = sorted(actor_layers)
+    if not layer_indices:
+        raise ValueError("Legacy RSL-RL checkpoint contains no actor linear layers.")
+    if layer_indices != list(range(0, 2 * len(layer_indices), 2)):
+        raise ValueError(
+            "Legacy RSL-RL actor linear layers must use sequential indices 0, 2, 4, ...; "
+            f"found {layer_indices}."
+        )
+
+    activation_factories = {
+        "elu": torch.nn.ELU,
+        "relu": torch.nn.ReLU,
+        "selu": torch.nn.SELU,
+        "tanh": torch.nn.Tanh,
+    }
+    normalized_activation = activation_name.lower()
+    if normalized_activation not in activation_factories:
+        raise ValueError(
+            f"Unsupported legacy RSL-RL activation '{activation_name}'. "
+            f"Supported activations: {sorted(activation_factories)}."
+        )
+
+    modules: list[torch.nn.Module] = []
+    previous_output_dim = None
+    for layer_position, layer_index in enumerate(layer_indices):
+        layer_state = actor_layers[layer_index]
+        if set(layer_state) != {"weight", "bias"}:
+            raise ValueError(
+                f"Legacy RSL-RL actor layer {layer_index} must contain both weight and bias."
+            )
+
+        weight = layer_state["weight"]
+        bias = layer_state["bias"]
+        if not isinstance(weight, torch.Tensor) or weight.ndim != 2:
+            raise ValueError(f"Legacy RSL-RL actor layer {layer_index} weight must be a matrix.")
+        if not isinstance(bias, torch.Tensor) or bias.ndim != 1:
+            raise ValueError(f"Legacy RSL-RL actor layer {layer_index} bias must be a vector.")
+
+        output_dim, input_dim = weight.shape
+        if bias.shape[0] != output_dim:
+            raise ValueError(
+                f"Legacy RSL-RL actor layer {layer_index} bias has dimension {bias.shape[0]}, "
+                f"but its weight has {output_dim} outputs."
+            )
+        if previous_output_dim is not None and input_dim != previous_output_dim:
+            raise ValueError(
+                f"Legacy RSL-RL actor layer {layer_index} expects {input_dim} inputs, "
+                f"but the previous layer outputs {previous_output_dim}."
+            )
+
+        modules.append(torch.nn.Linear(input_dim, output_dim))
+        if layer_position < len(layer_indices) - 1:
+            modules.append(activation_factories[normalized_activation]())
+        previous_output_dim = output_dim
+
+    first_input_dim = actor_layers[layer_indices[0]]["weight"].shape[1]
+    if first_input_dim != expected_observation_dim:
+        raise ValueError(
+            f"Legacy RSL-RL actor expects observation dimension {first_input_dim}, "
+            f"but the environment provides observation dimension {expected_observation_dim}."
+        )
+    if previous_output_dim != expected_action_dim:
+        raise ValueError(
+            f"Legacy RSL-RL actor outputs action dimension {previous_output_dim}, "
+            f"but the environment requires action dimension {expected_action_dim}."
+        )
+
+    actor = torch.nn.Sequential(*modules)
+    actor_state = {
+        key.removeprefix("actor."): value
+        for key, value in model_state.items()
+        if re.fullmatch(r"actor\.\d+\.(weight|bias)", key)
+    }
+    actor.load_state_dict(actor_state, strict=True)
+    return LegacyRslRlPolicy(actor).to(device).eval()
 
 
 def build_rsl_rl_runner_cfg_dict(agent_cfg) -> dict:
@@ -1327,20 +1454,36 @@ def main():
         if hasattr(agent_cfg, "seed"):
             agent_cfg.seed = seed
 
-        rsl_rl_env_for_runner = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
-        runner_cfg_dict = build_rsl_rl_runner_cfg_dict(agent_cfg)
-
         print(f"[INFO] Loading RSL-RL checkpoint from: {checkpoint_path}")
-        if agent_cfg.class_name == "OnPolicyRunner":
-            runner = OnPolicyRunner(rsl_rl_env_for_runner, runner_cfg_dict, log_dir=None, device=agent_cfg.device)
-        elif agent_cfg.class_name == "DistillationRunner":
-            runner = DistillationRunner(rsl_rl_env_for_runner, runner_cfg_dict, log_dir=None, device=agent_cfg.device)
+        if "model_state_dict" in checkpoint_object:
+            if getattr(agent_cfg.policy, "actor_obs_normalization", False):
+                raise ValueError(
+                    "Legacy RSL-RL actor observation normalization is not supported because "
+                    "the legacy checkpoint does not store compatible normalization state."
+                )
+            rsl_rl_policy = build_legacy_rsl_rl_policy(
+                checkpoint_object,
+                activation_name=agent_cfg.policy.activation,
+                expected_observation_dim=env.observation_space["policy"].shape[-1],
+                expected_action_dim=env.action_space.shape[-1],
+                device=env.unwrapped.device,
+            )
+            print("[INFO] Reconstructed deterministic actor from legacy RSL-RL model_state_dict.")
         else:
-            raise ValueError(f"Unsupported RSL-RL runner class: {agent_cfg.class_name}")
+            rsl_rl_env_for_runner = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+            runner_cfg_dict = build_rsl_rl_runner_cfg_dict(agent_cfg)
 
-        runner.load(checkpoint_path)
-        rsl_rl_policy = runner.get_inference_policy(device=env.unwrapped.device)
-        rsl_rl_policy_reset = getattr(rsl_rl_policy, "reset", None)
+            if agent_cfg.class_name == "OnPolicyRunner":
+                runner = OnPolicyRunner(rsl_rl_env_for_runner, runner_cfg_dict, log_dir=None, device=agent_cfg.device)
+            elif agent_cfg.class_name == "DistillationRunner":
+                runner = DistillationRunner(rsl_rl_env_for_runner, runner_cfg_dict, log_dir=None, device=agent_cfg.device)
+            else:
+                raise ValueError(f"Unsupported RSL-RL runner class: {agent_cfg.class_name}")
+
+            runner.load(checkpoint_path)
+            rsl_rl_policy = runner.get_inference_policy(device=env.unwrapped.device)
+            rsl_rl_policy_reset = getattr(rsl_rl_policy, "reset", None)
+
         rsl_rl_clip_actions = getattr(agent_cfg, "clip_actions", None)
 
     else:
