@@ -31,8 +31,8 @@ def main():
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
     from isaaclab_tasks.utils import parse_env_cfg
-    from cat_envs.tasks.utils.cleanrl.ppo import Agent
-    from cat_envs.tasks.utils.cleanrl.ppo import ActorWithRMS
+    from locomposition.tasks.utils.cleanrl.ppo import Agent
+    from locomposition.tasks.utils.cleanrl.ppo import ActorWithRMS
     
     env_cfg = parse_env_cfg(args.task, device=args.device, num_envs=args.num_envs, use_fabric=not args.disable_fabric)
     env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array")

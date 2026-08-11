@@ -1231,7 +1231,7 @@ def main():
     from rsl_rl.runners import DistillationRunner, OnPolicyRunner
 
     # Register custom CaT Gymnasium environments before parse_env_cfg() calls gym.spec(args.task).
-    import cat_envs.tasks.locomotion.velocity.config.solo12  # noqa: F401
+    import locomposition.tasks.locomotion.velocity.config.solo12  # noqa: F401
 
     print(f"ISAACLAB_NUCLEUS_DIR={ISAACLAB_NUCLEUS_DIR}")
 
@@ -1250,7 +1250,7 @@ def main():
     if args.use_training_go2_config:
         if "cat-go2" not in args.task.lower() and "cat_go2" not in args.task.lower():
             raise ValueError("--use_training_go2_config requires a custom CaT Go2 task.")
-        from cat_envs.assets.go2_config import UNITREE_GO2_CFG_TRAIN
+        from locomposition.assets.go2_config import UNITREE_GO2_CFG_TRAIN
 
         env_cfg.scene.robot = UNITREE_GO2_CFG_TRAIN.replace(prim_path="{ENV_REGEX_NS}/Robot")
         print("[INFO] Replaced the PLAY robot config with UNITREE_GO2_CFG_TRAIN for this evaluation.")
@@ -1441,8 +1441,8 @@ def main():
     rsl_rl_env_for_runner = None
 
     if policy_backend == "clean_rl":
-        from cat_envs.tasks.utils.cleanrl.ppo import Agent
-        from cat_envs.tasks.utils.cleanrl.ppo import ActorWithRMS
+        from locomposition.tasks.utils.cleanrl.ppo import Agent
+        from locomposition.tasks.utils.cleanrl.ppo import ActorWithRMS
 
         policy_agent = Agent(env).to(device)
         policy_agent.load_state_dict(model_state)

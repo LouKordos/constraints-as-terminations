@@ -1,7 +1,7 @@
 [project]
-name = "cat-isaac-lab-env"
+name = "locomposition"
 version = "0.1.0"
-description = "Constraints as Terminations Isaac Lab"
+description = "LoComposition locomotion learning environments and tools"
 readme = "README.md"
 requires-python = "==3.11.*"
 
@@ -97,7 +97,7 @@ known_isaaclabparty = [
     "isaaclab_assets"
 ]
 
-known_firstparty = "cat_envs"
+known_firstparty = ["locomposition", "cat_envs"]
 known_local_folder = "config"
 
 [tool.pyright]

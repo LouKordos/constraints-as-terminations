@@ -16,7 +16,7 @@ import isaaclab
 
 
 _EXTENSION_MARKER = "# PLACEHOLDER: Extension template (do not remove this comment)"
-_EXTENSION_IMPORT = "import cat_envs.tasks  # noqa: F401"
+_EXTENSION_IMPORT = "import locomposition.tasks  # noqa: F401"
 
 
 def _installed_trainer_path() -> Path:

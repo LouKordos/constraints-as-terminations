@@ -73,8 +73,8 @@ from isaaclab.envs import (DirectMARLEnvCfg, DirectRLEnvCfg, ManagerBasedRLEnvCf
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.io import dump_yaml
 from isaaclab_tasks.utils.hydra import hydra_task_config
-from cat_envs.tasks.utils.cleanrl.ppo import PPO
-import cat_envs.tasks  # noqa: F401
+from locomposition.tasks.utils.cleanrl.ppo import PPO
+import locomposition.tasks  # noqa: F401
 
 from os import environ
 import random
