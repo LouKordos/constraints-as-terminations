@@ -33,6 +33,25 @@ _GO2_ANYMAL_C_TUNING_RSL_RL_CFG = (
 _ANYMAL_C_GO2_TUNING_RSL_RL_CFG = (
     f"{agents.__name__}.rsl_rl_ppo_cfg:AnymalCGo2TuningPPORunnerCfg"
 )
+_PROJECT_CLEAN_RL_CFG = (
+    f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg"
+)
+
+
+def _register_locomposition_task(*, task_suffix: str, env_cfg_entry_point: str) -> None:
+    """Register a canonical project task and its former CaT-branded alias."""
+
+    kwargs = {
+        "env_cfg_entry_point": env_cfg_entry_point,
+        "clean_rl_cfg_entry_point": _PROJECT_CLEAN_RL_CFG,
+    }
+    for prefix in ("LoComposition-", "CaT-"):
+        gym.register(
+            id=f"{prefix}{task_suffix}",
+            entry_point=CaTEnv,
+            disable_env_checker=True,
+            kwargs=dict(kwargs),
+        )
 
 
 gym.register(
@@ -173,54 +192,44 @@ gym.register(
     },
 )
 
-gym.register(
-    id="CaT-Go2-Rough-Terrain-v0",
-    entry_point=CaTEnv,
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.cat_go2_rough_terrain_env_cfg:Go2RoughTerrainEnvCfg",
-        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
-    },
+_register_locomposition_task(
+    task_suffix="Go2-Rough-Terrain-v0",
+    env_cfg_entry_point=(
+        f"{__name__}.locomposition_go2_rough_terrain_env_cfg:"
+        "Go2RoughTerrainEnvCfg"
+    ),
 )
 
-gym.register(
-    id="CaT-Anymal-C-Rough-Terrain-v0",
-    entry_point=CaTEnv,
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.cat_anymal_c_rough_terrain_env_cfg:AnymalCRoughTerrainEnvCfg",
-        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
-    },
+_register_locomposition_task(
+    task_suffix="Anymal-C-Rough-Terrain-v0",
+    env_cfg_entry_point=(
+        f"{__name__}.locomposition_anymal_c_rough_terrain_env_cfg:"
+        "AnymalCRoughTerrainEnvCfg"
+    ),
 )
 
-gym.register(
-    id="CaT-Spot-Rough-Terrain-v0",
-    entry_point=CaTEnv,
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.cat_spot_rough_terrain_env_cfg:SpotRoughTerrainEnvCfg",
-        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
-    },
+_register_locomposition_task(
+    task_suffix="Spot-Rough-Terrain-v0",
+    env_cfg_entry_point=(
+        f"{__name__}.locomposition_spot_rough_terrain_env_cfg:"
+        "SpotRoughTerrainEnvCfg"
+    ),
 )
 
-gym.register(
-    id="CaT-Go2-Rough-Terrain-Joint-State-History-v0",
-    entry_point=CaTEnv,
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.cat_go2_rough_terrain_env_cfg:Go2RoughTerrainEnvCfgJointStateHistory",
-        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
-    },
+_register_locomposition_task(
+    task_suffix="Go2-Rough-Terrain-Joint-State-History-v0",
+    env_cfg_entry_point=(
+        f"{__name__}.locomposition_go2_rough_terrain_env_cfg:"
+        "Go2RoughTerrainEnvCfgJointStateHistory"
+    ),
 )
 
-gym.register(
-    id="CaT-Go2-Rough-Terrain-Full-State-History-v0",
-    entry_point=CaTEnv,
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.cat_go2_rough_terrain_env_cfg:Go2RoughTerrainEnvCfgFullStateHistory",
-        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
-    },
+_register_locomposition_task(
+    task_suffix="Go2-Rough-Terrain-Full-State-History-v0",
+    env_cfg_entry_point=(
+        f"{__name__}.locomposition_go2_rough_terrain_env_cfg:"
+        "Go2RoughTerrainEnvCfgFullStateHistory"
+    ),
 )
 
 gym.register(
@@ -243,52 +252,42 @@ gym.register(
     },
 )
 
-gym.register(
-    id="CaT-Go2-Rough-Terrain-Play-v0",
-    entry_point=CaTEnv,
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.cat_go2_rough_terrain_env_cfg:Go2RoughTerrainEnvCfg_PLAY",
-        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
-    },
+_register_locomposition_task(
+    task_suffix="Go2-Rough-Terrain-Play-v0",
+    env_cfg_entry_point=(
+        f"{__name__}.locomposition_go2_rough_terrain_env_cfg:"
+        "Go2RoughTerrainEnvCfg_PLAY"
+    ),
 )
 
-gym.register(
-    id="CaT-Anymal-C-Rough-Terrain-Play-v0",
-    entry_point=CaTEnv,
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.cat_anymal_c_rough_terrain_env_cfg:AnymalCRoughTerrainEnvCfg_PLAY",
-        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
-    },
+_register_locomposition_task(
+    task_suffix="Anymal-C-Rough-Terrain-Play-v0",
+    env_cfg_entry_point=(
+        f"{__name__}.locomposition_anymal_c_rough_terrain_env_cfg:"
+        "AnymalCRoughTerrainEnvCfg_PLAY"
+    ),
 )
 
-gym.register(
-    id="CaT-Spot-Rough-Terrain-Play-v0",
-    entry_point=CaTEnv,
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.cat_spot_rough_terrain_env_cfg:SpotRoughTerrainEnvCfg_PLAY",
-        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
-    },
+_register_locomposition_task(
+    task_suffix="Spot-Rough-Terrain-Play-v0",
+    env_cfg_entry_point=(
+        f"{__name__}.locomposition_spot_rough_terrain_env_cfg:"
+        "SpotRoughTerrainEnvCfg_PLAY"
+    ),
 )
 
-gym.register(
-    id="CaT-Go2-Rough-Terrain-Joint-State-History-Play-v0",
-    entry_point=CaTEnv,
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.cat_go2_rough_terrain_env_cfg:Go2RoughTerrainEnvCfgJointStateHistory_PLAY",
-        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
-    },
+_register_locomposition_task(
+    task_suffix="Go2-Rough-Terrain-Joint-State-History-Play-v0",
+    env_cfg_entry_point=(
+        f"{__name__}.locomposition_go2_rough_terrain_env_cfg:"
+        "Go2RoughTerrainEnvCfgJointStateHistory_PLAY"
+    ),
 )
 
-gym.register(
-    id="CaT-Go2-Rough-Terrain-Full-State-History-Play-v0",
-    entry_point=CaTEnv,
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.cat_go2_rough_terrain_env_cfg:Go2RoughTerrainEnvCfgFullStateHistory_PLAY",
-        "clean_rl_cfg_entry_point": f"{agents.__name__}.clean_rl_ppo_cfg:Solo12FlatPPORunnerCfg",
-    },
+_register_locomposition_task(
+    task_suffix="Go2-Rough-Terrain-Full-State-History-Play-v0",
+    env_cfg_entry_point=(
+        f"{__name__}.locomposition_go2_rough_terrain_env_cfg:"
+        "Go2RoughTerrainEnvCfgFullStateHistory_PLAY"
+    ),
 )

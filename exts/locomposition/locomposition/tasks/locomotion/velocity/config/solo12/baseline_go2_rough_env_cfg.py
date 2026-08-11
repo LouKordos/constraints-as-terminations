@@ -34,7 +34,7 @@ import locomposition.tasks.utils.mdp.events as cat_events
 import locomposition.tasks.utils.mdp.terminations as cat_terminations
 from locomposition.assets.go2_config import UNITREE_GO2_CFG_EVAL, UNITREE_GO2_CFG_TRAIN
 
-from .cat_go2_rough_terrain_env_cfg import rough_cfg
+from .locomposition_go2_rough_terrain_env_cfg import rough_cfg
 
 
 DEFAULT_MATCHED_SEED = 46

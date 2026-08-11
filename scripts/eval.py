@@ -36,6 +36,7 @@ from metrics_utils import (
     summarize_metric,
 )
 from rebuttal_report import REBUTTAL_DYNAMICS_SCENARIOS, write_rebuttal_reports
+from task_naming import is_locomposition_go2_task
 eval_script_path = os.path.dirname(os.path.abspath(__file__))
 
 CONTACT_FORCE_THRESHOLD_NEWTONS = 1.0
@@ -314,13 +315,12 @@ def is_upstream_go2_rough_task(task_name: str) -> bool:
     """
     Detect the upstream Isaac Lab rough-terrain Unitree Go2 task family.
 
-    This intentionally does not match the custom CaT-Go2 task names, because
+    This intentionally does not match LoComposition's Go2 task names, because
     those should keep using the constraint bounds saved in params/env.yaml.
     """
     task_name_lower = task_name.lower()
 
-    is_custom_cat_task = "cat-go2" in task_name_lower or "cat_go2" in task_name_lower
-    if is_custom_cat_task:
+    if is_locomposition_go2_task(task_name):
         return False
 
     mentions_rough = "rough" in task_name_lower
@@ -337,7 +337,7 @@ def is_matched_baseline_task(task_name: str) -> bool:
 def get_matched_baseline_constraint_bounds(
     profile_name: str,
 ) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
-    """Return CaT-equivalent thresholds used only to summarize baseline rollouts."""
+    """Return project operational-limit thresholds for baseline summaries."""
     try:
         return dict(MATCHED_BASELINE_CONSTRAINT_BOUNDS[profile_name])
     except KeyError as exception:
@@ -348,8 +348,8 @@ def get_hardcoded_upstream_go2_constraint_bounds() -> Dict[str, Tuple[Optional[f
     """
     Return eval-only constraint bounds for upstream Isaac Lab rough-terrain Unitree Go2 baselines.
 
-    These bounds mirror the constraint thresholds used for the comparable custom
-    CaT-style evaluation metrics, but only include terms already supported by
+    These bounds mirror the constraint thresholds used for the comparable
+    LoComposition evaluation metrics, but only include terms already supported by
     metrics_utils.compute_summary_metrics without changing metrics_utils.py.
 
     Not included here by design:
@@ -588,7 +588,7 @@ def parse_arguments():
     parser.add_argument(
         "--use_training_go2_config",
         action="store_true",
-        help="Temporarily evaluate custom CaT Go2 tasks with UNITREE_GO2_CFG_TRAIN instead of the PLAY task's eval robot config.",
+        help="Temporarily evaluate LoComposition Go2 tasks with UNITREE_GO2_CFG_TRAIN instead of the PLAY task's eval robot config.",
     )
     parser.add_argument("--policy_backend", choices=["auto", "clean_rl", "rsl_rl"], default="auto", help="Policy checkpoint backend. Use auto unless debugging.")
     parser.add_argument("--agent_entry_point", type=str, default="rsl_rl_cfg_entry_point", help="Gym registry entry point key for the RSL-RL agent config.")
@@ -765,7 +765,7 @@ def resolve_constraint_bounds_for_eval(
     Resolve the constraint bounds used by metrics_utils.compute_summary_metrics.
 
     Priority:
-    1. Custom CaT-style envs with env_cfg.constraints:
+    1. LoComposition envs with operational limits encoded through CaT:
        load the saved training/eval bounds from params/env.yaml.
     2. Repository matched baselines without custom constraints:
        use embodiment-specific CaT thresholds for reporting only.
@@ -822,7 +822,7 @@ def resolve_constraint_bounds_for_eval(
         constraint_bounds = get_matched_baseline_constraint_bounds(profile.name)
         constraint_bounds_source = f"hardcoded_matched_baseline_{profile.name}_eval_thresholds"
         print(
-            "[INFO] Using CaT-equivalent eval-only constraint bounds for "
+            "[INFO] Using LoComposition eval-only operational-limit bounds for "
             f"matched {profile.name} baseline reporting:"
         )
         print(format_constraint_bounds_for_logging(constraint_bounds))
@@ -1164,9 +1164,9 @@ def main():
         observation_dim = infer_checkpoint_input_dimensions(model_state)
         if robot_profile.name == "go2":
             if observation_dim == 236:
-                args.task = "CaT-Go2-Rough-Terrain-Joint-State-History-Play-v0"
+                args.task = "LoComposition-Go2-Rough-Terrain-Joint-State-History-Play-v0"
             elif observation_dim == 558:
-                args.task = "CaT-Go2-Rough-Terrain-Full-State-History-Play-v0"
+                args.task = "LoComposition-Go2-Rough-Terrain-Full-State-History-Play-v0"
         print(f"Observation dimension={observation_dim}, selected task={args.task}")
     else:
         print(f"[INFO] RSL-RL checkpoint selected, using task={args.task}")
@@ -1230,7 +1230,7 @@ def main():
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
     from rsl_rl.runners import DistillationRunner, OnPolicyRunner
 
-    # Register custom CaT Gymnasium environments before parse_env_cfg() calls gym.spec(args.task).
+    # Register LoComposition Gymnasium environments before parse_env_cfg() calls gym.spec(args.task).
     import locomposition.tasks.locomotion.velocity.config.solo12  # noqa: F401
 
     print(f"ISAACLAB_NUCLEUS_DIR={ISAACLAB_NUCLEUS_DIR}")
@@ -1239,17 +1239,26 @@ def main():
         matching_registered_tasks = sorted(
             task_id
             for task_id in gym.envs.registry.keys()
-            if any(name in task_id.lower() for name in ("cat-go2", "unitree-go2", "anymal", "spot"))
+            if any(
+                name in task_id.lower()
+                for name in (
+                    "locomposition",
+                    "cat-go2",
+                    "unitree-go2",
+                    "anymal",
+                    "spot",
+                )
+            )
         )
         raise RuntimeError(
-            f"Task '{args.task}' is not registered after importing the custom CaT task package. "
+            f"Task '{args.task}' is not registered after importing the LoComposition task package. "
             f"Matching registered tasks: {matching_registered_tasks}"
         )
 
     env_cfg = parse_env_cfg(args.task, device=args.device, num_envs=args.num_envs, use_fabric=not args.disable_fabric)
     if args.use_training_go2_config:
-        if "cat-go2" not in args.task.lower() and "cat_go2" not in args.task.lower():
-            raise ValueError("--use_training_go2_config requires a custom CaT Go2 task.")
+        if not is_locomposition_go2_task(args.task):
+            raise ValueError("--use_training_go2_config requires a LoComposition Go2 task.")
         from locomposition.assets.go2_config import UNITREE_GO2_CFG_TRAIN
 
         env_cfg.scene.robot = UNITREE_GO2_CFG_TRAIN.replace(prim_path="{ENV_REGEX_NS}/Robot")

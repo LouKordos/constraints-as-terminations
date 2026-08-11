@@ -194,7 +194,7 @@ def height_map_history(env, history_len: int = 3, latency: int = 0, asset_cfg: S
     # Depressing hack to avoid circular import (as preserved from original code)
     global height_map_grid
     if "height_map_grid" not in globals():
-        mod = import_module("locomposition.tasks.locomotion.velocity.config.solo12.cat_go2_rough_terrain_env_cfg")
+        mod = import_module("locomposition.tasks.locomotion.velocity.config.solo12.locomposition_go2_rough_terrain_env_cfg")
         height_map_grid = getattr(mod, "height_map_grid")
 
     key = f"_height_map_hist_{history_len}_{latency}_{asset_cfg.name}"

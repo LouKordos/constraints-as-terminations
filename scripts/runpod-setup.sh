@@ -69,11 +69,10 @@ cd IsaacLab
 #./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py --task=Isaac-Ant-v0 --headless
 
 mkdir -p /$ENV_NAME && cd /$ENV_NAME
-git clone https://github.com/Loukordos/constraints-as-terminations.git && cd constraints-as-terminations
-# For CaT only (run in the CaT directory):
-python -m pip install -e exts/cat_envs
+git clone https://github.com/LouKordos/LoComposition.git && cd LoComposition
+python -m pip install -e exts/locomposition
 wandb login
 
-python scripts/clean_rl/train.py --task=YOURTASKNAME --headless --num_envs=7500
-python scripts/clean_rl/play.py --task=CaT-Go2-Rough-Terrain-v0 --headless --num_envs=1 --video
-python scripts/clean_rl/eval.py --task=CaT-Go2-Rough-Terrain-v0 --headless --num_envs=1 --video --run_dir=
+python scripts/clean_rl/train.py --task=LoComposition-Go2-Rough-Terrain-Joint-State-History-v0 --headless --num_envs=7500
+python scripts/clean_rl/play.py --task=LoComposition-Go2-Rough-Terrain-Joint-State-History-Play-v0 --headless --num_envs=1 --video
+python scripts/eval.py --task=LoComposition-Go2-Rough-Terrain-Joint-State-History-Play-v0 --headless --num_envs=1 --run_dir=PATH_TO_RUN

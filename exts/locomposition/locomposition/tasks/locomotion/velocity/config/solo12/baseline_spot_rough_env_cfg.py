@@ -27,8 +27,8 @@ import locomposition.tasks.utils.mdp.commands as cat_commands
 import locomposition.tasks.utils.mdp.events as cat_events
 import locomposition.tasks.utils.mdp.terminations as cat_terminations
 
-from .cat_go2_rough_terrain_env_cfg import rough_cfg
-from .cat_spot_rough_terrain_env_cfg import (
+from .locomposition_go2_rough_terrain_env_cfg import rough_cfg
+from .locomposition_spot_rough_terrain_env_cfg import (
     DeterministicDelayedPDActuator,
     DeterministicRemotizedPDActuator,
 )
