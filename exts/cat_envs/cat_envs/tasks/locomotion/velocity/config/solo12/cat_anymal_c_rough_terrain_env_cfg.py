@@ -99,7 +99,7 @@ class AnymalCRoughTerrainEnvCfg(Go2RoughTerrainEnvCfg):
         self.terminations.base_contact.params["sensor_cfg"] = SceneEntityCfg(
             "contact_forces", body_names=["base", ".*_THIGH"]
         )
-        self.curriculum.power.params["end_weight"] = 0.00230
+        self.curriculum.power.params["end_weight"] = 0.0018
 
 
 @configclass
