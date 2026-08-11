@@ -171,7 +171,10 @@ class SpotRoughTerrainEnvCfg(Go2RoughTerrainEnvCfg):
         self.constraints.joint_torque.params["limit"] = 80.0
         self.constraints.joint_velocity.params["limit"] = 20.0
         self.constraints.joint_acceleration.params["limit"] = 800.0
-        self.constraints.action_rate.params["limit"] = 80.0
+         # Action rate depends on action scale, so lower action rate for Spot makes this constraint more restrictive!
+        # Thus we scale by the ratio of original Go2 action scale 0.8/0.2=4
+        # THIS MIGHT NEED ADJUSTMENTS BECAUSE ACTION RATE OF 42rad/s MIGHT BE TOO HIGH FOR THE SPOT ROBOT
+        self.constraints.action_rate.params["limit"] = 80.0 * (0.8 / 0.2)
 
         self.constraints.contact.params["names"] = ["body", ".*_uleg"]
         self.constraints.foot_contact_force.params.update(limit=800.0, names=[".*_foot"])
