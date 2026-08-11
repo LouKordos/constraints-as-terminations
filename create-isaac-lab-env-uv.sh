@@ -1,15 +1,72 @@
 #!/usr/bin/env bash
-set -euxo pipefail
+set -euo pipefail
 
-# Usage: ./setup_env_with_uv.sh <ENV_NAME>
-if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <ENV_NAME>" >&2
-    exit 1
+usage() {
+    cat <<EOF
+Usage: $0 ENV_NAME [--root PATH] [--repo-source URL_OR_PATH]
+
+Create a pinned Isaac Lab environment and install LoComposition.
+
+Options:
+  --root PATH                 Parent directory for the environment.
+  --repo-source URL_OR_PATH   Git URL or local repository to clone.
+  -h, --help                  Show this help message.
+EOF
+}
+
+if [ "$#" -eq 0 ]; then
+    usage >&2
+    exit 2
+fi
+
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    usage
+    exit 0
 fi
 
 ENV_NAME=$1
+shift
+ENV_ROOT="${LOCOMPOSITION_ENV_ROOT:-$HOME/mamba_env_data}"
+REPO_SOURCE="${LOCOMPOSITION_REPO_SOURCE:-https://github.com/LouKordos/LoComposition.git}"
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --root)
+            if [ "$#" -lt 2 ]; then
+                echo "[ERROR] --root requires a path." >&2
+                exit 2
+            fi
+            ENV_ROOT=$2
+            shift 2
+            ;;
+        --repo-source)
+            if [ "$#" -lt 2 ]; then
+                echo "[ERROR] --repo-source requires a URL or path." >&2
+                exit 2
+            fi
+            REPO_SOURCE=$2
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "[ERROR] Unknown option: $1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+if [[ ! "$ENV_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || [ "$ENV_NAME" = "." ] || [ "$ENV_NAME" = ".." ]; then
+    echo "[ERROR] Invalid environment name '$ENV_NAME'. Use letters, digits, '.', '_', or '-' without path separators." >&2
+    exit 2
+fi
+
 export OMNI_KIT_ACCEPT_EULA=Y
-PROJECT_ROOT="$HOME/mamba_env_data/$ENV_NAME"
+PROJECT_ROOT="$ENV_ROOT/$ENV_NAME"
+USER_REPO_DIR="$PROJECT_ROOT/LoComposition"
 
 PYTHON_VERSION="3.11"
 ISAACLAB_TAG="ddb044eb5b2300792de41e82d53b032f3632b489"
@@ -28,12 +85,21 @@ else
     echo "[INFO] uv is already installed."
 fi
 
-# Prepare project directory
+# Refuse to merge a new environment into an existing directory.
+if [ -e "$PROJECT_ROOT" ]; then
+    if [ ! -d "$PROJECT_ROOT" ] || [ -n "$(find "$PROJECT_ROOT" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        echo "[ERROR] Target '$PROJECT_ROOT' already exists and is non-empty." >&2
+        exit 1
+    fi
+fi
+
+# Prepare project directory.
 mkdir -p "$PROJECT_ROOT"
 cd "$PROJECT_ROOT"
+set -x
 
 # Initialize project and explicitly set Python requirement (creates pyproject.toml)
-uv init --python $PYTHON_VERSION .
+uv init --python "$PYTHON_VERSION" .
 uv venv
 
 # Install Python dependencies via uv pip, torch and Isaac Sim are pinned here
@@ -41,7 +107,6 @@ uv pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pyt
 uv pip install --upgrade pip 
 uv pip install 'isaacsim[all,extscache]==5.1.0' --extra-index-url https://pypi.nvidia.com  
 uv tool install rust-just
-uv tool update-shell
 
 # Clone and install IsaacLab
 mkdir -p "$PROJECT_ROOT/isaaclab-installation"
@@ -51,7 +116,7 @@ cd IsaacLab
 
 # Checkout the specific version defined at the top of script
 echo "[INFO] Checking out Isaac Lab version: $ISAACLAB_TAG"
-git checkout $ISAACLAB_TAG
+git checkout "$ISAACLAB_TAG"
 
 echo "[INFO] Attempting to activate: source ${PROJECT_ROOT}/.venv/bin/activate"
 source "${PROJECT_ROOT}/.venv/bin/activate" || { echo "venv activation failed"; exit 1; }
@@ -65,13 +130,11 @@ uv pip install -e source/isaaclab_rl
 deactivate
 
 cd "$PROJECT_ROOT" || exit 1
-USER_REPO_DIR="$PROJECT_ROOT/constraints-as-terminations"
-USER_REPO_URL="https://github.com/LouKordos/constraints-as-terminations.git"
 
-echo "[INFO] Cloning user repo..."
-git clone "$USER_REPO_URL" || { echo "[ERROR] Failed to clone user repo."; exit 1; }
+echo "[INFO] Cloning LoComposition from '$REPO_SOURCE'..."
+git clone "$REPO_SOURCE" "$USER_REPO_DIR" || { echo "[ERROR] Failed to clone LoComposition."; exit 1; }
 cd "$USER_REPO_DIR" || exit 1
-uv pip install --no-build-isolation --no-deps -e ./exts/cat_envs
+uv pip install --no-build-isolation --no-deps -e ./exts/locomposition
 uv pip install -r requirements.txt
 cd "$PROJECT_ROOT" || exit 1
 
@@ -115,7 +178,7 @@ fi
 set +x
 echo "-------------------------------------DONE. CHECKLIST:------------------------------------------"
 echo "1. source $PROJECT_ROOT/.venv/bin/activate"
-echo "2. vim $SLURM_CONFIG" # Make desired changes (if any)
-echo "3. cd $USER_REPO_DIR"
-echo "4. sbatch ../slurm-config.sbatch or ../slurm-config-2080ti.sbatch"
+echo "2. cd $USER_REPO_DIR"
+echo "3. Run a LoComposition training or evaluation command from README.md"
+echo "4. If generated, review $SLURM_CONFIG before submitting a Slurm job"
 echo "-----------------------------------------------------------------------------------------------"
