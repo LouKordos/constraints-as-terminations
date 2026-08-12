@@ -21,6 +21,15 @@ def test_readme_presents_locomposition_and_attributes_cat() -> None:
     assert "https://arxiv.org/abs/2403.18765" in text
 
 
+def test_readme_qualifies_cross_embodiment_transfer_without_retuning() -> None:
+    text = README.read_text(encoding="utf-8")
+
+    assert "without an embodiment-specific hyperparameter search" in text
+    assert "Action scaling and operational-limit bounds" in text
+    assert "mass randomization, disturbance magnitudes, and the energy coefficient" in text
+    assert "mass ratio" in text
+
+
 def test_readme_documents_locked_local_and_cluster_setup_without_secrets() -> None:
     text = README.read_text(encoding="utf-8")
 

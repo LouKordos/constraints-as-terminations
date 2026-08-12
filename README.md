@@ -10,11 +10,14 @@ LoComposition learns efficient rough-terrain locomotion without air-time targets
 
 ![Go2 sim2real](assets/demos/go2-sim2real.gif)
 
-## Cross-embodiment without Re-Tuning:
+## Cross-embodiment transfer without retuning
+
 <p align="center">
   <img src="assets/demos/spot.gif" alt="Spot" width="48%" />
   <img src="assets/demos/anymal-c.gif" alt="ANYMAL" width="48%" />
 </p>
+
+The same formulation and training recipe transfer to Spot and ANYmal C without an embodiment-specific hyperparameter search. Action scaling and operational-limit bounds follow each robot's actuator range; mass randomization, disturbance magnitudes, and the energy coefficient are scaled deterministically by mass ratio. These are mechanical conversions for the new embodiment, not another tuning pass.
 
 ## Why LoComposition
 
@@ -121,7 +124,7 @@ The former `CaT-*` task IDs and `cat_envs` Python imports remain available as co
 
 ## Sim-to-real deployment
 
-The Go2 stack runs policy inference at 50 Hz and republishes the latest PD target from a 500 Hz low-level loop. A Livox MID-360 and `elevation_mapping_cupy` produce the online elevation map, the LoComposition processing node converts it to the same yaw-aligned 13×11 observation used in simulation. Read [sim-to-real deployment guide](docs/sim2real.md) before setting up the hardware.
+The Go2 stack runs policy inference at 50 Hz and republishes the latest PD target from a 500 Hz low-level loop. A Livox MID-360 and `elevation_mapping_cupy` produce the online elevation map. The LoComposition processing node converts it to the same yaw-aligned 13×11 observation used in simulation. Read the [sim-to-real deployment guide](docs/sim2real.md) before setting up the hardware.
 
 ![Go2 obstacle sequences and the LiDAR elevation-mapping pipeline.](assets/sim2real-overview.png)
 
