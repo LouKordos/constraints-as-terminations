@@ -136,5 +136,28 @@ def test_setup_script_clones_and_installs_locomposition(tmp_path):
         "git clone https://github.com/LouKordos/LoComposition.git "
         f"{install_root}/fresh-env/LoComposition"
     ) in commands
-    assert "uv pip install --no-build-isolation --no-deps -e ./exts/locomposition" in commands
+    target_python = install_root / "fresh-env/.venv/bin/python"
+    assert (
+        f"uv pip install --python {target_python} "
+        "--no-build-isolation --no-deps -e ./exts/locomposition"
+    ) in commands
     assert "uv tool update-shell" not in commands
+
+
+def test_every_package_install_targets_the_new_virtual_environment(tmp_path):
+    install_root = tmp_path / "environments"
+    result = run_script(
+        tmp_path,
+        "isolated-env",
+        "--root",
+        str(install_root),
+        "--repo-source",
+        str(ROOT),
+    )
+
+    assert result.returncode == 0, result.stderr
+    target_python = install_root / "isolated-env/.venv/bin/python"
+    commands = (tmp_path / "commands.log").read_text().splitlines()
+    pip_installs = [line for line in commands if line.startswith("uv pip install ")]
+    assert pip_installs
+    assert all(f"--python {target_python}" in line for line in pip_installs)

@@ -67,6 +67,7 @@ fi
 export OMNI_KIT_ACCEPT_EULA=Y
 PROJECT_ROOT="$ENV_ROOT/$ENV_NAME"
 USER_REPO_DIR="$PROJECT_ROOT/LoComposition"
+VENV_PYTHON="$PROJECT_ROOT/.venv/bin/python"
 
 PYTHON_VERSION="3.11"
 ISAACLAB_TAG="ddb044eb5b2300792de41e82d53b032f3632b489"
@@ -103,9 +104,9 @@ uv init --python "$PYTHON_VERSION" .
 uv venv
 
 # Install Python dependencies via uv pip, torch and Isaac Sim are pinned here
-uv pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu128
-uv pip install --upgrade pip 
-uv pip install 'isaacsim[all,extscache]==5.1.0' --extra-index-url https://pypi.nvidia.com  
+uv pip install --python "$VENV_PYTHON" torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu128
+uv pip install --python "$VENV_PYTHON" --upgrade pip
+uv pip install --python "$VENV_PYTHON" 'isaacsim[all,extscache]==5.1.0' --extra-index-url https://pypi.nvidia.com
 uv tool install rust-just
 
 # Clone and install IsaacLab
@@ -118,24 +119,21 @@ cd IsaacLab
 echo "[INFO] Checking out Isaac Lab version: $ISAACLAB_TAG"
 git checkout "$ISAACLAB_TAG"
 
-echo "[INFO] Attempting to activate: source ${PROJECT_ROOT}/.venv/bin/activate"
-source "${PROJECT_ROOT}/.venv/bin/activate" || { echo "venv activation failed"; exit 1; }
 export OMNI_KIT_ACCEPT_EULA=Y
 
 echo "[INFO] Installing Isaac Lab Core and Tasks..."
-uv pip install -e source/isaaclab 
-uv pip install -e source/isaaclab_assets 
-uv pip install -e source/isaaclab_tasks 
-uv pip install -e source/isaaclab_rl
-deactivate
+uv pip install --python "$VENV_PYTHON" -e source/isaaclab
+uv pip install --python "$VENV_PYTHON" -e source/isaaclab_assets
+uv pip install --python "$VENV_PYTHON" -e source/isaaclab_tasks
+uv pip install --python "$VENV_PYTHON" -e source/isaaclab_rl
 
 cd "$PROJECT_ROOT" || exit 1
 
 echo "[INFO] Cloning LoComposition from '$REPO_SOURCE'..."
 git clone "$REPO_SOURCE" "$USER_REPO_DIR" || { echo "[ERROR] Failed to clone LoComposition."; exit 1; }
 cd "$USER_REPO_DIR" || exit 1
-uv pip install --no-build-isolation --no-deps -e ./exts/locomposition
-uv pip install -r requirements.txt
+uv pip install --python "$VENV_PYTHON" --no-build-isolation --no-deps -e ./exts/locomposition
+uv pip install --python "$VENV_PYTHON" -r requirements.txt
 cd "$PROJECT_ROOT" || exit 1
 
 SLURM_TEMPLATE="$HOME/local-mamba-test.sbatch"
