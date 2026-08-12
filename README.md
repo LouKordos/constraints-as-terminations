@@ -8,6 +8,14 @@
 
 LoComposition learns efficient rough-terrain locomotion without air-time targets, contact-count objectives, foot-clearance rewards, or a prescribed gait. The training formulation gives each concern one clear role: rewards specify the task, constraints encode operational limits, mechanical-energy minimization provides a gait preference, and exteroceptive perception makes that preference terrain-aware.
 
+![Go2 sim2real](assets/demos/go2-sim2real.gif)
+
+## Cross-embodiment without Re-Tuning:
+<p align="center">
+  <img src="assets/demos/spot.gif" alt="Spot" width="48%" />
+  <img src="assets/demos/anymal-c.gif" alt="ANYMAL" width="48%" />
+</p>
+
 ## Why LoComposition
 
 Quadruped locomotion rewards often mix command tracking, actuator limits, smoothness, foot timing, clearance, and terrain handling into one weighted objective. LoComposition separates them:
@@ -79,16 +87,6 @@ python scripts/generate_plots.py \
 ```
 
 The former `CaT-*` task IDs and `cat_envs` Python imports remain available as compatibility aliases. New scripts should use the `LoComposition-*` IDs and `locomposition` package. See the [migration guide](docs/migration.md) for the exact mapping.
-
-## Supported robots
-
-Each embodiment uses a separately trained policy, but the formulation and training recipe stay the same. Action scaling and actuator limits are adjusted based on the robot's size, while domain randomization, disturbances, and the energy penalty coefficient are scaled by the robot's mass ratio.
-
-![Placeholder for the Unitree Go2 hardware demonstration.](assets/demos/go2-hardware.gif)
-
-![Placeholder for the ANYmal C simulation demonstration.](assets/demos/anymal-c.gif)
-
-![Placeholder for the Boston Dynamics Spot simulation demonstration.](assets/demos/spot.gif)
 
 ## Repository layout
 
