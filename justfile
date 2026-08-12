@@ -8,7 +8,7 @@ train num_envs="7500" task="LoComposition-Go2-Rough-Terrain-Joint-State-History-
     tmpdir="${SLURM_TMPDIR:-$(pwd)/logs/tmp}"; \
     mkdir -p ./logs/clean_rl "$tmpdir" "$tmpdir/isaaclab/logs"; \
     echo "TMPDIR=$tmpdir"; \
-    TMPDIR="$tmpdir" python scripts/clean_rl/train.py --task={{task}} --seed={{seed}} --headless --num_envs={{num_envs}} 2>&1 | tee "./logs/clean_rl/train-$(date +'%Y-%m-%d-%H:%M:%S').log"
+    TMPDIR="$tmpdir" python scripts/clean_rl/train.py --task={{task}} --seed={{seed}} --headless --num_envs={{num_envs}} 2>&1 | 2>&1 | tee "./logs/clean_rl/train-${SLURM_ARRAY_JOB_ID:-${SLURM_JOB_ID:-local}}-${SLURM_ARRAY_TASK_ID:-0}-seed-{{seed}}-$(date +'%Y-%m-%d-%H:%M:%S').log"
 
 _train-rsl-baseline task num_envs seed max_iterations wandb_project *flags:
     tmpdir="${SLURM_TMPDIR:-$(pwd)/logs/tmp}"; \
