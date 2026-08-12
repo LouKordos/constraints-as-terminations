@@ -129,7 +129,20 @@ uv sync \
     --inexact
 
 echo "[INFO] Checking dependency consistency and editable package locations..."
-uv pip check --python "$VENV_PYTHON"
+if dependency_check=$(uv pip check --python "$VENV_PYTHON" 2>&1); then
+    printf '%s\n' "$dependency_check"
+else
+    printf '%s\n' "$dependency_check" >&2
+    known_conflict='The package `fastapi` requires `starlette<0.46.0,>=0.40.0`, but `0.49.1` is installed'
+    incompatibility_count=$(printf '%s\n' "$dependency_check" | grep -c '^The package `')
+    if [[ "$dependency_check" == *"Found 1 incompatibility"* ]] \
+        && [[ "$dependency_check" == *"$known_conflict"* ]] \
+        && [ "$incompatibility_count" -eq 1 ]; then
+        echo "[WARNING] Allowing the known Isaac Sim/Isaac Lab metadata conflict for Starlette 0.49.1." >&2
+    else
+        exit 1
+    fi
+fi
 uv pip show \
     --python "$VENV_PYTHON" \
     locomposition \

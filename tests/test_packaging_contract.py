@@ -50,6 +50,7 @@ def test_project_declares_all_previous_runtime_dependencies():
         "scipy",
         "seaborn",
         "statsmodels",
+        "starlette",
         "tensorboard",
         "tensordict",
         "toml",
@@ -69,6 +70,7 @@ def test_project_declares_all_previous_runtime_dependencies():
     assert str(requirements["numpy"].specifier) == "==1.26.0"
     assert str(requirements["zarr"].specifier) == "==3.1.5"
     assert str(requirements["rsl-rl-lib"].specifier) == "==5.4.2"
+    assert str(requirements["starlette"].specifier) == "==0.49.1"
 
 
 def test_uv_sources_keep_indexes_and_install_local_extension_editably():
@@ -94,7 +96,10 @@ def test_uv_sources_keep_indexes_and_install_local_extension_editably():
         "path": "exts/locomposition",
         "editable": True,
     }
-    assert uv["override-dependencies"] == ["pywin32; sys_platform == 'win32'"]
+    assert uv["override-dependencies"] == [
+        "pywin32; sys_platform == 'win32'",
+        "starlette==0.49.1",
+    ]
 
 
 def test_extension_declares_an_isolated_setuptools_build():

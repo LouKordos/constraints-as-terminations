@@ -171,6 +171,8 @@ Replace obsolete assertions with tests that assert:
 - exactly the same four Isaac Lab source packages are installed editably with the new environment Python;
 - the final project sync is both frozen and inexact;
 - `uv pip check` targets the new environment Python;
+- the one known FastAPI/Starlette metadata conflict is accepted only when it
+  is the sole incompatibility, while any unrelated incompatibility fails;
 - the local extension is installed by the project sync rather than a manual no-build-isolation command;
 - both generated Slurm files exist and pass `bash -n`;
 - L40S placeholders are substituted without changing its approved resources; and
@@ -198,7 +200,7 @@ Rewrite `create-isaac-lab-env-uv.sh` to:
 6. clone and pin Isaac Lab at the stable checkout path;
 7. install the four approved Isaac Lab source distributions editably using the new venv Python;
 8. run the final `uv sync --frozen --inexact` from LoComposition;
-9. run `uv pip check` and import-location diagnostics using the new environment;
+9. run `uv pip check`, accept only the documented single FastAPI/Starlette metadata mismatch, and run import-location diagnostics using the new environment;
 10. render the L40S output from the tracked template;
 11. derive and render the 2080 Ti output from that same template; and
 12. print activation, one-time W&B login, local training, and `sbatch` instructions.
@@ -313,7 +315,7 @@ If fixes were required, rerun the affected test first and then the full suite be
   --repo-source /home/kordoslo/dev/locomposition-rename-project-and-docs
 ```
 
-Expected: the cloned repository syncs from `uv.lock`; Isaac Lab is checked out at the pinned commit; the final sync and `uv pip check` pass; both Slurm variants are generated.
+Expected: the cloned repository syncs from `uv.lock`; Isaac Lab is checked out at the pinned commit; the final sync succeeds; the installer reports only the documented FastAPI/Starlette metadata warning; and both Slurm variants are generated.
 
 ### Step 2: Verify lock and package provenance in the fresh clone
 
@@ -325,7 +327,7 @@ uv pip check --python /tmp/locomposition-locked-env-smoke-20260812/.venv/bin/pyt
   'import inspect, isaaclab, isaaclab_assets, isaaclab_tasks, locomposition; print(inspect.getfile(isaaclab)); print(inspect.getfile(isaaclab_assets)); print(inspect.getfile(isaaclab_tasks)); print(inspect.getfile(locomposition))'
 ```
 
-Expected: Isaac Lab resolves from the pinned checkout and LoComposition resolves from the fresh cloned repository.
+Expected: the raw dependency check reports exactly the documented FastAPI/Starlette mismatch and no other incompatibility; Isaac Lab resolves from the pinned checkout and LoComposition resolves from the fresh cloned repository.
 
 ### Step 3: Verify generated Slurm variants
 

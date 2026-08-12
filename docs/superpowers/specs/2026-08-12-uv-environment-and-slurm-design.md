@@ -103,6 +103,14 @@ their transitive dependencies. The final uv synchronization is inexact so it
 does not remove the editable Isaac Lab packages or their additional
 dependencies, while still enforcing every version present in `uv.lock`.
 
+Fresh-install verification exposed one upstream metadata conflict in this
+combination: Isaac Sim 5.1 pins FastAPI 0.115.7, which declares Starlette
+below 0.46, while the pinned Isaac Lab revision requires the security-updated
+Starlette 0.49.1. The previously validated development environment already
+uses 0.49.1. The root lock therefore overrides Starlette to 0.49.1, and the
+installer accepts only this exact, single `uv pip check` incompatibility. Any
+additional or different incompatibility remains fatal.
+
 ## Installer workflow
 
 `create-isaac-lab-env-uv.sh ENV_NAME` retains its public command and the
@@ -127,8 +135,9 @@ The new workflow is:
 9. Run a second frozen, inexact uv synchronization. This installs the
    LoComposition extension editably, restores the repository-locked versions
    of overlapping packages, and preserves the editable Isaac Lab packages.
-10. Run `uv pip check` with the environment's Python and verify the installed
-    LoComposition and Isaac Lab package locations.
+10. Run `uv pip check` with the environment's Python, accepting only the
+    single documented FastAPI/Starlette metadata mismatch, and verify the
+    installed LoComposition and Isaac Lab package locations.
 11. Generate the L40S and 2080 Ti Slurm files from the tracked repository
     template.
 12. Print activation, W&B authentication, training, and submission commands.
@@ -260,7 +269,8 @@ directory using the revised installer and the current worktree as
 
 Verification in that fresh environment includes:
 
-1. `uv lock --check` and `uv pip check`.
+1. `uv lock --check` and installer-mediated `uv pip check`, with only the
+   documented single FastAPI/Starlette metadata mismatch accepted.
 2. Installed-version and editable-source inspection for LoComposition and all
    four Isaac Lab packages.
 3. Import and canonical/legacy task-alias verification.

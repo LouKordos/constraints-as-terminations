@@ -17,7 +17,7 @@ def write_executable(path: Path, content: str) -> None:
 
 def fake_install_environment(tmp_path: Path) -> dict[str, str]:
     fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
+    fake_bin.mkdir(parents=True)
     command_log = tmp_path / "commands.log"
 
     write_executable(
@@ -30,6 +30,18 @@ if [ "${1:-}" = "sync" ]; then
     printf 'deactivate() { :; }\n' > "${UV_PROJECT_ENVIRONMENT}/bin/activate"
     printf '#!/usr/bin/env bash\nexit 0\n' > "${UV_PROJECT_ENVIRONMENT}/bin/python"
     chmod +x "${UV_PROJECT_ENVIRONMENT}/bin/python"
+fi
+if [ "${1:-}" = "pip" ] && [ "${2:-}" = "check" ]; then
+    if [ "${FAKE_UV_PIP_CHECK_MODE:-}" = "known-starlette-conflict" ]; then
+        printf 'Found 1 incompatibility\n' >&2
+        printf 'The package `fastapi` requires `starlette<0.46.0,>=0.40.0`, but `0.49.1` is installed\n' >&2
+        exit 1
+    fi
+    if [ "${FAKE_UV_PIP_CHECK_MODE:-}" = "unexpected-conflict" ]; then
+        printf 'Found 1 incompatibility\n' >&2
+        printf 'The package `example` requires `missing`, but it is not installed\n' >&2
+        exit 1
+    fi
 fi
 """,
     )
@@ -68,9 +80,14 @@ fi
     }
 
 
-def run_script(tmp_path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+def run_script(
+    tmp_path: Path,
+    *arguments: str,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.update(fake_install_environment(tmp_path))
+    env.update(extra_env or {})
     return subprocess.run(
         [str(SCRIPT), *arguments],
         cwd=ROOT,
@@ -250,3 +267,31 @@ def test_setup_script_generates_l40s_and_2080ti_variants(tmp_path):
     assert "#SBATCH --gres=gpu:2080ti:1" in gpu_2080ti_content
     assert "#SBATCH --array=0-8%9" in gpu_2080ti_content
     assert "RUNS_PER_NODE=1" in gpu_2080ti_content
+
+
+def test_setup_script_accepts_only_the_known_upstream_starlette_conflict(tmp_path):
+    known = run_script(
+        tmp_path / "known",
+        "known-conflict",
+        "--root",
+        str(tmp_path / "known" / "environments"),
+        "--repo-source",
+        str(ROOT),
+        extra_env={"FAKE_UV_PIP_CHECK_MODE": "known-starlette-conflict"},
+    )
+
+    assert known.returncode == 0, known.stderr
+    assert "known Isaac Sim/Isaac Lab metadata conflict" in known.stderr
+
+    unexpected = run_script(
+        tmp_path / "unexpected",
+        "unexpected-conflict",
+        "--root",
+        str(tmp_path / "unexpected" / "environments"),
+        "--repo-source",
+        str(ROOT),
+        extra_env={"FAKE_UV_PIP_CHECK_MODE": "unexpected-conflict"},
+    )
+
+    assert unexpected.returncode != 0
+    assert "requires `missing`" in unexpected.stderr

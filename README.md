@@ -57,6 +57,8 @@ Reproducibility has two deliberate boundaries:
 - `uv.lock` fixes Isaac Sim 5.1.0, PyTorch 2.7.0 with CUDA 12.8, the LoComposition extension, and the remaining Python packages.
 - `create-isaac-lab-env-uv.sh` checks out Isaac Lab at `ddb044eb5b2300792de41e82d53b032f3632b489` and installs its four required source packages editably. Keeping this checkout explicit matters because Isaac Lab resolves application files relative to its source tree.
 
+One upstream metadata conflict is handled explicitly: Isaac Sim 5.1 pins a FastAPI version that declares Starlette below 0.46, while this Isaac Lab revision requires the security-updated Starlette 0.49.1. LoComposition keeps Isaac Lab's 0.49.1 requirement, matching the validated development environment. The installer accepts only that exact `uv pip check` warning and still fails on any other dependency incompatibility.
+
 If you already have that Isaac Lab revision installed in an active environment, synchronize LoComposition into it from the repository root. `--inexact` retains the separately installed editable Isaac Lab packages:
 
 ```bash

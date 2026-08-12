@@ -30,6 +30,9 @@ dependencies = [
     "rosbags",
     "tensordict",
     "rsl-rl-lib==5.4.2",
+    # The pinned Isaac Lab revision requires this security-updated version.
+    # Isaac Sim 5.1's FastAPI metadata still carries an incompatible upper bound.
+    "starlette==0.49.1",
 ]
 
 [tool.uv]
@@ -46,7 +49,10 @@ required-environments = [
 # This override forces uv to treat pywin32 as Windows-only, allowing the 
 # Linux environment to resolve and install successfully.
 override-dependencies = [
-    "pywin32; sys_platform == 'win32'"
+    "pywin32; sys_platform == 'win32'",
+    # Match pinned Isaac Lab. The installer allows only the corresponding
+    # known FastAPI metadata warning and fails on every other incompatibility.
+    "starlette==0.49.1",
 ]
 
 # Allows uv to automatically find these packages without needing the long --index-url flags every time you run a command.
