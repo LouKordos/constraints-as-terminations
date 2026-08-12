@@ -42,7 +42,7 @@ See the paper for more details. The [project page](https://sites.google.com/view
 
 ## Installation
 
-The setup script creates a pinned Python 3.11 environment, installs Isaac Sim 5.1.0 and the matching Isaac Lab revision, clones LoComposition, and installs its dependencies. It requires Linux, an NVIDIA GPU with a compatible driver, Git, and enough disk space for Isaac Sim.
+The setup script creates a Python 3.11 environment, installs the dependencies recorded in `uv.lock`, and checks out the compatible Isaac Lab source revision. It requires Linux, an NVIDIA GPU with a compatible driver, Git, and enough disk space for Isaac Sim.
 
 ```bash
 ./create-isaac-lab-env-uv.sh locomposition
@@ -50,14 +50,34 @@ source ~/mamba_env_data/locomposition/.venv/bin/activate
 cd ~/mamba_env_data/locomposition/LoComposition
 ```
 
-Use `--root PATH` to place the environment elsewhere, or `--repo-source URL_OR_PATH` to install from a fork or local checkout. The script refuses to merge into a non-empty target directory.
+Use `--root PATH` to place the environment elsewhere, or `--repo-source URL_OR_PATH` to install from a fork or local checkout. The script refuses to merge into a non-empty target directory. It finishes by checking the installed dependency graph and printing the locations of the editable LoComposition and Isaac Lab packages.
 
-If you already have the pinned Isaac Lab environment, install only this extension and its Python dependencies:
+Reproducibility has two deliberate boundaries:
+
+- `uv.lock` fixes Isaac Sim 5.1.0, PyTorch 2.7.0 with CUDA 12.8, the LoComposition extension, and the remaining Python packages.
+- `create-isaac-lab-env-uv.sh` checks out Isaac Lab at `ddb044eb5b2300792de41e82d53b032f3632b489` and installs its four required source packages editably. Keeping this checkout explicit matters because Isaac Lab resolves application files relative to its source tree.
+
+If you already have that Isaac Lab revision installed in an active environment, synchronize LoComposition into it from the repository root. `--inexact` retains the separately installed editable Isaac Lab packages:
 
 ```bash
-uv pip install --no-build-isolation --no-deps --editable ./exts/locomposition
-uv pip install --requirement requirements.txt
+UV_PROJECT_ENVIRONMENT="$VIRTUAL_ENV" uv sync --frozen --inexact
 ```
+
+### Cluster training
+
+Environment creation also writes two ready-to-review job files beside the virtual environment:
+
+- `train-locomposition.sbatch` runs three 7,500-environment seeds concurrently on one L40S, with eight allocated CPUs.
+- `train-locomposition-2080ti.sbatch` runs one seed per 2080 Ti array job, also with eight allocated CPUs.
+
+Authenticate W&B once from the cluster account whose shared home directory is mounted on the compute nodes. This is a one-time login for that account, not a step to repeat for every environment:
+
+```bash
+wandb login
+sbatch ~/mamba_env_data/locomposition/train-locomposition.sbatch
+```
+
+W&B stores that login outside the virtual environment, so new LoComposition environments reuse it. The jobs can also inherit a `WANDB_API_KEY` supplied by your scheduler or secret manager; no credential belongs in this repository or in an sbatch file.
 
 ## Quick start
 

@@ -21,6 +21,25 @@ def test_readme_presents_locomposition_and_attributes_cat() -> None:
     assert "https://arxiv.org/abs/2403.18765" in text
 
 
+def test_readme_documents_locked_local_and_cluster_setup_without_secrets() -> None:
+    text = README.read_text(encoding="utf-8")
+
+    assert "requirements.txt" not in text
+    assert "uv.lock" in text
+    assert "ddb044eb5b2300792de41e82d53b032f3632b489" in text
+    assert 'UV_PROJECT_ENVIRONMENT="$VIRTUAL_ENV"' in text
+    assert "uv sync --frozen --inexact" in text
+    assert "train-locomposition.sbatch" in text
+    assert "train-locomposition-2080ti.sbatch" in text
+    assert "one-time" in text.lower()
+    assert "shared home" in text.lower()
+    assert re.search(r"(?i)(?:export\s+)?WANDB_API_KEY\s*=", text) is None
+    text_without_isaaclab_revision = text.replace(
+        "ddb044eb5b2300792de41e82d53b032f3632b489", ""
+    )
+    assert re.search(r"(?i)\b[0-9a-f]{40}\b", text_without_isaaclab_revision) is None
+
+
 def test_readme_relative_links_resolve() -> None:
     text = README.read_text(encoding="utf-8")
     destinations = re.findall(r"!?\[[^\]]*\]\(([^)]+)\)", text)
