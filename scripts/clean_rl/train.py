@@ -1,13 +1,42 @@
 import argparse
 import sys
 import os
+import time
 from datetime import datetime
-os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8") # Determinism
+
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")  # Determinism
+
 from isaaclab.app import AppLauncher
 import cli_args  # isort: skip
 from functools import partial
+
 sys.stdout.reconfigure(line_buffering=True)
-print = partial(print, flush=True) # For cluster runs
+print = partial(print, flush=True)  # For cluster runs
+
+
+def reserve_timestamp_log_dir(log_root_path: str) -> str:
+    """
+    Atomically reserve a timestamp-only logging directory.
+
+    Multiple training processes may reach this function during the same
+    second. os.mkdir() is used as the atomic reservation operation, so only
+    one process can successfully claim a given timestamp directory.
+
+    If the current timestamp has already been claimed, wait briefly and retry
+    until a new timestamp becomes available.
+    """
+    os.makedirs(log_root_path, exist_ok=True)
+
+    while True:
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        log_dir = os.path.join(log_root_path, timestamp)
+
+        try:
+            os.mkdir(log_dir)
+            return log_dir
+        except FileExistsError:
+            time.sleep(0.05)
+
 
 def set_global_seed(seed: int):
     random.seed(seed)
@@ -69,7 +98,7 @@ simulation_app = app_launcher.app
 
 import gymnasium as gym
 
-from isaaclab.envs import (DirectMARLEnvCfg, DirectRLEnvCfg, ManagerBasedRLEnvCfg)
+from isaaclab.envs import DirectMARLEnvCfg, DirectRLEnvCfg, ManagerBasedRLEnvCfg
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.io import dump_yaml
 from isaaclab_tasks.utils.hydra import hydra_task_config
@@ -83,6 +112,8 @@ import torch
 
 from pxr import Usd, UsdGeom, Tf
 import hashlib
+
+
 def _first_mesh_with_indices(prim):
     """DFS until we find a UsdGeom.Mesh that actually has indices."""
     if prim.IsA(UsdGeom.Mesh):
@@ -95,11 +126,14 @@ def _first_mesh_with_indices(prim):
             return hit
     return None
 
+
 def _hash_mesh(mesh: UsdGeom.Mesh):
-    pts  = np.asarray(mesh.GetPointsAttr().Get(), dtype=np.float32)
-    idx  = np.asarray(mesh.GetFaceVertexIndicesAttr().Get(
-                       Usd.TimeCode.Default()), dtype=np.int32)
+    pts = np.asarray(mesh.GetPointsAttr().Get(), dtype=np.float32)
+    idx = np.asarray(
+        mesh.GetFaceVertexIndicesAttr().Get(Usd.TimeCode.Default()), dtype=np.int32
+    )
     return hashlib.sha1(pts.tobytes() + idx.tobytes()).hexdigest()
+
 
 def _hash_heightfield(prim):
     # PhysX height-field data live on a custom attribute:
@@ -109,18 +143,19 @@ def _hash_heightfield(prim):
     hf = np.asarray(data_attr.Get(), dtype=np.int16)
     return hashlib.sha1(hf.tobytes()).hexdigest()
 
+
 def get_ground_hash(env):
-    stage  = env.unwrapped.scene.stage
-    root   = stage.GetPrimAtPath("/World/ground")
-    
+    stage = env.unwrapped.scene.stage
+    root = stage.GetPrimAtPath("/World/ground")
+
     mesh = _first_mesh_with_indices(root)
     if mesh:
         return _hash_mesh(mesh)
-    
+
     # fall-back: maybe this is a PhysX height-field
     if root.HasAPI(Tf.Type.FindByName("PhysxHeightField")):
         return _hash_heightfield(root)
-    
+
     raise ValueError(f"No usable mesh or height-field found under {root.GetPath()}")
 
 
@@ -163,18 +198,31 @@ def print_resolved_training_config(env_cfg, task_name: str) -> None:
             if term_cfg is not None:
                 print(f"[INFO] event.{term_name}={term_cfg.params}")
 
-@hydra_task_config(args_cli.task, "clean_rl_cfg_entry_point")
-def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg,):
 
+@hydra_task_config(args_cli.task, "clean_rl_cfg_entry_point")
+def main(
+    env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg,
+    agent_cfg,
+):
     if environ.get("ENV_NAME") is None:
-        print("\n\n----------------------------------------------------------------------------------")
-        print("ERROR: Please set ENV_NAME environment variable before running this script, exiting.")
-        print("----------------------------------------------------------------------------------")
+        print(
+            "\n\n----------------------------------------------------------------------------------"
+        )
+        print(
+            "ERROR: Please set ENV_NAME environment variable before running this script, exiting."
+        )
+        print(
+            "----------------------------------------------------------------------------------"
+        )
         exit(1)
 
     # override configurations with non-hydra CLI arguments
     agent_cfg = cli_args.update_clean_rl_cfg(agent_cfg, args_cli)
-    env_cfg.scene.num_envs = (args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs)
+    env_cfg.scene.num_envs = (
+        args_cli.num_envs
+        if args_cli.num_envs is not None
+        else env_cfg.scene.num_envs
+    )
     agent_cfg.num_iterations = (
         args_cli.num_iterations
         if args_cli.num_iterations is not None
@@ -184,7 +232,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if args_cli.energy_end_weight is not None:
         power_term = getattr(getattr(env_cfg, "curriculum", None), "power", None)
         if power_term is None:
-            raise ValueError("--energy_end_weight requires an active curriculum.power term")
+            raise ValueError(
+                "--energy_end_weight requires an active curriculum.power term"
+            )
         if args_cli.energy_end_weight < 0.0:
             raise ValueError("--energy_end_weight must be non-negative")
         power_term.params["end_weight"] = args_cli.energy_end_weight
@@ -198,6 +248,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         env_cfg.scene.terrain.terrain_generator.seed = seed
 
     import isaaclab_tasks.manager_based.locomotion.velocity.mdp as velocity_mdp
+
     velocity_mdp.terrain_levels_vel.seed = seed
     set_global_seed(seed)
 
@@ -206,33 +257,48 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     print(f"[INFO] env_cfg.seed={env_cfg.seed}")
     print(f"[INFO] env_cfg.sim.random_seed={env_cfg.sim.random_seed}")
     if env_cfg.scene.terrain.terrain_generator is not None:
-        print(f"[INFO] terrain_generator.seed={env_cfg.scene.terrain.terrain_generator.seed}")
+        print(
+            f"[INFO] terrain_generator.seed={env_cfg.scene.terrain.terrain_generator.seed}"
+        )
 
     print_resolved_training_config(env_cfg, args_cli.task)
 
-    env_cfg.sim.device = (args_cli.device if args_cli.device is not None else env_cfg.sim.device)
+    env_cfg.sim.device = (
+        args_cli.device if args_cli.device is not None else env_cfg.sim.device
+    )
 
     # Follow robot with viewport
     env_cfg.viewer.origin_type = "asset_root"
-    env_cfg.viewer.asset_name  = "robot"
-    env_cfg.viewer.eye        = (0.0, -5.0, 5.0)
-    env_cfg.viewer.lookat     = (0.0,  0.0, 0.5)
+    env_cfg.viewer.asset_name = "robot"
+    env_cfg.viewer.eye = (0.0, -5.0, 5.0)
+    env_cfg.viewer.lookat = (0.0, 0.0, 0.5)
 
     # specify directory for logging experiments
-    log_root_path = os.path.join("logs", "clean_rl", agent_cfg.experiment_name)
+    log_root_path = os.path.join(
+        "logs", "clean_rl", agent_cfg.experiment_name
+    )
     log_root_path = os.path.abspath(log_root_path)
     print(f"[INFO] Logging experiment in directory: {log_root_path}")
-    log_dir = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    log_dir = os.path.join(log_root_path, log_dir)
+
+    # Atomically claim a unique timestamp-only run directory.
+    log_dir = reserve_timestamp_log_dir(log_root_path)
+    print(f"[INFO] Reserved run directory: {log_dir}")
 
     # dump the configuration into log-directory
-    dump_yaml(os.path.join(log_root_path, log_dir, "params", "env.yaml"), env_cfg)
-    dump_yaml(os.path.join(log_root_path, log_dir, "params", "agent.yaml"), agent_cfg)
+    dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
+    dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)
 
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    env = gym.make(
+        args_cli.task,
+        cfg=env_cfg,
+        render_mode="rgb_array" if args_cli.video else None,
+    )
 
     print("Terrain hash:", get_ground_hash(env))
-    if env.unwrapped.scene.terrain.cfg.terrain_type != "plane" and get_ground_hash(env) != "e3f8594b1c2755f00290cebc3d98598721063bd0":
+    if (
+        env.unwrapped.scene.terrain.cfg.terrain_type != "plane"
+        and get_ground_hash(env) != "e3f8594b1c2755f00290cebc3d98598721063bd0"
+    ):
         print("---------------------------------------------------")
         print("---------------------------------------------------")
         print("---------------------------------------------------")
@@ -240,7 +306,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         print("---------------------------------------------------")
         print("---------------------------------------------------")
         print("---------------------------------------------------")
-        #sys.exit(1)
+        # sys.exit(1)
 
     if args_cli.video:
         video_kwargs = {
@@ -255,6 +321,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     PPO(env, agent_cfg, log_dir)
     env.close()
+
 
 if __name__ == "__main__":
     main()
