@@ -24,9 +24,9 @@ The PNGs were exported at publication resolution and checked after conversion. I
 
 Keep the filenames when replacing the placeholders so the README does not need another edit. Prefer a true-color GIF or an optimized WebP only if GitHub rendering and file size have both been checked.
 
-## Links still needed
+## Links
 
-- A direct public URL for the project video. The README currently sends the “Project video” link to the project page, where the video is available.
+- Project video: `https://youtu.be/byAA07ge4O0` (already linked from the README).
 - The final personal blog-post URL, if the README should link to it. It is deliberately omitted for now rather than guessing a route.
 - The final public GitHub URL after the repository is renamed, so the setup script and `CITATION.cff` can be checked against the live repository.
 

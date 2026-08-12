@@ -73,6 +73,6 @@ export LOCOMPOSITION_SIM2REAL_IMAGE=owner/locomposition-sim2real:tag
 2. Update the fork/upstream remotes and check the clone URL shown by GitHub.
 3. Verify that the old GitHub URL redirects and that badges, archived scripts, and external project-page links still resolve.
 4. Publish a LoComposition-named sim-to-real image, then change the Compose default away from `loukordos/cat-sim2real:latest`.
-5. Replace the three labelled GIF placeholders and add the final direct project-video and personal-blog URLs listed in the [asset inventory](assets.md).
-6. Choose the final repository-wide license and add a top-level `LICENSE`; do not silently replace the existing per-file notices.
+5. Replace the three labelled GIF placeholders and add the final personal-blog URL listed in the [asset inventory](assets.md). The direct project-video URL is already present.
+6. Confirm the intended licensing for the LoComposition contributions. Decide whether the inherited `LICENCE` applies; otherwise add an agreed top-level license without replacing existing file-level notices.
 7. Re-run the repository tests and an external-link check after the GitHub rename is live.

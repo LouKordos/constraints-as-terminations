@@ -2,7 +2,7 @@
 
 ### Terrain-Adaptive Energy-Efficient Quadruped Locomotion without Gait Priors
 
-[Project page](https://sites.google.com/view/locomposition) · [Paper](https://arxiv.org/abs/2606.15896) · [Project video (on the project page)](https://sites.google.com/view/locomposition)
+[Project page](https://sites.google.com/view/locomposition) · [Paper](https://arxiv.org/abs/2606.15896) · [Project video](https://youtu.be/byAA07ge4O0)
 
 ![LoComposition separates task specification, operational limits, gait preference, and terrain adaptation.](assets/locomposition-overview.png)
 
@@ -17,7 +17,7 @@ Quadruped locomotion rewards often mix command tracking, actuator limits, smooth
 - **Gait preference:** mechanical-power minimization favors economical motion without naming a contact pattern.
 - **Terrain adaptation:** a robot-centric elevation map lets the policy spend energy where obstacles require it.
 
-The result is a low-cost trotting gait that emerges during training and increases clearance when the terrain calls for it. CaT remains an important component of the method; LoComposition is the complete formulation built around it, not a replacement name for the constraint mechanism.
+The result is an energy-efficient trotting gait that emerges during training and increases clearance when the terrain requires it. CaT is the chosen constraint mechanism for our method, and LoComposition is the complete formulation built around it.
 
 ## Results at a glance
 
@@ -30,15 +30,7 @@ Against a conventional complex-reward locomotion baseline, LoComposition provide
 
 ![Cost of Transport and learned contact patterns.](assets/cot-and-contact-patterns.png)
 
-The paper contains the controlled ablations, 12-seed aggregate results, and hardware protocol. The [project page](https://sites.google.com/view/locomposition) is the best place to watch the full qualitative comparison.
-
-## Additional evidence
-
-Follow-up analyses help explain what the headline metrics leave out. On uneven terrain, mean swing height increases from **2.28 cm to 5.72 cm**, while simultaneous diagonal contact decreases from **81% to 56%**. With a 20 ms action delay, planar velocity RMSE changes from 0.19 to 0.26 m/s for LoComposition, compared with 0.17 to 0.47 m/s without energy minimization. In a matched reward-penalty study using the same PPO settings and action scale, the best tested penalty coefficient still produces roughly **15× more torque-limit violations** than the CaT formulation.
-
-These are supporting analyses beyond the current preprint's main headline results; they are kept separate here to avoid presenting them as part of the original comparison.
-
-![Contact timing changes across terrain conditions.](assets/terrain-contact-adaptation.png)
+The paper contains the ablations and hardware setup. The [project page](https://sites.google.com/view/locomposition) and [project video](https://youtu.be/byAA07ge4O0) are the best places to watch the full comparison.
 
 ## Installation
 
@@ -119,7 +111,7 @@ The requested crops and replacement checklist are in [the asset inventory](docs/
 
 ## Sim-to-real deployment
 
-The Go2 stack runs policy inference at 50 Hz and republishes the latest PD target from a 500 Hz low-level loop. A Livox MID-360 and `elevation_mapping_cupy` produce the online map; the LoComposition processing node converts it to the same yaw-aligned 13×11 observation used in simulation. The controller includes state/map freshness checks and safe-stop behavior, but it is a soft-real-time research stack—not a formal runtime safety system.
+The Go2 stack runs policy inference at 50 Hz and republishes the latest PD target from a 500 Hz low-level loop. A Livox MID-360 and `elevation_mapping_cupy` produce an online elevation map; the LoComposition processing node converts it to the same yaw-aligned 13×11 observation used in simulation.
 
 Start with the [sim-to-real deployment guide](docs/sim2real.md) before connecting to hardware.
 
@@ -149,8 +141,6 @@ LoComposition uses **Constraints as Terminations** as the mechanism for operatio
 }
 ```
 
-The CaT/Isaac Lab foundation of this fork was originally implemented by Constant Roux and Maciej Stępień. The [original repository](https://github.com/Gepetto/constraints-as-terminations), [CaT paper](https://arxiv.org/abs/2403.18765), and [CaT project page](https://constraints-as-terminations.github.io) remain the authoritative sources for that prior work. Machine-readable LoComposition citation metadata is available in [CITATION.cff](CITATION.cff).
-
 ## License
 
-This repository does not yet declare one project-wide license. Existing source files retain their file-level notices (predominantly BSD-3-Clause, with Apache-2.0 in the ROS controller package). Check the relevant file or package before reuse. Selecting and adding the final top-level license is listed in the [migration checklist](docs/migration.md#repository-owner-checklist).
+Licensing is currently mixed. The inherited top-level [LICENCE](LICENCE) contains MIT terms and an Isaac Lab Project Developers copyright, while source files retain their own notices (predominantly BSD-3-Clause, with Apache-2.0 in the ROS controller package). Before the public release, confirm whether the inherited file is intended to cover the new LoComposition contributions and update the top-level licensing with all contributors' agreement. This is included in the [migration checklist](docs/migration.md#repository-owner-checklist).
