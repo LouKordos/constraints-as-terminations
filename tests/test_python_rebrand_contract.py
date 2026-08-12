@@ -13,10 +13,15 @@ ROOT = Path(__file__).resolve().parents[1]
 EXTENSION_ROOT = ROOT / "exts" / "locomposition"
 
 
-def test_primary_distribution_and_extension_are_named_locomposition():
+def test_extension_distribution_and_package_are_named_locomposition():
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    extension_setup = (EXTENSION_ROOT / "setup.py").read_text()
 
-    assert metadata["project"]["name"] == "locomposition"
+    assert metadata["tool"]["uv"]["sources"]["locomposition"] == {
+        "path": "exts/locomposition",
+        "editable": True,
+    }
+    assert 'name="locomposition"' in extension_setup
     assert (EXTENSION_ROOT / "locomposition" / "__init__.py").is_file()
 
 
