@@ -78,7 +78,7 @@ def _matched_height_scanner_cfg(sim_dt: float) -> RayCasterCfg:
 
 @configclass
 class MatchedAnymalCEventCfg:
-    """CaT ANYmal C randomization, reset, and disturbance conditions."""
+    """LoComposition ANYmal C randomization, reset, and disturbance conditions."""
 
     physics_material = EventTerm(
         func=mdp.randomize_rigid_body_material,
@@ -225,7 +225,7 @@ def _assert_upstream_anymal_reward_contract(rewards) -> None:
 
 @configclass
 class BaselineAnymalCRoughEnvCfg(AnymalCRoughEnvCfg):
-    """Upstream ANYmal C baseline under matched CaT experimental conditions."""
+    """Upstream ANYmal C baseline under matched LoComposition conditions."""
 
     use_deadzone_command: bool = True
 

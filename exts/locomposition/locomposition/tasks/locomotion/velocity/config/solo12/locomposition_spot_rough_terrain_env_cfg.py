@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""CaT rough-terrain configurations for Boston Dynamics Spot."""
+"""LoComposition rough-terrain configurations for Boston Dynamics Spot."""
 
 import torch
 
@@ -124,7 +124,7 @@ def _foot_ray_caster(foot_name: str, sim_dt: float) -> RayCasterCfg:
 
 @configclass
 class SpotRoughTerrainEnvCfg(Go2RoughTerrainEnvCfg):
-    """Shared CaT rough-terrain MDP with Spot-specific embodiment settings."""
+    """Shared LoComposition task with Spot-specific embodiment settings."""
 
     def __post_init__(self):
         super().__post_init__()

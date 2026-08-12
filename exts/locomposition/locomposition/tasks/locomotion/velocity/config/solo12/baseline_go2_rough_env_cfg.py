@@ -6,7 +6,7 @@
 """Matched upstream Isaac Lab rough-terrain baseline for Unitree Go2.
 
 The configuration intentionally keeps the upstream Go2 reward stack, action
-implementation, and action scale while matching the CaT experimental
+implementation, and action scale while matching the LoComposition experimental
 conditions. It is explicit because the installed upstream Go2 source currently
 contains unrelated working-tree edits and must not be a hidden dependency.
 """
@@ -68,7 +68,7 @@ def _matched_height_scanner_cfg(sim_dt: float) -> RayCasterCfg:
         prim_path="{ENV_REGEX_NS}/Robot/base",
         update_period=sim_dt,
         # Keep Isaac Lab's high ray origin and height_scan convention while
-        # matching CaT's horizontal footprint, placement, and drift.
+        # matching LoComposition's horizontal footprint, placement, and drift.
         offset=RayCasterCfg.OffsetCfg(pos=(0.2, 0.0, 20.0)),
         mesh_prim_paths=["/World/ground"],
         ray_alignment="yaw",
@@ -88,7 +88,7 @@ def _matched_height_scanner_cfg(sim_dt: float) -> RayCasterCfg:
 
 @configclass
 class MatchedGo2EventCfg:
-    """CaT Go2 randomization, reset, and disturbance conditions."""
+    """LoComposition Go2 randomization, reset, and disturbance conditions."""
 
     physics_material = EventTerm(
         func=mdp.randomize_rigid_body_material,
@@ -210,12 +210,12 @@ def _force_hard_terrain(env, env_ids):
     terrain.configure_env_origins(origins[row_index : row_index + 1].reshape(-1, 3))
 
 
-def _reset_joints_to_cat_eval_pose(
+def _reset_joints_to_locomposition_eval_pose(
     env,
     env_ids,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 ):
-    """Match the reset pose used by the CaT Go2 evaluation environment."""
+    """Match the reset pose used by the LoComposition Go2 evaluation environment."""
 
     asset: Articulation = env.scene[asset_cfg.name]
     joint_pos = asset.data.default_joint_pos[env_ids].clone()
@@ -254,7 +254,7 @@ def _assert_upstream_go2_reward_contract(rewards) -> None:
 
 @configclass
 class BaselineGo2RoughEnvCfg(UnitreeGo2RoughEnvCfg):
-    """Upstream Go2 baseline under the matched CaT experimental conditions."""
+    """Upstream Go2 baseline under matched LoComposition conditions."""
 
     use_deadzone_command: bool = True
 
@@ -341,7 +341,7 @@ class BaselineGo2RoughEnvCfg_PLAY(BaselineGo2RoughEnvCfg):
 
         self.events.force_hard_terrain = EventTerm(func=_force_hard_terrain, mode="startup")
         self.events.reset_robot_joints = EventTerm(
-            func=_reset_joints_to_cat_eval_pose,
+            func=_reset_joints_to_locomposition_eval_pose,
             mode="reset",
         )
         self.events.push_robot = None

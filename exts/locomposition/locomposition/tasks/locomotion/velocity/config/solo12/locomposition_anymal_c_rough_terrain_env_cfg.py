@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""CaT rough-terrain configurations for ANYbotics ANYmal C.
+"""LoComposition rough-terrain configurations for ANYbotics ANYmal C.
 
 The Go2 configuration remains the source of shared task behavior. This module
 only replaces settings whose meaning depends on the robot embodiment.
@@ -54,7 +54,7 @@ def _foot_ray_caster(foot_name: str, sim_dt: float) -> RayCasterCfg:
 
 @configclass
 class AnymalCRoughTerrainEnvCfg(Go2RoughTerrainEnvCfg):
-    """Go2 CaT task with the hard embodiment differences replaced for ANYmal C."""
+    """Shared LoComposition task with ANYmal C embodiment settings."""
 
     def __post_init__(self):
         super().__post_init__()

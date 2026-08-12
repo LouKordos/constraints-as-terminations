@@ -33,7 +33,7 @@ outputs/
 /isaacgymenvs/wandb
 runs*
 *.npy
-constraints-as-terminations-logs-and-runs.tar.zst
+locomposition-logs-and-runs.tar.zst
 job.*.out
 job.*.err
 sim2real/build
@@ -43,7 +43,7 @@ sim2real/ros2_ws/**/build
 sim2real/ros2_ws/**/install
 sim2real/ros2_ws/**/log
 sim2real/ros2_ws/src/third_party
-sim2real/ros2_ws/src/cat_controller/include/cat_controller/motor_crc.h
-sim2real/ros2_ws/src/cat_controller/src/motor_crc.cpp
+sim2real/ros2_ws/src/locomposition_controller/include/locomposition_controller/motor_crc.h
+sim2real/ros2_ws/src/locomposition_controller/src/motor_crc.cpp
 eval-job*.out
 eval-job*.err

@@ -245,8 +245,11 @@ def PPO(envs, ppo_cfg, run_path):
     agent = Agent(envs).to(device)
 
     LOAD_CHECKPOINT = False
-    #checkpoint_path = "/home/kordos/mamba_env_data/env_id_68_performance_based_energy_curr/constraints-as-terminations/logs/clean_rl/env_id_68_performance_based_energy_curr/2025-06-13-18-30-24/model_4299.pt"
-    checkpoint_path = "/home/kordos/mamba_env_data/env_id_68_performance_based_energy_curr/constraints-as-terminations/logs/clean_rl/env_id_68_performance_based_energy_curr/2025-06-15-11-15-38/model_13899.pt"
+    checkpoint_path = (
+        "/home/kordos/mamba_env_data/env_id_68_performance_based_energy_curr/LoComposition/"
+        "logs/clean_rl/env_id_68_performance_based_energy_curr/"
+        "2025-06-15-11-15-38/model_13899.pt"
+    )
     if LOAD_CHECKPOINT:
         print(f"[INFO] Loading model from: {checkpoint_path}")
         print("Loading from model currently assumes constraints curriculum progress = 1.0 i.e. fully enforced and resets the learning rate annealing!")

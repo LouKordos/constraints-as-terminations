@@ -1,9 +1,10 @@
-"""Run the installed Isaac Lab RSL-RL trainer with local CaT tasks registered.
+"""Run the installed Isaac Lab RSL-RL trainer with LoComposition tasks registered.
 
 The installed trainer intentionally contains an extension-template placeholder.
 This bootstrap replaces only that marker in memory, after AppLauncher startup,
 so the repository task package is imported at the point intended for external
-extensions. The upstream file on disk remains untouched.
+extensions. Legacy CaT task aliases are registered by the same import. The
+upstream file on disk remains untouched.
 """
 
 from __future__ import annotations

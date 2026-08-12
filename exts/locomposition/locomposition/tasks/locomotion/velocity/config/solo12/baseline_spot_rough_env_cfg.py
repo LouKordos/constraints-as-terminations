@@ -37,8 +37,8 @@ from .locomposition_spot_rough_terrain_env_cfg import (
 DEFAULT_MATCHED_SEED = 46
 
 
-def _cat_spot_asset():
-    """Use the exact delayed-actuator-compatible asset used by CaT Spot."""
+def _locomposition_spot_asset():
+    """Use the delayed-actuator-compatible asset from LoComposition Spot."""
 
     return SPOT_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
@@ -99,7 +99,7 @@ def _matched_height_scanner_cfg(sim_dt: float) -> RayCasterCfg:
 
 @configclass
 class MatchedSpotEventCfg:
-    """CaT Spot randomization, reset, and disturbance conditions."""
+    """LoComposition Spot randomization, reset, and disturbance conditions."""
 
     physics_material = EventTerm(
         func=mdp.randomize_rigid_body_material,
@@ -249,7 +249,7 @@ def _assert_upstream_spot_reward_contract(rewards) -> None:
 
 @configclass
 class BaselineSpotRoughEnvCfg(SpotFlatEnvCfg):
-    """Upstream Spot baseline under matched CaT rough-terrain conditions."""
+    """Upstream Spot baseline under matched LoComposition conditions."""
 
     use_deadzone_command: bool = True
 
@@ -261,7 +261,7 @@ class BaselineSpotRoughEnvCfg(SpotFlatEnvCfg):
         self.seed = DEFAULT_MATCHED_SEED
         self.scene.num_envs = 7500
         self.scene.env_spacing = 3.0
-        self.scene.robot = _cat_spot_asset()
+        self.scene.robot = _locomposition_spot_asset()
         self.scene.terrain = _matched_terrain_cfg()
 
         self.decimation = 10

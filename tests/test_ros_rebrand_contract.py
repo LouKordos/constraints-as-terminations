@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -102,3 +103,20 @@ def test_sim2real_entrypoints_default_to_locomposition_names():
     assert "ros2 launch locomposition_bringup bringup.launch.py" in build_script
     assert "locomposition_controller/include/locomposition_controller" in bootstrap
     assert "LOCOMPOSITION_SIM2REAL_IMAGE" in compose
+
+
+def test_generated_controller_crc_sources_stay_ignored_after_the_rename():
+    generated_paths = (
+        "sim2real/ros2_ws/src/locomposition_controller/"
+        "include/locomposition_controller/motor_crc.h",
+        "sim2real/ros2_ws/src/locomposition_controller/src/motor_crc.cpp",
+    )
+
+    for generated_path in generated_paths:
+        result = subprocess.run(
+            ["git", "check-ignore", "--no-index", generated_path],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
