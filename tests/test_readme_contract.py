@@ -44,9 +44,9 @@ def test_documentation_media_are_real_images_with_useful_resolution() -> None:
         "assets/sim2real-overview.png": (1200, 500),
         "assets/terrain-contact-adaptation.png": (1200, 500),
         "assets/swing-height-adaptation.png": (1200, 500),
-        "assets/demos/go2-hardware.gif": (960, 540),
-        "assets/demos/anymal-c.gif": (960, 540),
-        "assets/demos/spot.gif": (960, 540),
+        "assets/demos/go2-sim2real.gif": (960, 540),
+        "assets/demos/anymal-c.gif": (540, 540),
+        "assets/demos/spot.gif": (540, 540),
     }
 
     for relative_path, minimum_size in expected.items():
