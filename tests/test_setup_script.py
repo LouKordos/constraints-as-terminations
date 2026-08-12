@@ -34,7 +34,7 @@ fi
 if [ "${1:-}" = "pip" ] && [ "${2:-}" = "check" ]; then
     if [ "${FAKE_UV_PIP_CHECK_MODE:-}" = "known-starlette-conflict" ]; then
         printf 'Found 1 incompatibility\n' >&2
-        printf 'The package `fastapi` requires `starlette<0.46.0,>=0.40.0`, but `0.49.1` is installed\n' >&2
+        printf 'The package `fastapi` requires `starlette>=0.40.0,<0.46.0`, but `0.49.1` is installed\n' >&2
         exit 1
     fi
     if [ "${FAKE_UV_PIP_CHECK_MODE:-}" = "unexpected-conflict" ]; then
