@@ -671,9 +671,9 @@ arguments.
 Change bootstrap copy destinations and includes to
 `locomposition_controller`. Change Compose service/container labels to
 LoComposition. Make the image configurable as
-`${LOCOMPOSITION_SIM2REAL_IMAGE:-loukordos/cat-sim2real:latest}` so the current
-published image remains usable until republished. Change displayed launch
-commands to `ros2 launch locomposition_bringup bringup.launch.py`.
+`${LOCOMPOSITION_SIM2REAL_IMAGE:-loukordos/locomposition-sim2real:latest}`.
+Change displayed launch commands to
+`ros2 launch locomposition_bringup bringup.launch.py`.
 
 - [ ] **Step 6: Run source and syntax checks**
 

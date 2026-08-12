@@ -94,7 +94,7 @@ robots.
 | ROS bringup | `locomposition_bringup` | A legacy `cat_bringup` package forwards `bringup.launch.py` to the new package. |
 | ROS state-estimation launch package | `locomposition_state_estimation` | A legacy `cat_state_estimation` package forwards its existing launch entry points. |
 | ROS elevation-map message package | `locomposition_perception_msgs` | Renamed without claiming wire compatibility: a ROS message package name is part of its type identity. The migration is documented. |
-| Docker and runtime labels | LoComposition service, image-variable, and container labels | The existing published `loukordos/cat-sim2real` image may remain the default image value until a LoComposition image is published. |
+| Docker and runtime labels | LoComposition service, image-variable, image default, and container labels | The default image is `loukordos/locomposition-sim2real:latest`; `LOCOMPOSITION_SIM2REAL_IMAGE` can override it. |
 | New logs and W&B projects | LoComposition task/project names | Existing log directories and saved task IDs remain readable. |
 
 Compatibility protects meaningful user interfaces, not every incidental old

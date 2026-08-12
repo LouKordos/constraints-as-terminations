@@ -66,7 +66,7 @@ source /app/ros2_ws/install/setup.bash
 
 The bootstrap imports external packages listed in `sim2real/dependencies.repos`, including message and map dependencies that may not exist on a bare host ROS installation. Use a clean build after switching from the old `cat_perception_msgs` message identity.
 
-The current Compose configuration keeps the previously published `loukordos/cat-sim2real:latest` image as a transitional default. Set `LOCOMPOSITION_SIM2REAL_IMAGE` to use a republished image; see the [migration guide](migration.md#container-image-transition).
+Compose builds and runs `loukordos/locomposition-sim2real:latest` by default. Set `LOCOMPOSITION_SIM2REAL_IMAGE` to use another registry, owner, or tag; see the [migration guide](migration.md#container-image).
 
 ## Configure the MID-360 and robot transform
 

@@ -59,9 +59,9 @@ ros2 launch locomposition_bringup bringup.launch.py
 
 The old `ros2 launch cat_bringup bringup.launch.py` entry point remains as a thin forwarding wrapper. It does not restore the old ROS message type identity.
 
-## Container image transition
+## Container image
 
-The Compose service is now named `locomposition_sim2real`. Until a renamed image is published, it defaults to the existing `loukordos/cat-sim2real:latest` image. Override it without editing Compose files:
+The Compose service is named `locomposition_sim2real` and its default image is `loukordos/locomposition-sim2real:latest`. Override the registry, owner, or tag without editing Compose files:
 
 ```bash
 export LOCOMPOSITION_SIM2REAL_IMAGE=owner/locomposition-sim2real:tag
@@ -72,7 +72,7 @@ export LOCOMPOSITION_SIM2REAL_IMAGE=owner/locomposition-sim2real:tag
 1. Rename the GitHub repository to `LoComposition` only after this branch is ready to become the default branch.
 2. Update the fork/upstream remotes and check the clone URL shown by GitHub.
 3. Verify that the old GitHub URL redirects and that badges, archived scripts, and external project-page links still resolve.
-4. Publish a LoComposition-named sim-to-real image, then change the Compose default away from `loukordos/cat-sim2real:latest`.
+4. Build or publish `loukordos/locomposition-sim2real:latest`, or set `LOCOMPOSITION_SIM2REAL_IMAGE` to the image name you prefer.
 5. Replace the three labelled GIF placeholders and add the final personal-blog URL listed in the [asset inventory](assets.md). The direct project-video URL is already present.
 6. Confirm the intended licensing for the LoComposition contributions. Decide whether the inherited `LICENCE` applies; otherwise add an agreed top-level license without replacing existing file-level notices.
 7. Re-run the repository tests and an external-link check after the GitHub rename is live.
