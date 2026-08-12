@@ -5,7 +5,7 @@ usage() {
     cat <<EOF
 Usage: $0 ENV_NAME [--root PATH] [--repo-source URL_OR_PATH]
 
-Create a pinned Isaac Lab environment and install LoComposition.
+Create a locked LoComposition and pinned Isaac Lab environment.
 
 Options:
   --root PATH                 Parent directory for the environment.
@@ -64,17 +64,22 @@ if [[ ! "$ENV_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || [ "$ENV_NAME" = "." ] 
     exit 2
 fi
 
-export OMNI_KIT_ACCEPT_EULA=Y
 PROJECT_ROOT="$ENV_ROOT/$ENV_NAME"
 USER_REPO_DIR="$PROJECT_ROOT/LoComposition"
-VENV_PYTHON="$PROJECT_ROOT/.venv/bin/python"
+ISAACLAB_DIR="$PROJECT_ROOT/isaaclab-installation/IsaacLab"
+VENV_DIR="$PROJECT_ROOT/.venv"
+VENV_PYTHON="$VENV_DIR/bin/python"
+ISAACLAB_REVISION="ddb044eb5b2300792de41e82d53b032f3632b489"
 
-PYTHON_VERSION="3.11"
-ISAACLAB_TAG="ddb044eb5b2300792de41e82d53b032f3632b489"
+if [ -e "$PROJECT_ROOT" ]; then
+    if [ ! -d "$PROJECT_ROOT" ] || [ -n "$(find "$PROJECT_ROOT" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        echo "[ERROR] Target '$PROJECT_ROOT' already exists and is non-empty." >&2
+        exit 1
+    fi
+fi
 
-# Ensure uv is installed
 if ! command -v uv >/dev/null 2>&1; then
-    echo "[INFO] uv not found, installing..."
+    echo "[INFO] uv not found; installing it for the current user..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$HOME/.local/bin:$PATH"
 
@@ -83,100 +88,93 @@ if ! command -v uv >/dev/null 2>&1; then
         exit 1
     fi
 else
-    echo "[INFO] uv is already installed."
+    echo "[INFO] Using uv at $(command -v uv)."
 fi
 
-# Refuse to merge a new environment into an existing directory.
-if [ -e "$PROJECT_ROOT" ]; then
-    if [ ! -d "$PROJECT_ROOT" ] || [ -n "$(find "$PROJECT_ROOT" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
-        echo "[ERROR] Target '$PROJECT_ROOT' already exists and is non-empty." >&2
-        exit 1
-    fi
-fi
-
-# Prepare project directory.
 mkdir -p "$PROJECT_ROOT"
-cd "$PROJECT_ROOT"
-set -x
 
-# Initialize project and explicitly set Python requirement (creates pyproject.toml)
-uv init --python "$PYTHON_VERSION" .
-uv venv
+echo "[INFO] Cloning LoComposition from '$REPO_SOURCE'..."
+git clone "$REPO_SOURCE" "$USER_REPO_DIR"
 
-# Install Python dependencies via uv pip, torch and Isaac Sim are pinned here
-uv pip install --python "$VENV_PYTHON" torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu128
-uv pip install --python "$VENV_PYTHON" --upgrade pip
-uv pip install --python "$VENV_PYTHON" 'isaacsim[all,extscache]==5.1.0' --extra-index-url https://pypi.nvidia.com
-uv tool install rust-just
-
-# Clone and install IsaacLab
-mkdir -p "$PROJECT_ROOT/isaaclab-installation"
-cd isaaclab-installation
-git clone https://github.com/isaac-sim/IsaacLab.git
-cd IsaacLab
-
-# Checkout the specific version defined at the top of script
-echo "[INFO] Checking out Isaac Lab version: $ISAACLAB_TAG"
-git checkout "$ISAACLAB_TAG"
-
+export UV_PROJECT_ENVIRONMENT="$VENV_DIR"
 export OMNI_KIT_ACCEPT_EULA=Y
 
-echo "[INFO] Installing Isaac Lab Core and Tasks..."
+echo "[INFO] Creating the environment from LoComposition's committed uv.lock..."
+uv sync \
+    --project "$USER_REPO_DIR" \
+    --frozen \
+    --no-install-package locomposition
+
+if ! command -v just >/dev/null 2>&1; then
+    echo "[INFO] Installing the pinned just command for the current user..."
+    uv tool install rust-just==1.40.0
+fi
+
+echo "[INFO] Cloning the pinned Isaac Lab source checkout..."
+mkdir -p "$(dirname "$ISAACLAB_DIR")"
+git clone https://github.com/isaac-sim/IsaacLab.git "$ISAACLAB_DIR"
+cd "$ISAACLAB_DIR"
+git checkout "$ISAACLAB_REVISION"
+
+echo "[INFO] Installing the four supported Isaac Lab distributions editably..."
 uv pip install --python "$VENV_PYTHON" -e source/isaaclab
 uv pip install --python "$VENV_PYTHON" -e source/isaaclab_assets
 uv pip install --python "$VENV_PYTHON" -e source/isaaclab_tasks
 uv pip install --python "$VENV_PYTHON" -e source/isaaclab_rl
 
-cd "$PROJECT_ROOT" || exit 1
+echo "[INFO] Installing LoComposition and reasserting all locked versions..."
+uv sync \
+    --project "$USER_REPO_DIR" \
+    --frozen \
+    --inexact
 
-echo "[INFO] Cloning LoComposition from '$REPO_SOURCE'..."
-git clone "$REPO_SOURCE" "$USER_REPO_DIR" || { echo "[ERROR] Failed to clone LoComposition."; exit 1; }
-cd "$USER_REPO_DIR" || exit 1
-uv pip install --python "$VENV_PYTHON" --no-build-isolation --no-deps -e ./exts/locomposition
-uv pip install --python "$VENV_PYTHON" -r requirements.txt
-cd "$PROJECT_ROOT" || exit 1
+echo "[INFO] Checking dependency consistency and editable package locations..."
+uv pip check --python "$VENV_PYTHON"
+uv pip show \
+    --python "$VENV_PYTHON" \
+    locomposition \
+    isaaclab \
+    isaaclab-assets \
+    isaaclab-tasks \
+    isaaclab-rl
 
-SLURM_TEMPLATE="$HOME/local-mamba-test.sbatch"
-SLURM_CONFIG="$PROJECT_ROOT/slurm-config.sbatch"
-SLURM_CONFIG_2080TI="$PROJECT_ROOT/slurm-config-2080ti.sbatch"
+SLURM_TEMPLATE="$USER_REPO_DIR/train-locomposition.sbatch"
+SLURM_CONFIG="$PROJECT_ROOT/train-locomposition.sbatch"
+SLURM_CONFIG_2080TI="$PROJECT_ROOT/train-locomposition-2080ti.sbatch"
 
-if [ ! -f "$SLURM_TEMPLATE" ]; then
-    echo "[WARNING] Slurm template '$SLURM_TEMPLATE' does not exist; skipping Slurm configuration."
-else
-    echo "[INFO] Copying Slurm configuration template..."
-    cp "$SLURM_TEMPLATE" "$SLURM_CONFIG"
+escape_sed_replacement() {
+    printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'
+}
 
-    echo "[INFO] Applying ENV_NAME to $SLURM_CONFIG..."
-    sed -i -E "s|^[[:space:]]*(export[[:space:]]+)?ENV_NAME=.*|export ENV_NAME=${ENV_NAME}|" "$SLURM_CONFIG"
+escaped_env_root=$(escape_sed_replacement "$ENV_ROOT")
+escaped_env_name=$(escape_sed_replacement "$ENV_NAME")
 
-    echo "[INFO] Updating job name in $SLURM_CONFIG to '$ENV_NAME'..."
-    sed -i -E "s|^#SBATCH[[:space:]]+--job-name=.*|#SBATCH --job-name=${ENV_NAME}|" "$SLURM_CONFIG"
+echo "[INFO] Generating the L40S Slurm job..."
+sed \
+    -e "s|__LOCOMPOSITION_ENV_ROOT__|${escaped_env_root}|g" \
+    -e "s|__LOCOMPOSITION_ENV_NAME__|${escaped_env_name}|g" \
+    "$SLURM_TEMPLATE" > "$SLURM_CONFIG"
 
-    echo "[INFO] Creating 2080Ti Slurm configuration..."
-    cp "$SLURM_CONFIG" "$SLURM_CONFIG_2080TI"
+echo "[INFO] Generating the 2080 Ti Slurm job from the same template..."
+sed \
+    -e "s|__LOCOMPOSITION_ENV_ROOT__|${escaped_env_root}|g" \
+    -e "s|__LOCOMPOSITION_ENV_NAME__|${escaped_env_name}|g" \
+    -e 's|^#SBATCH --job-name=.*|#SBATCH --job-name=locomposition-training-2080ti|' \
+    -e 's|^#SBATCH --partition=.*|#SBATCH --partition=week|' \
+    -e 's|^#SBATCH --gres=.*|#SBATCH --gres=gpu:2080ti:1|' \
+    -e 's|^#SBATCH --array=.*|#SBATCH --array=0-8%9|' \
+    -e 's|^RUNS_PER_NODE=.*|RUNS_PER_NODE=1|' \
+    "$SLURM_TEMPLATE" > "$SLURM_CONFIG_2080TI"
 
-    echo "[INFO] Updating job name in $SLURM_CONFIG_2080TI to '${ENV_NAME}-2080ti'..."
-    sed -i -E "s|^#SBATCH[[:space:]]+--job-name=.*|#SBATCH --job-name=${ENV_NAME}-2080ti|" "$SLURM_CONFIG_2080TI"
+chmod +x "$SLURM_CONFIG" "$SLURM_CONFIG_2080TI"
+bash -n "$SLURM_CONFIG"
+bash -n "$SLURM_CONFIG_2080TI"
 
-    echo "[INFO] Updating partition in $SLURM_CONFIG_2080TI to 'week'..."
-    sed -i -E "s|^#SBATCH[[:space:]]+--partition=.*|#SBATCH --partition=week|" "$SLURM_CONFIG_2080TI"
-
-    echo "[INFO] Updating GPU request in $SLURM_CONFIG_2080TI to 'gpu:2080ti:1'..."
-    sed -i -E "s|^#SBATCH[[:space:]]+--gres=.*|#SBATCH --gres=gpu:2080ti:1|" "$SLURM_CONFIG_2080TI"
-
-    echo "[INFO] Updating array in $SLURM_CONFIG_2080TI to 9 single-run jobs..."
-    sed -i -E "s|^#SBATCH[[:space:]]+--array=.*|#SBATCH --array=0-8%9|" "$SLURM_CONFIG_2080TI"
-
-    echo "[INFO] Updating RUNS_PER_NODE in $SLURM_CONFIG_2080TI to 1..."
-    sed -i -E "s|^RUNS_PER_NODE=.*|RUNS_PER_NODE=1|" "$SLURM_CONFIG_2080TI"
-
-    echo "[INFO] Slurm configurations complete."
-fi
-
-set +x
-echo "-------------------------------------DONE. CHECKLIST:------------------------------------------"
-echo "1. source $PROJECT_ROOT/.venv/bin/activate"
-echo "2. cd $USER_REPO_DIR"
-echo "3. Run a LoComposition training or evaluation command from README.md"
-echo "4. If generated, review $SLURM_CONFIG before submitting a Slurm job"
-echo "-----------------------------------------------------------------------------------------------"
+echo "------------------------------------- DONE -------------------------------------"
+echo "Activate: source $VENV_DIR/bin/activate"
+echo "Repository: cd $USER_REPO_DIR"
+echo "W&B: run 'wandb login' once per cluster account (not once per environment)."
+echo "L40S: sbatch $SLURM_CONFIG"
+echo "2080 Ti: sbatch $SLURM_CONFIG_2080TI"
+echo "The generated jobs also accept an inherited WANDB_API_KEY override."
+echo "--------------------------------------------------------------------------------"
