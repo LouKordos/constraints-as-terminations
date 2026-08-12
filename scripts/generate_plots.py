@@ -2002,6 +2002,22 @@ def _plot_cumulative_reward(sim_times, reward_array, reset_times, output_dir, pi
         with open(os.path.join(pickle_dir, 'cumulative_reward.pickle'), 'wb') as f:
             pickle.dump(fig, f)
 
+def compute_running_average(sim_times, values, window_size):
+    """Compute a complete-window average aligned to each window's right edge."""
+    sim_times = np.asarray(sim_times)
+    values = np.asarray(values)
+    if sim_times.shape[0] != values.shape[0]:
+        raise ValueError("sim_times and values must have the same length")
+    if window_size <= 0:
+        raise ValueError("window_size must be positive")
+    if values.shape[0] < window_size:
+        return sim_times[:0], values[:0]
+
+    window = np.ones(window_size) / window_size
+    running_average = np.convolve(values, window, mode='valid')
+    average_times = sim_times[(window_size - 1):]
+    return average_times, running_average
+
 def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_times, output_dir, pickle_dir, FIGSIZE):
     fig, ax = plt.subplots(figsize=FIGSIZE)
     ax.plot(sim_times, cost_of_transport_time_series, label='cost_of_transport')
@@ -2010,11 +2026,11 @@ def _plot_cost_of_transport(sim_times, cost_of_transport_time_series, reset_time
     # window_sizes = [25, 50, 300]
     window_sizes = [100]
     for window_size in window_sizes:
-        window = np.ones(window_size) / window_size
-        running_average = np.convolve(cost_of_transport_time_series, window, mode='valid')
-        # Align the running average times. For 'valid', the i-th averaged point corresponds to sim_times[i + (window_size-1)], i.e. the right edge of the window.
-        average_times = sim_times[(window_size - 1):]
-        ax.plot(average_times, running_average, label=f'{window_size}-sample running avg', linestyle="dashed")
+        average_times, running_average = compute_running_average(
+            sim_times, cost_of_transport_time_series, window_size
+        )
+        if running_average.size:
+            ax.plot(average_times, running_average, label=f'{window_size}-sample running avg', linestyle="dashed")
 
     ax.set_xlabel(r'Time ($\text{s}$)')
     ax.set_ylabel('Cost of Transport (-)')
