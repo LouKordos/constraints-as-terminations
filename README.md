@@ -30,7 +30,7 @@ Against a conventional complex-reward locomotion baseline, LoComposition provide
 
 ![Cost of Transport and learned contact patterns.](assets/cot-and-contact-patterns.png)
 
-The paper contains the ablations and hardware setup. The [project page](https://sites.google.com/view/locomposition) and [project video](https://youtu.be/byAA07ge4O0) are the best places to watch the full comparison.
+See the paper for more details. The [project page](https://sites.google.com/view/locomposition) and [project video](https://youtu.be/byAA07ge4O0) are the best place to watch the full comparison.
 
 ## Installation
 
@@ -82,23 +82,13 @@ The former `CaT-*` task IDs and `cat_envs` Python imports remain available as co
 
 ## Supported robots
 
-Each embodiment uses a separately trained policy. The formulation and training recipe stay the same; action scaling and actuator limits follow the robot, while mass randomization, disturbances, and the energy coefficient are scaled deterministically by the robot's mass ratio. This normalization is not a per-robot hyperparameter search and should not be read as one policy transferring between embodiments.
-
-| Robot | Current evidence | Canonical task prefix |
-| --- | --- | --- |
-| Unitree Go2 | Simulation and zero-shot hardware deployment | `LoComposition-Go2-*` |
-| ANYmal C | Rough-terrain simulation, same formulation | `LoComposition-Anymal-C-*` |
-| Boston Dynamics Spot | Rough-terrain simulation, same formulation | `LoComposition-Spot-*` |
-
-The following GIFs are deliberately labelled placeholders until the final website clips are exported:
+Each embodiment uses a separately trained policy, but the formulation and training recipe stay the same. Action scaling and actuator limits are adjusted based on the robot's size, while domain randomization, disturbances, and the energy penalty coefficient are scaled by the robot's mass ratio.
 
 ![Placeholder for the Unitree Go2 hardware demonstration.](assets/demos/go2-hardware.gif)
 
 ![Placeholder for the ANYmal C simulation demonstration.](assets/demos/anymal-c.gif)
 
 ![Placeholder for the Boston Dynamics Spot simulation demonstration.](assets/demos/spot.gif)
-
-The requested crops and replacement checklist are in [the asset inventory](docs/assets.md).
 
 ## Repository layout
 
@@ -111,9 +101,7 @@ The requested crops and replacement checklist are in [the asset inventory](docs/
 
 ## Sim-to-real deployment
 
-The Go2 stack runs policy inference at 50 Hz and republishes the latest PD target from a 500 Hz low-level loop. A Livox MID-360 and `elevation_mapping_cupy` produce an online elevation map; the LoComposition processing node converts it to the same yaw-aligned 13×11 observation used in simulation.
-
-Start with the [sim-to-real deployment guide](docs/sim2real.md) before connecting to hardware.
+The Go2 stack runs policy inference at 50 Hz and republishes the latest PD target from a 500 Hz low-level loop. A Livox MID-360 and `elevation_mapping_cupy` produce the online elevation map, the LoComposition processing node converts it to the same yaw-aligned 13×11 observation used in simulation. Read [sim-to-real deployment guide](docs/sim2real.md) before setting up the hardware.
 
 ![Go2 obstacle sequences and the LiDAR elevation-mapping pipeline.](assets/sim2real-overview.png)
 
@@ -143,4 +131,4 @@ LoComposition uses **Constraints as Terminations** as the mechanism for operatio
 
 ## License
 
-Licensing is currently mixed. The inherited top-level [LICENCE](LICENCE) contains MIT terms and an Isaac Lab Project Developers copyright, while source files retain their own notices (predominantly BSD-3-Clause, with Apache-2.0 in the ROS controller package). Before the public release, confirm whether the inherited file is intended to cover the new LoComposition contributions and update the top-level licensing with all contributors' agreement. This is included in the [migration checklist](docs/migration.md#repository-owner-checklist).
+This repository does not declare one project-wide license yet, but existing source files already may have their notices (BSD-3-Clause/Apache-2.0 in the ROS controller package). Check the relevant file or package before reuse.
