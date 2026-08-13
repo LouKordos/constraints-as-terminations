@@ -17,7 +17,7 @@ LoComposition learns efficient rough-terrain locomotion without air-time targets
   <img src="assets/demos/anymal-c.gif" alt="ANYMAL" width="48%" />
 </p>
 
-The same formulation and training recipe transfer to Spot and ANYmal C without an embodiment-specific hyperparameter search. Action scaling and operational-limit bounds are adjusted due to actuator differences. Disturbance magnitudes and the energy coefficient are simply scaled linearly by mass ratio.
+The same formulation and training recipe transfer to Spot and ANYmal C without an embodiment-specific hyperparameter search. Action scaling and operational-limit bounds are adjusted to match each robot's actuator range. Mass randomization, disturbance magnitudes, and the energy coefficient are scaled linearly by mass ratio; this is a deterministic embodiment conversion, not another tuning pass.
 
 ## Why LoComposition
 
@@ -45,7 +45,7 @@ See the paper for more details. The [project page](https://sites.google.com/view
 
 ## Installation
 
-The setup script creates a Python 3.11 environment, installs the dependencies recorded in `uv.lock`, and checks out the compatible Isaac Lab source. It requires Linux, an NVIDIA GPU with a compatible driver, Git, and enough disk space for Isaac Sim because (several gigs).
+The setup script creates a Python 3.11 environment, installs the dependencies recorded in `uv.lock`, and checks out the compatible Isaac Lab source. It requires Linux, an NVIDIA GPU with a compatible driver, Git, and roughly 20 GB of free disk space.
 
 ```bash
 ./create-isaac-lab-env-uv.sh locomposition

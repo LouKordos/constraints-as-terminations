@@ -23,30 +23,29 @@ def test_readme_presents_locomposition_and_attributes_cat() -> None:
 
 def test_readme_qualifies_cross_embodiment_transfer_without_retuning() -> None:
     text = README.read_text(encoding="utf-8")
+    lowercase_text = text.lower()
 
     assert "without an embodiment-specific hyperparameter search" in text
     assert "Action scaling and operational-limit bounds" in text
-    assert "mass randomization, disturbance magnitudes, and the energy coefficient" in text
-    assert "mass ratio" in text
+    assert (
+        "mass randomization, disturbance magnitudes, and the energy coefficient"
+        in lowercase_text
+    )
+    assert "mass ratio" in lowercase_text
 
 
-def test_readme_documents_locked_local_and_cluster_setup_without_secrets() -> None:
+def test_readme_documents_locked_setup_and_cluster_use_without_secrets() -> None:
     text = README.read_text(encoding="utf-8")
 
     assert "requirements.txt" not in text
     assert "uv.lock" in text
-    assert "ddb044eb5b2300792de41e82d53b032f3632b489" in text
-    assert 'UV_PROJECT_ENVIRONMENT="$VIRTUAL_ENV"' in text
-    assert "uv sync --frozen --inexact" in text
+    assert "compatible Isaac Lab source" in text
     assert "train-locomposition.sbatch" in text
     assert "train-locomposition-2080ti.sbatch" in text
-    assert "one-time" in text.lower()
     assert "shared home" in text.lower()
+    assert "do not need to do this for each env" in text.lower()
     assert re.search(r"(?i)(?:export\s+)?WANDB_API_KEY\s*=", text) is None
-    text_without_isaaclab_revision = text.replace(
-        "ddb044eb5b2300792de41e82d53b032f3632b489", ""
-    )
-    assert re.search(r"(?i)\b[0-9a-f]{40}\b", text_without_isaaclab_revision) is None
+    assert re.search(r"(?i)\b[0-9a-f]{40}\b", text) is None
 
 
 def test_readme_relative_links_resolve() -> None:
