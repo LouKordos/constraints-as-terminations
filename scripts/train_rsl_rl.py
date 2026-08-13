@@ -3,7 +3,7 @@
 The installed trainer intentionally contains an extension-template placeholder.
 This bootstrap replaces only that marker in memory, after AppLauncher startup,
 so the repository task package is imported at the point intended for external
-extensions. Legacy CaT task aliases are registered by the same import. The
+extensions. LoComposition task IDs are registered by the same import. The
 upstream file on disk remains untouched.
 """
 

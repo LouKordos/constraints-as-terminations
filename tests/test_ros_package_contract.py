@@ -36,8 +36,7 @@ def test_canonical_ros_package_directories_match_manifest_names():
         assert manifest_name(package_directory) == package_name
 
 
-def test_perception_message_type_moved_without_a_wire_compatibility_claim():
-    assert not (ROS_SRC / "cat_perception_msgs").exists()
+def test_perception_message_package_is_canonical():
     message = (
         ROS_SRC
         / "locomposition_perception_msgs"
@@ -55,7 +54,6 @@ def test_perception_message_type_moved_without_a_wire_compatibility_claim():
             "locomposition_perception_msgs",
         )
     )
-    assert "cat_perception_msgs" not in canonical_text
     assert "locomposition_perception_msgs" in canonical_text
 
 
@@ -68,31 +66,6 @@ def test_canonical_controller_entrypoints_are_locomposition_named():
     cmake = (controller / "CMakeLists.txt").read_text()
     assert "project(locomposition_controller)" in cmake
     assert "add_executable(locomposition_controller" in cmake
-
-
-def test_legacy_non_message_packages_are_launch_only_forwarders():
-    expected_launch_files = {
-        "cat_controller": {
-            "cat_control.launch.py",
-            "cat_elevation_map_processing.launch.py",
-            "cat_elevation_map_comparison.launch.py",
-        },
-        "cat_bringup": {"bringup.launch.py"},
-        "cat_state_estimation": {"livox.launch.py", "odom.launch.py"},
-    }
-
-    for package_name, launch_files in expected_launch_files.items():
-        package_directory = ROS_SRC / package_name
-        assert manifest_name(package_directory) == package_name
-        assert not (package_directory / "src").exists()
-        assert not (package_directory / "config").exists()
-        assert {
-            path.name for path in (package_directory / "launch").glob("*.launch.py")
-        } == launch_files
-        for launch_file in launch_files:
-            wrapper = (package_directory / "launch" / launch_file).read_text()
-            assert "IncludeLaunchDescription" in wrapper
-            assert "locomposition_" in wrapper
 
 
 def test_sim2real_entrypoints_default_to_locomposition_names():

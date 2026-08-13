@@ -98,8 +98,6 @@ python scripts/generate_plots.py \
   --output_dir=/absolute/path/to/output/plots
 ```
 
-The former `CaT-*` task IDs and `cat_envs` Python imports are available as compatibility aliases from before the rename. New scripts should use the `LoComposition-*` IDs and `locomposition` package.
-
 ## Repository layout
 
 - `exts/locomposition/`: Isaac Lab environments, robot configurations, CaT constraint manager, and CleanRL PPO implementation.
@@ -107,7 +105,7 @@ The former `CaT-*` task IDs and `cat_envs` Python imports are available as compa
 - `scripts/eval.py`: checkpoint evaluation, scenario rollouts, and metric collection.
 - `scripts/generate_plots.py`: plot regeneration from saved evaluation arrays.
 - `sim2real/`: ROS 2 controller, elevation-map processing, launch stack, and traced policies for the Go2.
-- `tests/`: naming, compatibility, setup, ROS, plotting, and metric contracts.
+- `tests/`: naming, setup, ROS, plotting, and metric contracts.
 
 ## Sim-to-real deployment
 

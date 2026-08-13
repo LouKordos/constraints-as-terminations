@@ -36,10 +36,15 @@ from metrics_utils import (
     summarize_metric,
 )
 from rebuttal_report import REBUTTAL_DYNAMICS_SCENARIOS, write_rebuttal_reports
-from task_naming import is_locomposition_go2_task
 eval_script_path = os.path.dirname(os.path.abspath(__file__))
 
 CONTACT_FORCE_THRESHOLD_NEWTONS = 1.0
+
+
+def is_locomposition_go2_task(task_name: str) -> bool:
+    """Return whether a task belongs to the canonical LoComposition Go2 family."""
+
+    return task_name.startswith("LoComposition-Go2-")
 
 UPSTREAM_GO2_HARDCODED_CONSTRAINT_BOUNDS: Dict[str, Tuple[Optional[float], Optional[float]]] = {
     "joint_torque": (-20.0, 20.0),
@@ -1261,7 +1266,6 @@ def main():
                 name in task_id.lower()
                 for name in (
                     "locomposition",
-                    "cat-go2",
                     "unitree-go2",
                     "anymal",
                     "spot",

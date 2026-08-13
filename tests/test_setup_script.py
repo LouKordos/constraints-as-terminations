@@ -177,7 +177,7 @@ def test_setup_script_clones_before_frozen_project_sync(tmp_path):
     assert commands.index(clone) < commands.index(initial_sync)
 
 
-def test_setup_script_uses_two_lock_boundaries_without_legacy_installs(tmp_path):
+def test_setup_script_uses_two_lock_boundaries_without_manual_installs(tmp_path):
     install_root = tmp_path / "environments"
     result = run_script(
         tmp_path,

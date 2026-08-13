@@ -39,19 +39,18 @@ _PROJECT_CLEAN_RL_CFG = (
 
 
 def _register_locomposition_task(*, task_suffix: str, env_cfg_entry_point: str) -> None:
-    """Register a canonical project task and its former CaT-branded alias."""
+    """Register a LoComposition project task."""
 
     kwargs = {
         "env_cfg_entry_point": env_cfg_entry_point,
         "clean_rl_cfg_entry_point": _PROJECT_CLEAN_RL_CFG,
     }
-    for prefix in ("LoComposition-", "CaT-"):
-        gym.register(
-            id=f"{prefix}{task_suffix}",
-            entry_point=CaTEnv,
-            disable_env_checker=True,
-            kwargs=dict(kwargs),
-        )
+    gym.register(
+        id=f"LoComposition-{task_suffix}",
+        entry_point=CaTEnv,
+        disable_env_checker=True,
+        kwargs=kwargs,
+    )
 
 
 gym.register(

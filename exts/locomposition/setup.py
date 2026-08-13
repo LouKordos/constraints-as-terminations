@@ -21,9 +21,7 @@ INSTALL_REQUIRES = [
 # Installation operation
 setup(
     name="locomposition",
-    packages=find_packages(
-        include=("locomposition", "locomposition.*", "cat_envs")
-    ),
+    packages=find_packages(include=("locomposition", "locomposition.*")),
     author=EXTENSION_TOML_DATA["package"]["author"],
     maintainer=EXTENSION_TOML_DATA["package"]["maintainer"],
     url=EXTENSION_TOML_DATA["package"]["repository"],

@@ -111,6 +111,6 @@ def test_extension_declares_an_isolated_setuptools_build():
     }
 
 
-def test_legacy_requirements_file_is_removed_and_lock_is_committed():
+def test_requirements_file_is_absent_and_lock_is_committed():
     assert not (ROOT / "requirements.txt").exists()
     assert (ROOT / "uv.lock").is_file()
