@@ -23,15 +23,19 @@ def test_readme_presents_locomposition_and_attributes_cat() -> None:
 
 def test_readme_qualifies_cross_embodiment_transfer_without_retuning() -> None:
     text = README.read_text(encoding="utf-8")
-    lowercase_text = text.lower()
 
     assert "without an embodiment-specific hyperparameter search" in text
-    assert "Action scaling and operational-limit bounds" in text
     assert (
-        "mass randomization, disturbance magnitudes, and the energy coefficient"
-        in lowercase_text
+        "Action scaling and operational-limit bounds are adjusted due to actuator "
+        "differences."
+        in text
     )
-    assert "mass ratio" in lowercase_text
+    assert (
+        "Disturbance magnitudes and the energy coefficient are simply scaled "
+        "linearly by mass ratio."
+        in text
+    )
+    assert "deterministic embodiment conversion" not in text
 
 
 def test_readme_documents_locked_setup_and_cluster_use_without_secrets() -> None:
