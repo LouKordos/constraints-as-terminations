@@ -17,7 +17,7 @@ LoComposition learns efficient rough-terrain locomotion without air-time targets
   <img src="assets/demos/anymal-c.gif" alt="ANYMAL" width="48%" />
 </p>
 
-The same formulation and training recipe transfer to Spot and ANYmal C without an embodiment-specific hyperparameter search. Action scaling and operational-limit bounds follow each robot's actuator range; mass randomization, disturbance magnitudes, and the energy coefficient are scaled deterministically by mass ratio. These are mechanical conversions for the new embodiment, not another tuning pass.
+The same formulation and training recipe transfer to Spot and ANYmal C without an embodiment-specific hyperparameter search. Action scaling and operational-limit bounds are adjusted due to actuator differences. Disturbance magnitudes and the energy coefficient are simply scaled linearly by mass ratio.
 
 ## Why LoComposition
 
@@ -45,7 +45,7 @@ See the paper for more details. The [project page](https://sites.google.com/view
 
 ## Installation
 
-The setup script creates a Python 3.11 environment, installs the dependencies recorded in `uv.lock`, and checks out the compatible Isaac Lab source revision. It requires Linux, an NVIDIA GPU with a compatible driver, Git, and enough disk space for Isaac Sim.
+The setup script creates a Python 3.11 environment, installs the dependencies recorded in `uv.lock`, and checks out the compatible Isaac Lab source. It requires Linux, an NVIDIA GPU with a compatible driver, Git, and enough disk space for Isaac Sim because (several gigs).
 
 ```bash
 ./create-isaac-lab-env-uv.sh locomposition
@@ -53,36 +53,23 @@ source ~/mamba_env_data/locomposition/.venv/bin/activate
 cd ~/mamba_env_data/locomposition/LoComposition
 ```
 
-Use `--root PATH` to place the environment elsewhere, or `--repo-source URL_OR_PATH` to install from a fork or local checkout. The script refuses to merge into a non-empty target directory. It finishes by checking the installed dependency graph and printing the locations of the editable LoComposition and Isaac Lab packages.
-
-Reproducibility has two deliberate boundaries:
-
-- `uv.lock` fixes Isaac Sim 5.1.0, PyTorch 2.7.0 with CUDA 12.8, the LoComposition extension, and the remaining Python packages.
-- `create-isaac-lab-env-uv.sh` checks out Isaac Lab at `ddb044eb5b2300792de41e82d53b032f3632b489` and installs its four required source packages editably. Keeping this checkout explicit matters because Isaac Lab resolves application files relative to its source tree.
+Use `--root PATH` to place the environment somewhere else, or `--repo-source URL_OR_PATH` to install from a fork or local checkout.
 
 One upstream metadata conflict is handled explicitly: Isaac Sim 5.1 pins a FastAPI version that declares Starlette below 0.46, while this Isaac Lab revision requires the security-updated Starlette 0.49.1. LoComposition keeps Isaac Lab's 0.49.1 requirement, matching the validated development environment. The installer accepts only that exact `uv pip check` warning and still fails on any other dependency incompatibility.
-
-If you already have that Isaac Lab revision installed in an active environment, synchronize LoComposition into it from the repository root. `--inexact` retains the separately installed editable Isaac Lab packages:
-
-```bash
-UV_PROJECT_ENVIRONMENT="$VIRTUAL_ENV" uv sync --frozen --inexact
-```
 
 ### Cluster training
 
 Environment creation also writes two ready-to-review job files beside the virtual environment:
 
-- `train-locomposition.sbatch` runs three 7,500-environment seeds concurrently on one L40S, with eight allocated CPUs.
-- `train-locomposition-2080ti.sbatch` runs one seed per 2080 Ti array job, also with eight allocated CPUs.
+- `train-locomposition.sbatch` runs three 7,500-environment seeds concurrently on one L40S, with eight CPUs.
+- `train-locomposition-2080ti.sbatch` runs one seed per 2080 Ti array job, also with eight CPUs.
 
-Authenticate W&B once from the cluster account whose shared home directory is mounted on the compute nodes. This is a one-time login for that account, not a step to repeat for every environment:
+Authenticate W&B once from the cluster account whose shared home directory is mounted on the compute nodes. You do not need to do this for each env:
 
 ```bash
 wandb login
 sbatch ~/mamba_env_data/locomposition/train-locomposition.sbatch
 ```
-
-W&B stores that login outside the virtual environment, so new LoComposition environments reuse it. The jobs can also inherit a `WANDB_API_KEY` supplied by your scheduler or secret manager; no credential belongs in this repository or in an sbatch file.
 
 ## Quick start
 
@@ -111,7 +98,7 @@ python scripts/generate_plots.py \
   --output_dir=/absolute/path/to/output/plots
 ```
 
-The former `CaT-*` task IDs and `cat_envs` Python imports remain available as compatibility aliases. New scripts should use the `LoComposition-*` IDs and `locomposition` package. See the [migration guide](docs/migration.md) for the exact mapping.
+The former `CaT-*` task IDs and `cat_envs` Python imports are available as compatibility aliases from before the rename. New scripts should use the `LoComposition-*` IDs and `locomposition` package.
 
 ## Repository layout
 
