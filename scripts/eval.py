@@ -137,6 +137,23 @@ def compute_scenario_completion(
     return completion
 
 
+def disable_viewport_tracking_before_close(environment: Any) -> None:
+    """Stop Isaac Lab's camera callback before environment teardown deletes the scene."""
+    unwrapped_environment = getattr(environment, "unwrapped", environment)
+    controller = getattr(unwrapped_environment, "viewport_camera_controller", None)
+    if controller is None:
+        return
+
+    controller_config = getattr(controller, "cfg", None)
+    if controller_config is not None:
+        controller_config.origin_type = "world"
+
+    subscription_handle = getattr(controller, "_viewport_camera_update_handle", None)
+    if subscription_handle is not None:
+        subscription_handle.unsubscribe()
+        controller._viewport_camera_update_handle = None
+
+
 MATCHED_BASELINE_CONSTRAINT_BOUNDS: Dict[
     str, Dict[str, Tuple[Optional[float], Optional[float]]]
 ] = {
@@ -1210,6 +1227,7 @@ def main():
 
         if env is not None:
             try:
+                disable_viewport_tracking_before_close(env)
                 env.close()
             except Exception as exception:
                 print(f"[WARN] Failed to close evaluation environment: {exception}")
