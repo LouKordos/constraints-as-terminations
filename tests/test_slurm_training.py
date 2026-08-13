@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "train-locomposition.sbatch"
+JUSTFILE = ROOT / "justfile"
 
 
 def render_template(tmp_path: Path) -> Path:
@@ -116,6 +117,23 @@ def test_l40s_template_is_valid_bash_after_substitution(tmp_path):
     result = subprocess.run(["bash", "-n", str(job)], text=True, capture_output=True)
 
     assert result.returncode == 0, result.stderr
+
+
+def test_train_recipe_redirects_stderr_into_tee_pipeline():
+    content = JUSTFILE.read_text()
+
+    assert " 2>&1 | tee " in content
+    assert "| 2>&1 |" not in content
+
+
+def test_rsl_baseline_recipe_prepares_its_own_log_directory():
+    content = JUSTFILE.read_text()
+    baseline_recipe = content.split("_train-rsl-baseline", maxsplit=1)[1].split(
+        "train-baseline-go2", maxsplit=1
+    )[0]
+
+    assert "mkdir -p ./logs/rsl_rl" in baseline_recipe
+    assert "mkdir -p ./logs/clean_rl" not in baseline_recipe
 
 
 def test_array_task_zero_launches_three_expected_runs(tmp_path):
