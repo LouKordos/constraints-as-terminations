@@ -134,6 +134,9 @@ if dependency_check=$(uv pip check --python "$VENV_PYTHON" 2>&1); then
 else
     printf '%s\n' "$dependency_check" >&2
     incompatibility_count=$(printf '%s\n' "$dependency_check" | grep -c '^The package `')
+    # Isaac Sim 5.1 pins FastAPI 0.115.7, whose metadata requires Starlette <0.46;
+    # the pinned Isaac Lab revision requires Starlette 0.49.1. Permit only this
+    # conflict until the simulator stack is upgraded in a controlled change.
     if [[ "$dependency_check" == *"Found 1 incompatibility"* ]] \
         && [[ "$dependency_check" == *'The package `fastapi` requires `starlette'* ]] \
         && [[ "$dependency_check" == *'>=0.40.0'* ]] \
