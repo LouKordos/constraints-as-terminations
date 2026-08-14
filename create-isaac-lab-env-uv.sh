@@ -99,14 +99,10 @@ git clone "$REPO_SOURCE" "$USER_REPO_DIR"
 export UV_PROJECT_ENVIRONMENT="$VENV_DIR"
 export OMNI_KIT_ACCEPT_EULA=Y
 
-echo "[INFO] Creating the environment from LoComposition's committed uv.lock..."
-uv sync \
-    --project "$USER_REPO_DIR" \
-    --frozen \
-    --no-install-package locomposition
+uv sync --project "$USER_REPO_DIR" --frozen --no-install-package locomposition
 
 if ! command -v just >/dev/null 2>&1; then
-    echo "[INFO] Installing the pinned just command for the current user..."
+    echo "[INFO] Installing the just command..."
     uv tool install rust-just==1.40.0
 fi
 
@@ -122,11 +118,7 @@ uv pip install --python "$VENV_PYTHON" -e source/isaaclab_assets
 uv pip install --python "$VENV_PYTHON" -e source/isaaclab_tasks
 uv pip install --python "$VENV_PYTHON" -e source/isaaclab_rl
 
-echo "[INFO] Installing LoComposition and reasserting all locked versions..."
-uv sync \
-    --project "$USER_REPO_DIR" \
-    --frozen \
-    --inexact
+uv sync --project "$USER_REPO_DIR" --frozen --inexact
 
 echo "[INFO] Checking dependency consistency and editable package locations..."
 if dependency_check=$(uv pip check --python "$VENV_PYTHON" 2>&1); then
@@ -148,13 +140,7 @@ else
         exit 1
     fi
 fi
-uv pip show \
-    --python "$VENV_PYTHON" \
-    locomposition \
-    isaaclab \
-    isaaclab-assets \
-    isaaclab-tasks \
-    isaaclab-rl
+uv pip show --python "$VENV_PYTHON" locomposition isaaclab isaaclab-assets isaaclab-tasks isaaclab-rl
 
 SLURM_TEMPLATE="$USER_REPO_DIR/train-locomposition.sbatch"
 SLURM_CONFIG="$PROJECT_ROOT/train-locomposition.sbatch"
