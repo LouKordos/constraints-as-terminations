@@ -81,8 +81,8 @@ ament_target_dependencies(elevation_map_processing_node
   grid_map_ros
 )
 
-# Optional diagnostic for checking numerical equivalence between the ZMQ/Python
-# and native C++ elevation-map processing pipelines.
+# Node used for migration from old elevation map processing using ZMQ and a python translation layer to native C++
+# Disregard this as it was only a quick test to ensure the values are the same
 add_executable(elevation_map_comparison_node src/elevation_map_comparison_node.cpp)
 target_include_directories(elevation_map_comparison_node PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>) # Include the current package include dir
 target_link_libraries(
