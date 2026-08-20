@@ -16,8 +16,8 @@
 
 set -euo pipefail
 
-ENV_ROOT="__LOCOMPOSITION_ENV_ROOT__"
-ENV_NAME="__LOCOMPOSITION_ENV_NAME__"
+export ENV_ROOT="__LOCOMPOSITION_ENV_ROOT__"
+export ENV_NAME="__LOCOMPOSITION_ENV_NAME__"
 export OMNI_KIT_ACCEPT_EULA=Y
 
 source "${ENV_ROOT}/${ENV_NAME}/.venv/bin/activate"
