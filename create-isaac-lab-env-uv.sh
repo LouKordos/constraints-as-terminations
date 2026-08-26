@@ -99,6 +99,7 @@ git clone "$REPO_SOURCE" "$USER_REPO_DIR"
 export UV_PROJECT_ENVIRONMENT="$VENV_DIR"
 export OMNI_KIT_ACCEPT_EULA=Y
 
+uv venv --project "$USER_REPO_DIR" --prompt "$ENV_NAME" "$VENV_DIR"
 uv sync --project "$USER_REPO_DIR" --frozen --no-install-package locomposition
 
 if ! command -v just >/dev/null 2>&1; then
